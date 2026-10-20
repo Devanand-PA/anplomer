@@ -1,0 +1,14 @@
+.gradle/
+.gradle-home/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# emulator lab (local scratch: AVD, adb logs, screenshots)
+.emulator-lab/
+shots/
