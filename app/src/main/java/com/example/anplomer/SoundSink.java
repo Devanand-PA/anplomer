@@ -23,4 +23,19 @@ public interface SoundSink {
     void setEnabled(boolean enabled);
 
     boolean isEnabled();
+
+    /**
+     * Music volume, 0..1. Implementations without music may ignore it.
+     * The default keeps third-party sinks (headless tests) compiling.
+     */
+    default void setMusicVolume(float volume) {
+    }
+
+    /** Called when the host activity is no longer visible. */
+    default void suspendAudio() {
+    }
+
+    /** Called when the host activity becomes visible again. */
+    default void resumeAudio() {
+    }
 }

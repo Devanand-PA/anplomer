@@ -954,17 +954,23 @@ public final class Renderer {
     // ------------------------------------------------------------------
 
     private void drawHud(Canvas c, Game g, float sw, float sh) {
-        if (g.state == Game.State.MENU) {
+        // Gameplay-only: the modal overlays (paused, results, settings) show
+        // their own score/coin lines, and on short screens the HUD collided
+        // with the big centred titles through the scrim.
+        if (g.state != Game.State.PLAYING) {
             return;
         }
         float pad = 18f;
         float scale = Math.min(sw, sh) / 480f;
         float boxH = 78f * scale;
-        float boxW = 200f * scale;      // score panel
-        float coinW = 140f * scale;     // coin chip
 
         // score panel: dark backing plus a light border so it reads on any
-        // backdrop; values are large, white, hard-shadowed.
+        // backdrop; values are large, white, hard-shadowed. The panel is
+        // sized to its value so the score can never overflow it.
+        String scoreStr = String.format(java.util.Locale.US, "%06d", g.score);
+        text.setTextSize(38f * scale);
+        float scoreW = text.measureText(scoreStr);
+        float boxW = Math.max(200f * scale, 32f * scale + scoreW);
         fill.setColor(0x99000000);
         c.drawRoundRect(rect(pad, pad, pad + boxW, pad + boxH), 16f, 16f, fill);
         stroke.setColor(0x88FFFFFF);
@@ -978,11 +984,14 @@ public final class Renderer {
         text.setTextSize(38f * scale);
         text.setColor(0xFFFFFFFF);
         text.setShadowLayer(5f, 0f, 3f, 0xCC000000);
-        c.drawText(String.format(java.util.Locale.US, "%06d", g.score),
-                pad + 16f * scale, pad + 66f * scale, text);
+        c.drawText(scoreStr, pad + 16f * scale, pad + 66f * scale, text);
 
-        // coin chip
+        // coin chip: sized to its text so the gold count can never overflow
         float cx0 = pad + boxW + 12f * scale;
+        String coinStr = g.coinsTaken + "/" + g.level.coinCount();
+        text.setTextSize(34f * scale);
+        float coinTextW = text.measureText(coinStr);
+        float coinW = Math.max(140f * scale, 62f * scale + coinTextW + 18f * scale);
         fill.setColor(0x99000000);
         c.drawRoundRect(rect(cx0, pad, cx0 + coinW, pad + boxH), 16f, 16f, fill);
         c.drawRoundRect(rect(cx0, pad, cx0 + coinW, pad + boxH), 16f, 16f, stroke);
@@ -1191,10 +1200,17 @@ public final class Renderer {
             case PAUSED:
                 scrim(c, sw, sh, 0.55f);
                 text.setTextAlign(Paint.Align.CENTER);
+                // Stack geometry mirrors Game.layoutPauseButtons so the title
+                // sits above the buttons and the hint below them, whatever
+                // the screen size.
+                float pbh = Math.max(48f, sh * 0.095f);
+                float pgap = pbh * 0.35f;
+                float ptotal = pbh * g.pauseButtons.length + pgap * (g.pauseButtons.length - 1);
+                float ptop = (sh - ptotal) / 2f;
                 text.setTextSize(64f * scale);
                 text.setColor(0xFFFFFFFF);
                 text.setShadowLayer(8f, 0f, 5f, 0xAA000000);
-                c.drawText("PAUSED", sw / 2f, sh * 0.5f - 3.4f * 74f * scale * 0.5f, text);
+                c.drawText("PAUSED", sw / 2f, Math.max(ptop - 26f * scale, 54f * scale), text);
                 text.setShadowLayer(6f, 0f, 4f, 0x99000000);
                 for (Game.UiButton b : g.pauseButtons) {
                     fill.setColor(0xFF2F4B8C);
@@ -1214,7 +1230,7 @@ public final class Renderer {
                 text.setColor(0xCCFFFFFF);
                 text.setShadowLayer(4f, 0f, 3f, 0x99000000);
                 c.drawText("R restart  •  back to resume  •  M sound",
-                        sw / 2f, sh * 0.5f + 3.4f * 74f * scale * 0.5f + 34f * scale, text);
+                        sw / 2f, Math.min(ptop + ptotal + 32f * scale, sh - 12f * scale), text);
                 break;
             case LEVEL_CLEARED:
                 scrim(c, sw, sh, 0.62f);
@@ -1247,35 +1263,52 @@ public final class Renderer {
             case GAME_OVER:
                 scrim(c, sw, sh, 0.68f);
                 text.setTextAlign(Paint.Align.CENTER);
+                // Laid out top-down with gaps larger than every glyph, so no
+                // two lines can ever overlap (the old fixed fractions put
+                // "TAP TO RETRY" on top of the coins line).
+                float oy = Math.max(sh * 0.30f, 110f * scale);
                 text.setTextSize(78f * scale);
                 text.setColor(0xFFE4453A);
                 text.setShadowLayer(10f, 0f, 6f, 0xAA000000);
-                c.drawText("GAME OVER", sw / 2f, sh * 0.4f, text);
+                c.drawText("GAME OVER", sw / 2f, oy, text);
+                oy += 92f * scale;
                 text.setTextSize(34f * scale);
                 text.setColor(0xFFFFFFFF);
-                c.drawText("Final score  " + g.score, sw / 2f, sh * 0.4f + 70f * scale, text);
+                text.setShadowLayer(6f, 0f, 4f, 0x99000000);
+                c.drawText("Final score  " + g.score, sw / 2f, oy, text);
+                oy += 50f * scale;
                 text.setColor(0xFFBFD4FF);
-                c.drawText("Coins collected  " + g.coinsTaken, sw / 2f, sh * 0.4f + 118f * scale, text);
-                blinkText(c, "TAP TO RETRY  •  " + g.levelLabel(), sw / 2f, sh * 0.62f, 32f * scale, g);
+                c.drawText("Coins collected  " + g.coinsTaken, sw / 2f, oy, text);
+                oy += 62f * scale;
+                blinkText(c, "TAP TO RETRY  •  " + g.levelLabel(), sw / 2f, oy, 32f * scale, g);
+                oy += 46f * scale;
                 text.setTextSize(22f * scale);
                 text.setColor(0xCCFFFFFF);
                 text.setShadowLayer(4f, 0f, 3f, 0x99000000);
-                c.drawText("your progress auto-saves at each level",
-                        sw / 2f, sh * 0.62f + 46f * scale, text);
+                c.drawText("your progress auto-saves at each level", sw / 2f, oy, text);
                 break;
             case WIN:
                 scrim(c, sw, sh, 0.60f);
                 text.setTextAlign(Paint.Align.CENTER);
+                // Same top-down layout rule as GAME_OVER.
+                float wy = Math.max(sh * 0.28f, 104f * scale);
                 text.setTextSize(84f * scale);
                 text.setColor(0xFFFFD34D);
                 text.setShadowLayer(12f, 0f, 7f, 0xAA000000);
-                c.drawText("YOU WIN!", sw / 2f, sh * 0.36f, text);
+                c.drawText("YOU WIN!", sw / 2f, wy, text);
+                wy += 98f * scale;
                 text.setTextSize(34f * scale);
                 text.setColor(0xFFFFFFFF);
-                c.drawText("All three peaks conquered", sw / 2f, sh * 0.36f + 62f * scale, text);
+                text.setShadowLayer(6f, 0f, 4f, 0x99000000);
+                c.drawText("All three peaks conquered", sw / 2f, wy, text);
+                wy += 56f * scale;
                 text.setColor(0xFF9BE89B);
-                c.drawText("Final score  " + g.score, sw / 2f, sh * 0.36f + 112f * scale, text);
-                blinkText(c, "TAP FOR TITLE", sw / 2f, sh * 0.62f, 30f * scale, g);
+                c.drawText("Final score  " + g.score, sw / 2f, wy, text);
+                wy += 68f * scale;
+                blinkText(c, "TAP FOR TITLE", sw / 2f, wy, 30f * scale, g);
+                break;
+            case SETTINGS:
+                drawSettings(c, g, sw, sh, scale);
                 break;
             case PLAYING:
             default:
@@ -1437,6 +1470,88 @@ public final class Renderer {
         c.drawRect(rect(-4f, -12f, 4f, 12f), fill);
         c.drawRect(rect(-10f, -4f, 10f, 4f), fill);
         c.restore();
+    }
+
+    private void drawSettings(Canvas c, Game g, float sw, float sh, float scale) {
+        scrim(c, sw, sh, 0.62f);
+        float pw = g.settingsPanelW();
+        float ph = g.settingsPanelH();
+        float left = (sw - pw) / 2f;
+        float top = (sh - ph) / 2f;
+        drawPanel(c, sw / 2f, sh / 2f, pw, ph);
+
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(40f * scale);
+        text.setColor(0xFFFFD34D);
+        text.setShadowLayer(6f, 0f, 4f, 0xAA000000);
+        c.drawText("SETTINGS", sw / 2f, top + 64f * scale, text);
+
+        drawSlider(c, g, g.sliders[Game.SLIDER_MUSIC], "MUSIC VOLUME",
+                g.musicVolume + "%", scale);
+        drawSlider(c, g, g.sliders[Game.SLIDER_BUTTONS], "MOVE BUTTON SIZE",
+                g.moveScalePct + "%", scale);
+
+        // back button, styled like the pause overlay buttons
+        for (Game.UiButton b : g.settingsButtons) {
+            fill.setColor(0xFF2F4B8C);
+            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), 18f, 18f, fill);
+            fill.setColor(0x33FFFFFF);
+            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h * 0.5f), 18f, 18f, fill);
+            stroke.setColor(0xAAFFFFFF);
+            stroke.setStrokeWidth(3f);
+            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), 18f, 18f, stroke);
+            text.setTextSize(Math.max(24f * scale, Math.min(34f * scale, b.h * 0.52f)));
+            text.setColor(0xFFFFFFFF);
+            text.setShadowLayer(4f, 0f, 3f, 0x99000000);
+            c.drawText(b.label, b.x + b.w / 2f, b.y + b.h * 0.66f, text);
+        }
+
+        text.setTextSize(20f * scale);
+        text.setColor(0xCCFFFFFF);
+        text.setShadowLayer(4f, 0f, 3f, 0x99000000);
+        // between the second slider and the back button, so it never collides
+        c.drawText("drag a slider  •  changes apply immediately",
+                sw / 2f, top + ph * 0.74f, text);
+    }
+
+    private void drawSlider(Canvas c, Game g, Game.UiSlider s, String label, String value, float scale) {
+        // label above-left of the track, current value above-right
+        text.setTextSize(24f * scale);
+        text.setShadowLayer(4f, 0f, 3f, 0x99000000);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(0xFFFFFFFF);
+        c.drawText(label, s.x, s.y - 34f * scale, text);
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setColor(0xFFFFE08A);
+        c.drawText(value, s.x + s.w, s.y - 34f * scale, text);
+        text.setTextAlign(Paint.Align.CENTER);
+
+        // knob position straight from the current setting, so the bar always
+        // matches the label even if a drag is in flight
+        float frac;
+        if (s.id == Game.SLIDER_BUTTONS) {
+            frac = (g.moveScalePct - SaveState.BUTTONS_MIN)
+                    / (float) (SaveState.BUTTONS_MAX - SaveState.BUTTONS_MIN);
+        } else {
+            frac = g.musicVolume / (float) SaveState.MUSIC_MAX;
+        }
+        frac = Math.max(0f, Math.min(1f, frac));
+        float knobX = s.x + s.w * frac;
+
+        float trackH = 16f * scale;
+        fill.setColor(0x66000000);
+        c.drawRoundRect(rect(s.x, s.y - trackH / 2f, s.x + s.w, s.y + trackH / 2f),
+                trackH / 2f, trackH / 2f, fill);
+        fill.setColor(0xFFFFC93C);
+        c.drawRoundRect(rect(s.x, s.y - trackH / 2f, knobX, s.y + trackH / 2f),
+                trackH / 2f, trackH / 2f, fill);
+
+        float knobR = 17f * scale;
+        fill.setColor(0xFFFFFFFF);
+        c.drawCircle(knobX, s.y, knobR, fill);
+        stroke.setColor(0xFFD89A17);
+        stroke.setStrokeWidth(3f * scale);
+        c.drawCircle(knobX, s.y, knobR, stroke);
     }
 
     private void blinkText(Canvas c, String s, float x, float y, float size, Game g) {

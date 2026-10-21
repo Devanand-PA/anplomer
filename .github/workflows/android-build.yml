@@ -3,9 +3,14 @@ name: Android Build
 on:
   push:
 
+# Writing to GitHub Releases requires contents write on the default
+# (read-only) GITHUB_TOKEN.
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Assemble debug APK
+    name: Assemble debug APK and update release
     runs-on: ubuntu-latest
 
     steps:
@@ -27,9 +32,26 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: anplomer-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # Keeps ONE rolling release tagged "latest" that always matches the most
+      # recent push: the tag is re-created at the built commit and the fresh
+      # APK attached, so the downloadable source snapshot is the exact code
+      # the APK was built from. To only release from the default branch, add
+      # `if: github.ref == 'refs/heads/master'` to this step.
+      - name: Update the rolling "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk anplomer-debug.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest \
+            --title "Anplomer — latest build" \
+            --notes "Automated build of branch $GITHUB_REF_NAME at commit $GITHUB_SHA." \
+            --prerelease \
+            anplomer-debug.apk

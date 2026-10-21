@@ -24,6 +24,10 @@ public final class SoundManager implements SoundSink {
     private volatile SoundPool pool;
     private final SparseIntArray ids = new SparseIntArray();
     private volatile boolean enabled = true;
+    /** Music slider value, 0..1 (the persisted percentage divided by 100). */
+    private volatile float musicVolumeSetting = 0.7f;
+    private volatile int musicSampleId;
+    private volatile int musicStream;
 
     public SoundManager(Context context) {
         try {
@@ -79,6 +83,50 @@ public final class SoundManager implements SoundSink {
             double f = 660 + 330 * Math.min(1, t / 0.12);
             return Math.sin(6.283185 * f * t) * 0.9;
         }, 0.34));
+
+        // looping background music, synthesised the same way as the effects
+        defineMusic(musicLoop());
+    }
+
+    /**
+     * Builds a soft chiptune loop: four plucked chords (C - G - Am - F) with a
+     * quiet bass note under each. Encoded as a 16-bit mono WAV so SoundPool
+     * can loop it seamlessly (each note's envelope has decayed to near zero by
+     * the loop point, so there is no click).
+     */
+    private static byte[] musicLoop() {
+        final double rate = SAMPLE_RATE;
+        // each chord gets 2s: 8 plucked eighth-notes of 0.25s
+        final double chordLen = 2.0;
+        final double noteLen = 0.25;
+        double[][] chords = {
+                {261.63, 329.63, 392.00},   // C
+                {246.94, 293.66, 392.00},   // G
+                {220.00, 261.63, 329.63},   // A minor
+                {220.00, 261.63, 349.23},   // F (2nd inversion)
+        };
+        double[] bass = {130.81, 98.00, 110.00, 87.31};
+        // arpeggio order within a chord: root, third, fifth, third, ...
+        int[] pattern = {0, 1, 2, 1, 0, 1, 2, 1};
+        int n = (int) (rate * chordLen * chords.length);
+        double[] raw = new double[n];
+        for (int i = 0; i < n; i++) {
+            double t = i / rate;
+            int chordIdx = (int) (t / chordLen) % chords.length;
+            double local = t - (int) (t / chordLen) * chordLen;
+            int noteIdx = Math.min(pattern.length - 1, (int) (local / noteLen));
+            double noteT = local - noteIdx * noteLen;
+            // plucked melody note: fast attack, exponential decay
+            double env = Math.min(1.0, noteT / 0.006) * Math.exp(-4.5 * noteT / noteLen);
+            double f = chords[chordIdx][pattern[noteIdx]];
+            double v = Math.sin(6.283185 * f * noteT) * 0.16
+                    + Math.sin(6.283185 * 2 * f * noteT) * 0.05;
+            // sustained soft bass under the whole chord
+            double benv = Math.min(1.0, local / 0.05)
+                    * Math.pow(Math.max(0.0, 1.0 - local / chordLen), 0.6);
+            raw[i] = v * env + Math.sin(6.283185 * bass[chordIdx] * t) * 0.14 * benv;
+        }
+        return toWav(raw);
     }
 
     private interface Voice {
@@ -92,6 +140,52 @@ public final class SoundManager implements SoundSink {
         }
         int id = pool.load(f.getAbsolutePath(), 1);
         ids.put(name.hashCode(), id);
+    }
+
+    /** Loads the music loop; playback starts once the sample is decoded. */
+    private void defineMusic(byte[] wav) throws IOException {
+        File f = new File(cacheDir, "music-loop.wav");
+        try (OutputStream os = new FileOutputStream(f)) {
+            os.write(wav);
+        }
+        final SoundPool p = pool;
+        musicSampleId = p.load(f.getAbsolutePath(), 1);
+        p.setOnLoadCompleteListener((sp, sampleId, status) -> {
+            if (sampleId == musicSampleId && status == 0) {
+                startMusic();
+            }
+        });
+    }
+
+    private void startMusic() {
+        SoundPool p = pool;
+        if (p == null || musicStream != 0) {
+            return;
+        }
+        try {
+            // loop forever at priority 0 so any effect can steal the stream
+            musicStream = p.play(musicSampleId, musicVolume(), musicVolume(), 0, -1, 1f);
+        } catch (Throwable t) {
+            musicStream = 0;   // released concurrently — stay silent
+        }
+    }
+
+    /** Effective music volume: the slider, gated by the sound on/off switch. */
+    private float musicVolume() {
+        return enabled ? musicVolumeSetting : 0f;
+    }
+
+    private void applyMusicVolume() {
+        SoundPool p = pool;
+        int s = musicStream;
+        if (p == null || s == 0) {
+            return;
+        }
+        try {
+            p.setVolume(s, musicVolume(), musicVolume());
+        } catch (Throwable ignored) {
+            // released concurrently with the volume change — safe to ignore
+        }
     }
 
     private File cacheDir;
@@ -213,11 +307,44 @@ public final class SoundManager implements SoundSink {
     @Override
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+        applyMusicVolume();
     }
 
     @Override
     public boolean isEnabled() {
         return enabled;
+    }
+
+    @Override
+    public void setMusicVolume(float volume) {
+        float v = Math.max(0f, Math.min(1f, volume));
+        musicVolumeSetting = v;
+        if (pool != null && musicStream == 0 && musicSampleId != 0) {
+            startMusic();   // the sample may still be decoding, or was stolen
+        }
+        applyMusicVolume();
+    }
+
+    @Override
+    public synchronized void suspendAudio() {
+        SoundPool p = pool;
+        if (p != null) {
+            try {
+                p.autoPause();   // pauses the music loop and any playing effect
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    @Override
+    public synchronized void resumeAudio() {
+        SoundPool p = pool;
+        if (p != null) {
+            try {
+                p.autoResume();
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     public synchronized void release() {
@@ -226,5 +353,7 @@ public final class SoundManager implements SoundSink {
             pool = null;
         }
         ids.clear();
+        musicStream = 0;
+        musicSampleId = 0;
     }
 }

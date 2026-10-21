@@ -11,7 +11,7 @@ import java.util.List;
 public final class Game implements Player.Listener {
 
     public enum State {
-        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN
+        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS
     }
 
     /**
@@ -48,6 +48,32 @@ public final class Game implements Player.Listener {
         }
     }
 
+    /**
+     * Horizontal slider used by the settings overlay. ({@code x, w} span the
+     * track; {@code y} is the track's vertical centre; {@code h} is the touch
+     * band height.) Value mapping lives with the owner: 0 at {@code x}, 1 at
+     * {@code x + w}.
+     */
+    public static final class UiSlider {
+        public final int id;
+        public float x, y, w, h;
+
+        public UiSlider(int id) {
+            this.id = id;
+        }
+
+        /** Fraction (unclamped) the given screen x maps to on the track. */
+        public float fractionAt(float px) {
+            return w <= 0f ? 0f : (px - x) / w;
+        }
+
+        /** Generous touch band around the whole track. */
+        public boolean containsBand(float px, float py) {
+            return px >= x - h * 0.6f && px <= x + w + h * 0.6f
+                    && Math.abs(py - y) <= h * 0.85f;
+        }
+    }
+
     public static final int BTN_RESUME = 0;
     public static final int BTN_RESTART = 1;
     public static final int BTN_MENU = 2;
@@ -58,6 +84,12 @@ public final class Game implements Player.Listener {
     public static final int BTN_MODE = 5;
     public static final int BTN_SOUND = 6;
     public static final int BTN_RESET = 7;
+    public static final int BTN_SETTINGS = 8;
+    public static final int BTN_BACK = 9;   // settings back button
+
+    // settings slider ids
+    public static final int SLIDER_MUSIC = 0;
+    public static final int SLIDER_BUTTONS = 1;
 
     public final InputController input = new InputController();
     public final Camera camera = new Camera();
@@ -90,7 +122,19 @@ public final class Game implements Player.Listener {
     public final UiButton[] pauseButtons = new UiButton[]{
             new UiButton("RESUME", BTN_RESUME),
             new UiButton("RESTART", BTN_RESTART),
+            new UiButton("SETTINGS", BTN_SETTINGS),
             new UiButton("MENU", BTN_MENU)};
+
+    /** Settings overlay: two sliders plus a back button. */
+    public final UiSlider[] sliders = {
+            new UiSlider(SLIDER_MUSIC),
+            new UiSlider(SLIDER_BUTTONS)};
+    public final UiButton[] settingsButtons = {new UiButton("BACK", BTN_BACK)};
+
+    /** Music volume percent (0..100); mirrors {@link SaveState#music}. */
+    public int musicVolume = 70;
+    /** Movement button size percent (50..150); mirrors {@link SaveState#buttons}. */
+    public int moveScalePct = 100;
 
     /** Home-screen buttons; CONTINUE is only present when a save exists. */
     public final List<UiButton> menuButtons = new ArrayList<>();
@@ -107,6 +151,11 @@ public final class Game implements Player.Listener {
     private float resetArmTimer;
     /** Seconds left to flash the "goal locked" message in coin collector. */
     public float goalLockedTimer;
+
+    /** State to return to when the settings overlay closes. */
+    private State settingsReturn = State.MENU;
+    /** Scratch buffer for reading touch positions while dragging sliders. */
+    private final float[] pointerBuf = new float[8];
 
     public boolean checkpointActive;
     private float checkpointX, checkpointY;
@@ -125,17 +174,22 @@ public final class Game implements Player.Listener {
         if (store != null) {
             save = SaveState.decode(store.load());
             mode = Mode.values()[save.mode];
-            if (sound != null) {
-                sound.setEnabled(save.sound);
-            }
+        }
+        musicVolume = save.music;
+        moveScalePct = save.buttons;
+        if (sound != null) {
+            sound.setEnabled(save.sound);
+            sound.setMusicVolume(save.music / 100f);
         }
         // Default canvas so menu/pause buttons are laid out even before the
         // first resize arrives; the loop thread resizes on the real surface.
         screenWidth = 1080f;
         screenHeight = 480f;
-        controls = Controls.compute(screenWidth, screenHeight);
+        controls = Controls.compute(screenWidth, screenHeight, moveScalePct / 100f);
         rebuildMenuButtons();
         layoutMenuButtons();
+        layoutPauseButtons();
+        layoutSettings();
         loadLevel(Math.min(save.levelIndex, Levels.TEXT.length - 1));
     }
 
@@ -148,22 +202,25 @@ public final class Game implements Player.Listener {
         boolean first = screenWidth <= 0f;
         screenWidth = w;
         screenHeight = h;
-        controls = Controls.compute(w, h);
-        input.setScreen(w, h);
+        controls = Controls.compute(w, h, moveScalePct / 100f);
+        input.setScreen(w, h, moveScalePct / 100f);
         camera.resize(w, h);
         if (first || level == null) {
             camera.snapTo(player.centerX(), player.centerY(), level);
         }
         layoutPauseButtons();
         layoutMenuButtons();
+        layoutSettings();
     }
 
     private void layoutPauseButtons() {
         float bw = Math.min(screenWidth * 0.42f, 520f);
-        float bh = Math.max(74f, screenHeight * 0.11f);
+        // Four buttons now: slightly slimmer so the stack still fits with a
+        // title above and a hint line below on short screens.
+        float bh = Math.max(48f, screenHeight * 0.095f);
         float gap = bh * 0.35f;
         float x = (screenWidth - bw) / 2f;
-        float total = bh * 3 + gap * 2;
+        float total = bh * pauseButtons.length + gap * (pauseButtons.length - 1);
         float y = (screenHeight - total) / 2f;
         for (UiButton b : pauseButtons) {
             b.x = x;
@@ -183,6 +240,7 @@ public final class Game implements Player.Listener {
         }
         menuButtons.add(new UiButton("MODE:  " + mode.label, BTN_MODE));
         menuButtons.add(new UiButton("SOUND:  " + (save.sound ? "ON" : "OFF"), BTN_SOUND));
+        menuButtons.add(new UiButton("SETTINGS", BTN_SETTINGS));
         menuButtons.add(new UiButton(resetArmed ? "TAP AGAIN TO CONFIRM" : "RESET SAVE", BTN_RESET));
         layoutMenuButtons();
     }
@@ -192,10 +250,12 @@ public final class Game implements Player.Listener {
             return;
         }
         float bw = Math.min(screenWidth * 0.42f, 560f);
-        float bh = Math.max(56f, screenHeight * 0.095f);
-        float gap = bh * 0.28f;
+        // Five buttons in the worst case: keep them compact so the stack fits
+        // between the subtitle and the reset button on short screens.
+        float bh = Math.max(42f, screenHeight * 0.08f);
+        float gap = bh * 0.26f;
         float x = (screenWidth - bw) / 2f;
-        float top = screenHeight * 0.28f;
+        float top = screenHeight * 0.29f;
         for (UiButton b : menuButtons) {
             if (b.id == BTN_RESET) {
                 continue;   // laid out separately below
@@ -221,8 +281,124 @@ public final class Game implements Player.Listener {
     private void persist() {
         save.mode = mode.ordinal();
         save.sound = sound != null && sound.isEnabled();
+        save.music = musicVolume;
+        save.buttons = moveScalePct;
         if (store != null) {
             store.store(save.encode());
+        }
+    }
+
+    /** Recomputes control geometry after the movement-button size changes. */
+    private void applyControlScale() {
+        float scale = moveScalePct / 100f;
+        controls = Controls.compute(screenWidth, screenHeight, scale);
+        input.setScreen(screenWidth, screenHeight, scale);
+    }
+
+    // ---- settings overlay ----------------------------------------------
+
+    /** Opens the settings overlay, remembering where to return. */
+    private void openSettings() {
+        settingsReturn = state == State.PAUSED ? State.PAUSED : State.MENU;
+        layoutSettings();
+        setState(State.SETTINGS);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void closeSettings() {
+        persist();
+        setState(settingsReturn);
+        if (settingsReturn == State.MENU) {
+            rebuildMenuButtons();   // keep SOUND/CONTINUE labels honest
+        }
+        sound.play(SoundSink.SELECT);
+    }
+
+    /** Panel geometry, shared with the renderer so drawing and hit tests agree. */
+    public float settingsPanelW() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenWidth * 0.74f, 760f * scale);
+    }
+
+    public float settingsPanelH() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenHeight * 0.8f, 500f * scale);
+    }
+
+    private void layoutSettings() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        float pw = settingsPanelW();
+        float ph = settingsPanelH();
+        float left = (screenWidth - pw) / 2f;
+        float top = (screenHeight - ph) / 2f;
+
+        float trackW = Math.min(pw * 0.66f, 500f * scale);
+        float trackX = (screenWidth - trackW) / 2f;
+        sliders[SLIDER_MUSIC].x = trackX;
+        sliders[SLIDER_MUSIC].y = top + ph * 0.34f;
+        sliders[SLIDER_MUSIC].w = trackW;
+        sliders[SLIDER_MUSIC].h = 48f * scale;
+        sliders[SLIDER_BUTTONS].x = trackX;
+        sliders[SLIDER_BUTTONS].y = top + ph * 0.60f;
+        sliders[SLIDER_BUTTONS].w = trackW;
+        sliders[SLIDER_BUTTONS].h = 48f * scale;
+
+        float bw = Math.min(pw * 0.44f, 360f * scale);
+        float bh = Math.max(42f, Math.min(ph * 0.15f, 74f * scale));
+        UiButton back = settingsButtons[0];
+        back.w = bw;
+        back.h = bh;
+        back.x = (screenWidth - bw) / 2f;
+        back.y = top + ph * 0.9f - bh / 2f;
+    }
+
+    private void updateSettings() {
+        if (input.consumeBack()) {
+            closeSettings();
+            return;
+        }
+        // While a finger is anywhere in a slider's band it owns that slider:
+        // this covers taps on the track and continuous drags alike.
+        int n = input.pointerPositions(pointerBuf);
+        for (int i = 0; i < n; i++) {
+            float px = pointerBuf[i * 2];
+            float py = pointerBuf[i * 2 + 1];
+            for (UiSlider s : sliders) {
+                if (s.containsBand(px, py)) {
+                    applySlider(s.id, s.fractionAt(px));
+                }
+            }
+        }
+        if (input.consumeTap(tap)) {
+            for (UiButton b : settingsButtons) {
+                if (b.contains(tap[0], tap[1])) {
+                    closeSettings();
+                    return;
+                }
+            }
+        }
+    }
+
+    private void applySlider(int id, float fraction) {
+        float f = Math.max(0f, Math.min(1f, fraction));
+        if (id == SLIDER_MUSIC) {
+            int v = Math.round(f * (SaveState.MUSIC_MAX - SaveState.MUSIC_MIN))
+                    + SaveState.MUSIC_MIN;
+            if (v != musicVolume) {
+                musicVolume = v;
+                save.music = v;
+                sound.setMusicVolume(v / 100f);
+                persist();
+            }
+        } else if (id == SLIDER_BUTTONS) {
+            int pct = Math.round(f * (SaveState.BUTTONS_MAX - SaveState.BUTTONS_MIN))
+                    + SaveState.BUTTONS_MIN;
+            if (pct != moveScalePct) {
+                moveScalePct = pct;
+                save.buttons = pct;
+                persist();
+                applyControlScale();
+            }
         }
     }
 
@@ -282,9 +458,13 @@ public final class Game implements Player.Listener {
         save = SaveState.defaults();
         persist();
         mode = Mode.CLASSIC;
+        musicVolume = save.music;
+        moveScalePct = save.buttons;
         if (sound != null) {
             sound.setEnabled(save.sound);
+            sound.setMusicVolume(save.music / 100f);
         }
+        applyControlScale();
         rebuildMenuButtons();
         sound.play(SoundSink.SELECT);
     }
@@ -427,6 +607,9 @@ public final class Game implements Player.Listener {
             case WIN:
                 updateResult();
                 break;
+            case SETTINGS:
+                updateSettings();
+                break;
             default:
                 break;
         }
@@ -459,6 +642,9 @@ public final class Game implements Player.Listener {
                     case BTN_SOUND:
                         toggleSound();
                         break;
+                    case BTN_SETTINGS:
+                        openSettings();
+                        break;
                     case BTN_RESET:
                         resetSaveTap();
                         break;
@@ -490,6 +676,9 @@ public final class Game implements Player.Listener {
                             break;
                         case BTN_RESTART:
                             restartLevel();
+                            break;
+                        case BTN_SETTINGS:
+                            openSettings();
                             break;
                         case BTN_MENU:
                             quitToMenu();

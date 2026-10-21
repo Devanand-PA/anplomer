@@ -49,9 +49,14 @@ public final class InputController {
     private float tapX, tapY;
 
     public synchronized void setScreen(float w, float h) {
+        setScreen(w, h, 1f);
+    }
+
+    /** Same as {@link #setScreen(float, float)} with a movement-button scale. */
+    public synchronized void setScreen(float w, float h, float moveScale) {
         screenW = w;
         screenH = h;
-        controls = Controls.compute(w, h);
+        controls = Controls.compute(w, h, moveScale);
         recompute();
     }
 
@@ -239,6 +244,26 @@ public final class InputController {
 
     public synchronized void clearTap() {
         tapPending = false;
+    }
+
+    /**
+     * Copies the current touch positions into {@code out} as x,y pairs (at
+     * most {@code out.length / 2} of them) and returns the count. Used by
+     * overlay widgets that track drags, such as the settings sliders.
+     */
+    public synchronized int pointerPositions(float[] out) {
+        int max = out == null ? 0 : out.length / 2;
+        int n = Math.min(max, pointers.size());
+        int i = 0;
+        for (float[] p : pointers.values()) {
+            if (i >= n) {
+                break;
+            }
+            out[i * 2] = p[0];
+            out[i * 2 + 1] = p[1];
+            i++;
+        }
+        return i;
     }
 
     public float tapX() {

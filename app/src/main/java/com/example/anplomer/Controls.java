@@ -23,12 +23,22 @@ public final class Controls {
     public float leftHitR, rightHitR, jumpHitR, pauseHitR, muteHitR;
 
     public static Controls compute(float screenWidth, float screenHeight) {
+        return compute(screenWidth, screenHeight, 1f);
+    }
+
+    /**
+     * @param moveScale multiplier for the movement pads and jump button
+     *                  (0.5..1.5); the pause/mute discs keep a fixed size.
+     */
+    public static Controls compute(float screenWidth, float screenHeight, float moveScale) {
         Controls c = new Controls();
         c.w = screenWidth;
         c.h = screenHeight;
         float base = Math.min(screenWidth, screenHeight);
-        c.btnR = Math.max(48f, base * 0.072f);
-        float m = c.btnR * 0.55f;
+        float rawR = Math.max(48f, base * 0.072f);
+        moveScale = Math.max(0.5f, Math.min(1.5f, moveScale));
+        c.btnR = rawR * moveScale;
+        float m = rawR * 0.55f;
 
         c.leftY = screenHeight - m - c.btnR;
         c.leftX = m + c.btnR;
@@ -39,7 +49,7 @@ public final class Controls {
         c.jumpX = screenWidth - m - c.jumpR;
         c.jumpY = screenHeight - m - c.jumpR;
 
-        c.pauseR = c.btnR * 0.72f;
+        c.pauseR = rawR * 0.72f;
         c.pauseX = screenWidth - m - c.pauseR;
         c.pauseY = m + c.pauseR;
 

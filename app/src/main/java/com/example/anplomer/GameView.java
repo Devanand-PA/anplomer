@@ -20,6 +20,7 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
     private static final String TAG = "AnplomerView";
 
     private final Game game;
+    private final SoundManager soundManager;
     private final Renderer renderer = new Renderer();
     private final FrameDumper frameDumper;
 
@@ -45,6 +46,7 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
     public GameView(Context context, SoundManager sound) {
         super(context);
         game = new Game(sound, new PrefsSaveStore(context));
+        soundManager = sound;
         SurfaceHolder holder = getHolder();
         holder.addCallback(this);
         holder.setFormat(PixelFormat.RGBA_8888);
@@ -79,11 +81,17 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
         hostPaused = true;
         pendingForcePause = true;
         game.input.reset();
+        if (soundManager != null) {
+            soundManager.suspendAudio();   // silence music + effects in background
+        }
     }
 
     /** Called by MainActivity.onResume; without it the game stays frozen. */
     public void onHostResume() {
         hostPaused = false;
+        if (soundManager != null) {
+            soundManager.resumeAudio();
+        }
     }
 
     @Override
