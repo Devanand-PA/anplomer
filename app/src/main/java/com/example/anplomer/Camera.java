@@ -42,7 +42,10 @@ public final class Camera {
             float t = shakeTime * 45f;
             shakeOffsetX = (float) Math.sin(t * 1.7f) * shakeMag;
             shakeOffsetY = (float) Math.cos(t * 2.3f) * shakeMag * 0.7f;
-            shakeMag *= Math.pow(0.02f, dt);   // fast decay
+            // Fast exponential decay without Math.pow on the frame path:
+            // 1 - 3.9*dt is 0.935 at the fixed 60 Hz step, which matches the
+            // old 0.02^dt curve closely enough to be invisible.
+            shakeMag *= Math.max(0f, 1f - 3.9f * dt);
             if (shakeTime <= 0f) {
                 shakeOffsetX = 0f;
                 shakeOffsetY = 0f;

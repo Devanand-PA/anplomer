@@ -101,7 +101,7 @@ public final class RendererSmoke {
                 }
                 java.awt.Color[] cols = new java.awt.Color[lg.colors.length];
                 for (int i = 0; i < cols.length; i++) {
-                    cols[i] = new java.awt.Color(lg.colors[i] & 0xFFFFFF, true);
+                    cols[i] = new java.awt.Color((lg.colors[i] & 0xFFFFFF) | 0xFF000000, true);
                 }
                 g.setPaint(new java.awt.GradientPaint(lg.x0, lg.y0, cols[0],
                         lg.x1, lg.y1, cols[cols.length - 1]));
@@ -109,7 +109,7 @@ public final class RendererSmoke {
             }
             int c = p.getColor();
             int a = p.getAlpha();
-            int rgb = (c & 0xFFFFFF);
+            int rgb = (c & 0xFFFFFF) | 0xFF000000;
             Color col = new Color(rgb, true);
             if (a < 255) {
                 col = new Color((col.getRed() * a) / 255, (col.getGreen() * a) / 255,
@@ -127,7 +127,7 @@ public final class RendererSmoke {
         }
 
         private void stroke(Paint p) {
-            int c = p.getColor() & 0xFFFFFF;
+            int c = (p.getColor() & 0xFFFFFF) | 0xFF000000;
             int a = p.getAlpha();
             Color col = new Color(c, true);
             if (a < 255) {
@@ -244,9 +244,20 @@ public final class RendererSmoke {
             note("text '" + s + "' @" + x + "," + y + " #" + Integer.toHexString(p.getColor()));
             paint(p);
             withTransform(g2 -> {
-                g2.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN,
-                        Math.max(6, (int) p.getTextSize())));
-                g2.drawString(s, x, y);
+                java.awt.Font f = new java.awt.Font("SansSerif", java.awt.Font.PLAIN,
+                        Math.max(6, (int) p.getTextSize()));
+                g2.setFont(f);
+                // the stub records Align but does not apply it; a real Canvas
+                // does, so a dump that ignored it drew every centred label half
+                // a string too far right.
+                float drawX = x;
+                float strW = g2.getFontMetrics().stringWidth(s);
+                if (p.getTextAlign() == Paint.Align.CENTER) {
+                    drawX = x - strW / 2f;
+                } else if (p.getTextAlign() == Paint.Align.RIGHT) {
+                    drawX = x - strW;
+                }
+                g2.drawString(s, drawX, y);
             });
             drawCount++;
         }
@@ -290,7 +301,69 @@ public final class RendererSmoke {
                 + ", screen " + g.screenWidth + "x" + g.screenHeight + ")");
     }
 
+    /** Render one labelled frame at 2400x1080 for visual review. */
+    static void dumpShot(java.io.File file, int level, float playerX, Game.State state,
+                         java.util.function.Consumer<Game> setup, boolean settle) {
+        Renderer r = new Renderer();
+        Game g = new Game(new NullSound());
+        g.resize(2400, 1080);
+        g.loadLevel(level);
+        g.state = Game.State.PLAYING;
+        if (playerX >= 0f) {
+            g.player.x = playerX;
+            g.player.y = 0f;
+        }
+        if (setup != null) {
+            setup.accept(g);
+        }
+        g.state = state;
+        int frames = settle ? 120 : 4;
+        for (int i = 0; i < frames; i++) {
+            g.update(1f / 60f);
+        }
+        RasterCanvas c = new RasterCanvas(2400, 1080);
+        r.draw(g, c, 2400, 1080);
+        c.save(file.getPath());
+        System.out.println("[render] shot " + file.getName() + " (" + c.drawCount + " draws)");
+    }
+
+    static void dumpShots() {
+        String dirName = System.getenv("DUMP_SHOTS");
+        java.io.File dir = new java.io.File(dirName);
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        dumpShot(new java.io.File(dir, "menu.png"), 0, -1f, Game.State.MENU, null, false);
+        dumpShot(new java.io.File(dir, "career.png"), 0, -1f, Game.State.CAREER, g -> {
+            g.profile.coins = 186;
+            g.profile.levelIndex = 3;
+            g.newProfile();
+            g.profiles.get(1).coins = 42;
+        }, true);
+        dumpShot(new java.io.File(dir, "store.png"), 0, -1f, Game.State.STORE, g -> {
+            g.profile.coins = 214;
+            g.profile.upgrades[Upgrades.SPEED] = 2;
+            g.profile.upgrades[Upgrades.JUMP] = 1;
+            g.profile.upgrades[Upgrades.MAGNET] = 1;
+        }, true);
+        dumpShot(new java.io.File(dir, "level4-caverns.png"), 3, 132f * 64f,
+                Game.State.PLAYING, g -> {
+                    g.profile.upgrades[Upgrades.SPEED] = 1;
+                    g.speedBoostTimer = 7.5f;
+                    g.shieldCharges = 1;
+                    g.runCoins = 6;
+                }, true);
+        dumpShot(new java.io.File(dir, "level8-summit.png"), 7, 41f * 64f,
+                Game.State.PLAYING, g -> {
+                    g.magnetTimer = 6.2f;
+                    g.doubleJumpTimer = 4.0f;
+                    g.profile.coins = 128;
+                }, true);
+    }
+
     public static void main(String[] args) {
+        if (System.getenv("DUMP_SHOTS") != null) {
+            dumpShots();
+        }
         float[][] sizes = {
                 {2400, 1080}, {1080, 480}, {1920, 1080}, {1280, 720},
                 {2340, 1080}, {960, 540}, {800, 480}, {480, 320},
@@ -311,12 +384,17 @@ public final class RendererSmoke {
         Game.State[] states = Game.State.values();
         int total = 0;
         for (float[] s : sizes) {
-            for (int level = 0; level < 3; level++) {
+            for (int level = 0; level < Levels.TEXT.length; level++) {
                 g.loadLevel(level);
                 g.resize(s[0], s[1]);
                 for (Game.State st : states) {
                     g.state = st;
                     g.stateTime = 0.5f;
+                    if (st == Game.State.CAREER || st == Game.State.STORE) {
+                        // those screens lay their rows out on the first update
+                        g.update(1f / 60f);
+                        g.stateTime = 0.5f;
+                    }
                     drawFrame(r, g, s[0], s[1]);
                     }
                     // a few more frames with the state timer advancing, which is
@@ -329,6 +407,52 @@ public final class RendererSmoke {
             }
         }
         System.out.println("[render] drew " + total + " state/size combinations");
+
+        // ---- 1b. career, store and the power-up HUD -----------------------
+        System.out.println("[render] career / store / power-up HUD");
+        Game hg = new Game(sound);
+        hg.resize(2400, 1080);
+        hg.state = Game.State.PLAYING;
+        hg.update(1f / 60f);
+        int levelsWithPickups = 0;
+        for (int level = 0; level < Levels.TEXT.length; level++) {
+            hg.loadLevel(level);
+            if (!hg.powerUps.isEmpty()) {
+                levelsWithPickups++;
+            }
+        }
+        check(levelsWithPickups == Levels.TEXT.length,
+                "every level should carry pickups: " + levelsWithPickups
+                        + "/" + Levels.TEXT.length);
+        hg.loadLevel(3);
+        hg.state = Game.State.PLAYING;
+        // every timed effect alive at once, so the whole HUD strip is drawn
+        hg.speedBoostTimer = 6.5f;
+        hg.magnetTimer = 5.5f;
+        hg.doubleJumpTimer = 4.5f;
+        hg.shieldCharges = 2;
+        hg.runCoins = 7;
+        hg.storeMsg = "PURCHASED";
+        hg.storeMsgTimer = 1.5f;
+        hg.careerMsg = "NEW CAREER";
+        hg.careerMsgTimer = 1.5f;
+        drawFrame(r, hg, 2400, 1080);
+        drawFrame(r, hg, 1080, 480);
+        drawFrame(r, hg, 1, 1);
+
+        hg.state = Game.State.CAREER;
+        hg.update(1f / 60f);
+        check(!hg.careerButtons.isEmpty(), "career screen laid out no rows");
+        drawFrame(r, hg, 2400, 1080);
+        drawFrame(r, hg, 1080, 480);
+
+        hg.state = Game.State.STORE;
+        hg.update(1f / 60f);
+        check(!hg.storeButtons.isEmpty(), "store screen laid out no rows");
+        drawFrame(r, hg, 2400, 1080);
+        drawFrame(r, hg, 1080, 480);
+        System.out.println("[render] career rows " + hg.careerButtons.size()
+                + ", store rows " + hg.storeButtons.size());
 
         // ---- 2. real gameplay, drawing every frame ------------------------
         System.out.println("[render] live gameplay with rendering");
@@ -408,7 +532,7 @@ public final class RendererSmoke {
 
         // ---- 3. level transitions and win ---------------------------------
         System.out.println("[render] level flow");
-        for (int level = 0; level < 3; level++) {
+        for (int level = 0; level < Levels.TEXT.length; level++) {
             g.loadLevel(level);
             g.resize(2400, 1080);
             g.state = Game.State.PLAYING;

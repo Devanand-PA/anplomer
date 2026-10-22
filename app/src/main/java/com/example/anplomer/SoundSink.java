@@ -17,6 +17,8 @@ public interface SoundSink {
     String WIN = "win";
     String GAME_OVER = "gameover";
     String HURT = "hurt";
+    String POWERUP = "powerup";
+    String PURCHASE = "purchase";
 
     void play(String name);
 

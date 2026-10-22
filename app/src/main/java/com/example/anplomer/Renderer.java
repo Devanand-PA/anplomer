@@ -17,7 +17,9 @@ import android.graphics.Typeface;
 public final class Renderer {
 
     // ------------------------------------------------------------------
-    // palettes per level: 0 = meadow day, 1 = sunset ruins, 2 = night peak
+    // palettes per level: 1 meadow day, 2 sunset ruins, 3 night peak,
+    // 4 crystal caverns, 5 ember forge, 6 windy bluffs, 7 frozen spire,
+    // 8 starfall summit. The first three are the original colours.
     // ------------------------------------------------------------------
     private static final class Pal {
         final int skyTop, skyMid, skyBot;
@@ -47,18 +49,46 @@ public final class Renderer {
     }
 
     private static final Pal[] PALS = {
+            // 1 — Emerald Meadow: bright blue day
             new Pal(0xFF2E6BD6, 0xFF5AA7F0, 0xFFBFE4FF, 0xFFFFFFFF,
                     0xFF8FA6DE, 0xFF4F9E5E, 0xFF2F7346,
                     0xFF59C24C, 0xFF3E9E3A, 0xFF9A6236, 0xFF7A4A28,
                     0xFF9AA3AE, 0xFF737C88, false),
+            // 2 — Sunset Ruins: warm dusk
             new Pal(0xFF2A2A66, 0xFFB8547A, 0xFFFFC178, 0xFFFFE3C6,
                     0xFF6A4C8C, 0xFF7A5070, 0xFF43305A,
                     0xFF84B84A, 0xFF5F9438, 0xFF8E5A34, 0xFF6F421F,
                     0xFFA29898, 0xFF7A7070, false),
+            // 3 — Night Peak: deep blue night with a moon
             new Pal(0xFF0A1034, 0xFF1B2A6B, 0xFF3E56A6, 0xFFC8D6FF,
                     0xFF3E4E8E, 0xFF24406B, 0xFF152A46,
                     0xFF3FA36A, 0xFF2C7C50, 0xFF5D4433, 0xFF43301F,
                     0xFF8089A8, 0xFF5C6480, true),
+            // 4 — Crystal Caverns: violet underground, crystal "stars"
+            new Pal(0xFF140B2E, 0xFF35215E, 0xFF6E4C9E, 0xFFE0D2FF,
+                    0xFF2C2148, 0xFF3E2F5E, 0xFF261B3C,
+                    0xFF46D6C0, 0xFF2A9E90, 0xFF4A3A5E, 0xFF342944,
+                    0xFF8B79B8, 0xFF61538A, true),
+            // 5 — Ember Forge: ash sky over molten rock
+            new Pal(0xFF2B0E10, 0xFF7A2412, 0xFFE07A2A, 0xFFFFD2A0,
+                    0xFF4A1E1C, 0xFF6E2A1E, 0xFF3A1410,
+                    0xFFE08A3C, 0xFFB05E24, 0xFF5A2E22, 0xFF3E1E16,
+                    0xFF8A6A5C, 0xFF64483C, false),
+            // 6 — Windy Bluffs: high bright sky, long flyer arcs
+            new Pal(0xFF1E7FC4, 0xFF68C6E8, 0xFFDFF6FF, 0xFFFFFFFF,
+                    0xFF9FB8C8, 0xFF5FA86E, 0xFF3F8A5A,
+                    0xFF8FD44A, 0xFF62A832, 0xFFB98A4A, 0xFF8E6632,
+                    0xFFA8B4BE, 0xFF7C8892, false),
+            // 7 — Frozen Spire: icy twilight with a cold moon
+            new Pal(0xFF101A3A, 0xFF2A4E86, 0xFF9CC4EC, 0xFFE8F4FF,
+                    0xFF6A8AB0, 0xFF4A6E96, 0xFF33506E,
+                    0xFFBFE8FF, 0xFF8FC0E0, 0xFF6E7C8E, 0xFF505C6C,
+                    0xFF9FB0C4, 0xFF74849A, true),
+            // 8 — Starfall Summit: cosmic finale
+            new Pal(0xFF07030F, 0xFF241048, 0xFF5A2A7A, 0xFFC9A8FF,
+                    0xFF3A2A5C, 0xFF2A1E46, 0xFF1A1230,
+                    0xFF54E0B0, 0xFF34A884, 0xFF4A3A62, 0xFF342848,
+                    0xFF8E7EC4, 0xFF665A96, true),
     };
 
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -66,6 +96,115 @@ public final class Renderer {
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
     private final RectF rect = new RectF();
+
+    // ------------------------------------------------------------------
+    // precomputed tables: the frame path used to call Math.sin for every
+    // star twinkle, coin spin, lava ripple and h1() hash. Looking the value
+    // up in a table is visually identical and keeps the per-frame trig off
+    // the hot path (and the hash table reproduces h1 bit-for-bit in range,
+    // so the generated scenery looks exactly the same).
+    // ------------------------------------------------------------------
+
+    /** Sin table over one full turn (2048 steps is well under a pixel of error). */
+    private static final int SIN_BITS = 11;
+    private static final int SIN_SIZE = 1 << SIN_BITS;
+    private static final int SIN_MASK = SIN_SIZE - 1;
+    private static final float SIN_SCALE = SIN_SIZE / (float) (Math.PI * 2);
+    private static final float[] SIN = new float[SIN_SIZE];
+    private static final int SIN_QUARTER = SIN_SIZE / 4;
+
+    /** h1() memo: exact values for the integer range the scenery/tiles use. */
+    private static final int HASH_OFF = 4096;
+    private static final float[] HASH = new float[16384];
+
+    static {
+        for (int i = 0; i < SIN_SIZE; i++) {
+            SIN[i] = (float) Math.sin(i * (Math.PI * 2 / SIN_SIZE));
+        }
+        for (int i = 0; i < HASH.length; i++) {
+            int n = i - HASH_OFF;
+            float x = (float) Math.sin(n * 12.9898f + 78.233f) * 43758.5453f;
+            HASH[i] = x - (float) Math.floor(x);
+        }
+    }
+
+    /** Table sine for cosmetic animation (radians, any magnitude). */
+    private static float sinf(float radians) {
+        return SIN[((int) (radians * SIN_SCALE)) & SIN_MASK];
+    }
+
+    private static float cosf(float radians) {
+        return SIN[((int) (radians * SIN_SCALE) + SIN_QUARTER) & SIN_MASK];
+    }
+
+    /** Deterministic hash in [0,1) — same values as the old Math.sin version. */
+    private static float h1(int n) {
+        int i = n + HASH_OFF;
+        if (i >= 0 && i < HASH.length) {
+            return HASH[i];
+        }
+        float x = (float) Math.sin(n * 12.9898f + 78.233f) * 43758.5453f;
+        return x - (float) Math.floor(x);
+    }
+
+    // ------------------------------------------------------------------
+    // caches: nothing in draw() may allocate once values settle. The sky
+    // gradient is rebuilt only when the palette or the surface changes;
+    // HUD/overlay strings are rebuilt only when their value changes.
+    // ------------------------------------------------------------------
+
+    private LinearGradient skyShader;
+    private float skyW = -1f;
+    private float skyH = -1f;
+    private int skyPal = -1;
+    /** Palette currently drawn (index into {@link #PALS}); set at frame start. */
+    private int palIndex;
+
+    private float lblScale = -1f;
+    private String scoreStr = "000000";
+    private int scoreKey = Integer.MIN_VALUE;
+    private float scoreW;
+    private String coinStr = "0/0";
+    private int coinKey = Integer.MIN_VALUE;
+    private int coinTotalKey = -1;
+    private float coinW0;
+    private String walletStr = "0";
+    private int walletKey = Integer.MIN_VALUE;
+    private float walletW0;
+    private String goalStr = "";
+    private int goalKey = Integer.MIN_VALUE;
+    private boolean goalLockedKey;
+    private float goalW0;
+
+    /** "12.3s" style labels, built once per tenth-of-a-second value ever seen. */
+    private static final String[] TENTH_LABELS = new String[512];
+
+    /** Small non-negative integers as strings, built at most once each. */
+    private static final String[] NUM_LABELS = new String[1024];
+
+    /** Career avatar tints (Profile.colorIndex indexes this list). */
+    private static final int[] AVATAR = {
+            0xFFFF8A65, 0xFF4FC3F7, 0xFF9CCC65,
+            0xFFFFD54F, 0xFFBA68C8, 0xFF4DD0E1,
+    };
+
+    /** HUD power-up chips: type ordinal + remaining tenths. */
+    private final int[] chipKey = {-1, -1, -1};
+    private final String[] chipStr = new String[3];
+
+    /** Locked-goal flash label (raised in PLAYING, so cached). */
+    private int needKey = -1;
+    private String needStr = "";
+
+    /** Active-career badge measurements. */
+    private int badgeKey = Integer.MIN_VALUE;
+    private float badgeScale = -1f;
+    private float badgeNameW, badgeCoinsW, badgeLvlW;
+
+    /** Store row labels, rebuilt when the upgrade level changes. */
+    private final int[] storeKey = {-1, -1, -1, -1, -1, -1};
+    private final String[] storeEff = new String[Upgrades.COUNT];
+    private final String[] storePrice = new String[Upgrades.COUNT];
 
     public Renderer() {
         stroke.setStyle(Paint.Style.STROKE);
@@ -80,7 +219,9 @@ public final class Renderer {
     public void draw(Game g, Canvas c, float sw, float sh) {
         // No state mutation here: the game loop owns Game and applies surface
         // size changes on its own thread before calling draw().
-        Pal p = PALS[Math.min(g.levelIndex, PALS.length - 1)];
+        int pi = Math.min(g.levelIndex, PALS.length - 1);
+        Pal p = PALS[pi];
+        palIndex = pi;
 
         drawSky(c, sw, sh, p, g);
         drawScenery(c, sw, sh, p, g);
@@ -96,6 +237,7 @@ public final class Renderer {
         drawGoal(c, g);
         drawPlatforms(c, g);
         drawCoins(c, g);
+        drawPowerUps(c, g);
         drawEnemies(c, g);
         if (!(g.state == Game.State.MENU && g.player.dead)) {
             drawPlayer(c, g);
@@ -127,20 +269,28 @@ public final class Renderer {
         // "the sky turns black while moving". The sky is the backdrop for the
         // entire frame and must always be opaque.
         fill.setAlpha(255);
-        fill.setShader(new LinearGradient(0f, 0f, 0f, sh,
-                new int[]{p.skyTop, p.skyMid, p.skyBot},
-                new float[]{0f, 0.58f, 1f}, Shader.TileMode.CLAMP));
+        // The gradient only depends on (palette, surface size): rebuild it on a
+        // resize or palette change instead of allocating one every frame.
+        if (skyShader == null || sw != skyW || sh != skyH || palIndex != skyPal) {
+            skyShader = new LinearGradient(0f, 0f, 0f, sh,
+                    new int[]{p.skyTop, p.skyMid, p.skyBot},
+                    new float[]{0f, 0.58f, 1f}, Shader.TileMode.CLAMP);
+            skyW = sw;
+            skyH = sh;
+            skyPal = palIndex;
+        }
+        fill.setShader(skyShader);
         c.drawRect(0f, 0f, sw, sh, fill);
         fill.setShader(null);
 
         if (p.night) {
             // stars
-            text.setColor(0xFFFFFFFF);
+            float tw = g.worldTime * 2.4f;
             for (int i = 0; i < 90; i++) {
                 float sx = h1(i * 3 + 1) * sw;
                 float sy = h1(i * 3 + 2) * sh * 0.62f;
-                float tw = 0.45f + 0.55f * (0.5f + 0.5f * (float) Math.sin(g.worldTime * 2.4f + i));
-                fill.setColor(Color.argb((int) (190 * tw), 255, 255, 255));
+                float k = 0.45f + 0.55f * (0.5f + 0.5f * sinf(tw + i));
+                fill.setColor(Color.argb((int) (190 * k), 255, 255, 255));
                 float r = 1.1f + h1(i * 7) * 1.9f;
                 c.drawCircle(sx, sy, r, fill);
             }
@@ -156,14 +306,13 @@ public final class Renderer {
             c.drawCircle(mx + 12f, my + 14f, 6f, fill);
             c.drawCircle(mx + 4f, my - 18f, 4f, fill);
         } else {
-            // sun with glow
-            float sx = sw * (p == PALS[1] ? 0.30f : 0.80f);
-            float sy = sh * (p == PALS[1] ? 0.40f : 0.18f);
-            int glow = p == PALS[1] ? 0x55FFD9A0 : 0x44FFF6C0;
-            fill.setColor(glow);
-            c.drawCircle(sx, sy, 130f, fill);
-            fill.setColor(p == PALS[1] ? 0xFFFFD08A : 0xFFFFF3C4);
-            c.drawCircle(sx, sy, 62f, fill);
+            // sun with glow; a low, big ember sun for the forge palette
+            float sx = sw * sunXFrac();
+            float sy = sh * sunYFrac();
+            fill.setColor(sunGlow());
+            c.drawCircle(sx, sy, palIndex == 4 ? 190f : 130f, fill);
+            fill.setColor(sunCore());
+            c.drawCircle(sx, sy, palIndex == 4 ? 84f : 62f, fill);
         }
 
         // clouds
@@ -174,8 +323,61 @@ public final class Renderer {
             float cx = i * spacing + h1(i * 13) * 200f - scroll;
             float cy = sh * (0.10f + h1(i * 13 + 5) * 0.30f);
             float scale = 0.7f + h1(i * 13 + 9) * 0.8f;
-            float drift = (float) Math.sin(g.worldTime * 0.35f + i) * 14f;
+            float drift = sinf(g.worldTime * 0.35f + i) * 14f;
             drawCloud(c, cx + drift, cy, scale, p.cloud);
+        }
+    }
+
+    /** Sun position per palette (kept out of Pal: layout is a renderer concern). */
+    private float sunXFrac() {
+        switch (palIndex) {
+            case 1:
+                return 0.30f;
+            case 4:
+                return 0.22f;
+            case 6:
+                return 0.68f;
+            default:
+                return 0.80f;
+        }
+    }
+
+    private float sunYFrac() {
+        switch (palIndex) {
+            case 1:
+                return 0.40f;
+            case 4:
+                return 0.52f;
+            case 6:
+                return 0.24f;
+            default:
+                return 0.18f;
+        }
+    }
+
+    private int sunGlow() {
+        switch (palIndex) {
+            case 1:
+                return 0x55FFD9A0;
+            case 4:
+                return 0x55FF9A3C;
+            case 6:
+                return 0x44CFE6FF;
+            default:
+                return 0x44FFF6C0;
+        }
+    }
+
+    private int sunCore() {
+        switch (palIndex) {
+            case 1:
+                return 0xFFFFD08A;
+            case 4:
+                return 0xFFFFC56A;
+            case 6:
+                return 0xFFEAF4FF;
+            default:
+                return 0xFFFFF3C4;
         }
     }
 
@@ -271,139 +473,223 @@ public final class Renderer {
         int ty0 = Math.max(0, (int) Math.floor(g.camera.y / Constants.TILE) - 1);
         int ty1 = Math.min(lvl.h - 1, (int) Math.floor((g.camera.y + g.camera.viewH) / Constants.TILE) + 1);
 
-        float T = Constants.TILE;
+        // Solid bodies are batched into horizontal runs: one body rect (one
+        // outline/crack/highlight path for stone) per run instead of one set
+        // of primitives per 64 px tile. Per-tile detail (speckles, grass
+        // blades) is only emitted where it can actually be seen — the exposed
+        // surface row and the exposed side columns of a run.
         for (int ty = ty0; ty <= ty1; ty++) {
-            for (int tx = tx0; tx <= tx1; tx++) {
+            int tx = tx0;
+            while (tx <= tx1) {
                 char ch = lvl.tileAt(tx, ty);
-                if (ch == Level.EMPTY) {
-                    continue;
-                }
-                float x = tx * T;
-                float y = ty * T;
-                switch (ch) {
-                    case Level.GROUND: {
-                        boolean topOpen = !lvl.isSolid(tx, ty - 1);
-                        fill.setColor(p.dirt);
-                        c.drawRect(x, y, x + T, y + T, fill);
-                        // speckles
-                        fill.setColor(p.dirtDark);
-                        for (int i = 0; i < 3; i++) {
-                            float sx = x + h1(tx * 31 + ty * 7 + i) * (T - 14f) + 7f;
-                            float sy = y + h1(tx * 17 + ty * 13 + i * 3) * (T - 14f) + 7f;
-                            c.drawCircle(sx, sy, 3f + h1(tx + ty + i) * 3f, fill);
-                        }
-                        if (topOpen) {
-                            // grass cap
-                            fill.setColor(p.grass);
-                            c.drawRect(x, y, x + T, y + 20f, fill);
-                            fill.setColor(p.grassDark);
-                            c.drawRect(x, y + 16f, x + T, y + 22f, fill);
-                            // blades
-                            fill.setColor(p.grass);
-                            for (int i = 0; i < 4; i++) {
-                                float bx = x + 8f + i * 15f;
-                                float bh = 7f + h1(tx * 5 + ty * 3 + i) * 8f;
-                                path.reset();
-                                path.moveTo(bx, y + 4f);
-                                path.lineTo(bx + 4f, y + 4f - bh);
-                                path.lineTo(bx + 8f, y + 4f);
-                                path.close();
-                                c.drawPath(path, fill);
-                            }
-                        }
-                        // side shading
-                        if (!lvl.isSolid(tx - 1, ty)) {
-                            fill.setColor(0x33000000);
-                            c.drawRect(x, y, x + 9f, y + T, fill);
-                        }
-                        if (!lvl.isSolid(tx + 1, ty)) {
-                            fill.setColor(0x33000000);
-                            c.drawRect(x + T - 9f, y, x + T, y + T, fill);
-                        }
-                        break;
+                if (ch == Level.GROUND) {
+                    boolean topOpen = !lvl.isSolid(tx, ty - 1);
+                    int end = tx;
+                    while (end < tx1 && lvl.tileAt(end + 1, ty) == Level.GROUND
+                            && (!lvl.isSolid(end + 1, ty - 1)) == topOpen) {
+                        end++;
                     }
-                    case Level.STONE: {
-                        fill.setColor(p.stone);
-                        c.drawRect(x + 2f, y + 2f, x + T - 2f, y + T - 2f, fill);
-                        fill.setColor(p.stoneDark);
-                        stroke.setColor(p.stoneDark);
-                        stroke.setStrokeWidth(3f);
-                        c.drawRect(x + 2f, y + 2f, x + T - 2f, y + T - 2f, stroke);
-                        // cracks
-                        stroke.setStrokeWidth(2.5f);
-                        stroke.setColor(0x55000000);
-                        float ox = h1(tx * 3 + ty) * 20f;
-                        c.drawLine(x + 14f + ox, y + 10f, x + 30f + ox, y + 34f, stroke);
-                        c.drawLine(x + 30f + ox, y + 34f, x + 20f + ox, y + T - 10f, stroke);
-                        fill.setColor(0x22FFFFFF);
-                        c.drawRect(x + 4f, y + 4f, x + T - 4f, y + 11f, fill);
-                        break;
+                    drawGroundRun(c, lvl, p, ty, tx, end, topOpen);
+                    tx = end + 1;
+                } else if (ch == Level.STONE) {
+                    int end = tx;
+                    while (end < tx1 && lvl.tileAt(end + 1, ty) == Level.STONE) {
+                        end++;
                     }
-                    case Level.SPIKE: {
-                        fill.setColor(0xFFB9C2CC);
-                        stroke.setColor(0xFF6E7885);
-                        stroke.setStrokeWidth(3f);
-                        int n = 3;
-                        float wSeg = T / n;
-                        for (int i = 0; i < n; i++) {
-                            path.reset();
-                            path.moveTo(x + i * wSeg + 3f, y + T);
-                            path.lineTo(x + i * wSeg + wSeg / 2f, y + T * 0.42f);
-                            path.lineTo(x + i * wSeg + wSeg - 3f, y + T);
-                            path.close();
-                            c.drawPath(path, fill);
-                            c.drawPath(path, stroke);
-                        }
-                        fill.setColor(0x55FFFFFF);
-                        for (int i = 0; i < n; i++) {
-                            path.reset();
-                            path.moveTo(x + i * wSeg + wSeg / 2f, y + T * 0.42f);
-                            path.lineTo(x + i * wSeg + wSeg / 2f + 4f, y + T * 0.55f);
-                            path.lineTo(x + i * wSeg + wSeg / 2f + 6f, y + T * 0.62f);
-                            path.close();
-                            c.drawPath(path, fill);
-                        }
-                        break;
+                    drawStoneRun(c, p, ty, tx, end);
+                    tx = end + 1;
+                } else if (ch == Level.LAVA) {
+                    int end = tx;
+                    while (end < tx1 && lvl.tileAt(end + 1, ty) == Level.LAVA) {
+                        end++;
                     }
-                    case Level.LAVA: {
-                        fill.setColor(0xFFD33A16);
-                        c.drawRect(x, y, x + T, y + T, fill);
-                        fill.setColor(0xFFFF8A1E);
-                        c.drawRect(x, y + 8f, x + T, y + T, fill);
-                        // animated surface
-                        fill.setColor(0xFFFFD24A);
-                        path.reset();
-                        path.moveTo(x, y + 14f);
-                        for (int i = 0; i <= 8; i++) {
-                            float px = x + i * (T / 8f);
-                            float py = y + 14f + (float) Math.sin(t * 3.2f + tx * 1.1f + i * 0.7f) * 6f;
-                            path.lineTo(px, py);
-                        }
-                        path.lineTo(x + T, y + 26f);
-                        path.lineTo(x, y + 26f);
-                        path.close();
-                        c.drawPath(path, fill);
-                        // bubbles
-                        fill.setColor(0x80FFE9A0);
-                        float b = h1(tx * 9 + ty * 5);
-                        float bt = (t * 0.6f + b) % 1f;
-                        c.drawCircle(x + b * (T - 20f) + 10f, y + T - bt * T * 0.7f, 4f + b * 5f, fill);
-                        break;
-                    }
-                    case Level.CHECKPOINT:
-                    case Level.START:
-                    case Level.GOAL:
-                    case Level.COIN:
-                    case Level.WALKER:
-                    case Level.FLYER:
-                    case Level.MOVER_H:
-                    case Level.MOVER_V:
-                        break;
-                    default:
-                        break;
+                    drawLavaRun(c, p, ty, tx, end, t);
+                    tx = end + 1;
+                } else if (ch == Level.SPIKE) {
+                    drawSpikeTile(c, ty, tx);
+                    tx++;
+                } else {
+                    tx++;
                 }
             }
         }
+    }
+
+    private void drawGroundRun(Canvas c, Level lvl, Pal p, int ty, int x0, int x1, boolean topOpen) {
+        final float T = Constants.TILE;
+        float x = x0 * T;
+        float y = ty * T;
+        float w = (x1 - x0 + 1) * T;
+
+        // body
+        fill.setColor(p.dirt);
+        c.drawRect(x, y, x + w, y + T, fill);
+
+        // speckles: surface row and exposed side columns only — interior bulk
+        // is covered by its neighbours and would be invisible detail anyway
+        fill.setColor(p.dirtDark);
+        boolean sideOpenL = !lvl.isSolid(x0 - 1, ty);
+        boolean sideOpenR = !lvl.isSolid(x1 + 1, ty);
+        for (int tx = x0; tx <= x1; tx++) {
+            boolean exposed = topOpen || (tx == x0 && sideOpenL) || (tx == x1 && sideOpenR);
+            if (!exposed) {
+                continue;
+            }
+            float bx = tx * T;
+            for (int i = 0; i < 3; i++) {
+                float sx = bx + h1(tx * 31 + ty * 7 + i) * (T - 14f) + 7f;
+                float sy = y + h1(tx * 17 + ty * 13 + i * 3) * (T - 14f) + 7f;
+                c.drawCircle(sx, sy, 3f + h1(tx + ty + i) * 3f, fill);
+            }
+        }
+
+        if (topOpen) {
+            // grass cap over the whole run, then all blades in one path
+            fill.setColor(p.grass);
+            c.drawRect(x, y, x + w, y + 20f, fill);
+            fill.setColor(p.grassDark);
+            c.drawRect(x, y + 16f, x + w, y + 22f, fill);
+            fill.setColor(p.grass);
+            path.reset();
+            for (int tx = x0; tx <= x1; tx++) {
+                float bx = tx * T;
+                for (int i = 0; i < 4; i++) {
+                    float gx = bx + 8f + i * 15f;
+                    float bh = 7f + h1(tx * 5 + ty * 3 + i) * 8f;
+                    path.moveTo(gx, y + 4f);
+                    path.lineTo(gx + 4f, y + 4f - bh);
+                    path.lineTo(gx + 8f, y + 4f);
+                    path.close();
+                }
+            }
+            c.drawPath(path, fill);
+        }
+
+        // side shading
+        fill.setColor(0x33000000);
+        if (sideOpenL) {
+            c.drawRect(x, y, x + 9f, y + T, fill);
+        }
+        if (sideOpenR) {
+            c.drawRect(x + w - 9f, y, x + w, y + T, fill);
+        }
+    }
+
+    private void drawStoneRun(Canvas c, Pal p, int ty, int x0, int x1) {
+        final float T = Constants.TILE;
+        float x = x0 * T;
+        float y = ty * T;
+        float w = (x1 - x0 + 1) * T;
+
+        fill.setColor(p.stone);
+        c.drawRect(x + 2f, y + 2f, x + w - 2f, y + T - 2f, fill);
+
+        // per-tile borders, cracks and top highlights batched into three paths
+        stroke.setColor(p.stoneDark);
+        stroke.setStrokeWidth(3f);
+        path.reset();
+        for (int tx = x0; tx <= x1; tx++) {
+            float bx = tx * T;
+            path.moveTo(bx + 2f, y + 2f);
+            path.lineTo(bx + T - 2f, y + 2f);
+            path.lineTo(bx + T - 2f, y + T - 2f);
+            path.lineTo(bx + 2f, y + T - 2f);
+            path.close();
+        }
+        c.drawPath(path, stroke);
+
+        stroke.setStrokeWidth(2.5f);
+        stroke.setColor(0x55000000);
+        path.reset();
+        for (int tx = x0; tx <= x1; tx++) {
+            float bx = tx * T;
+            float ox = h1(tx * 3 + ty) * 20f;
+            path.moveTo(bx + 14f + ox, y + 10f);
+            path.lineTo(bx + 30f + ox, y + 34f);
+            path.lineTo(bx + 20f + ox, y + T - 10f);
+        }
+        c.drawPath(path, stroke);
+
+        fill.setColor(0x22FFFFFF);
+        path.reset();
+        for (int tx = x0; tx <= x1; tx++) {
+            float bx = tx * T;
+            path.moveTo(bx + 4f, y + 4f);
+            path.lineTo(bx + T - 4f, y + 4f);
+            path.lineTo(bx + T - 4f, y + 11f);
+            path.lineTo(bx + 4f, y + 11f);
+            path.close();
+        }
+        c.drawPath(path, fill);
+    }
+
+    private void drawLavaRun(Canvas c, Pal p, int ty, int x0, int x1, float t) {
+        final float T = Constants.TILE;
+        float x = x0 * T;
+        float y = ty * T;
+        float w = (x1 - x0 + 1) * T;
+
+        fill.setColor(0xFFD33A16);
+        c.drawRect(x, y, x + w, y + T, fill);
+        fill.setColor(0xFFFF8A1E);
+        c.drawRect(x, y + 8f, x + w, y + T, fill);
+
+        // animated surface: every tile's wave strip in one path
+        fill.setColor(0xFFFFD24A);
+        path.reset();
+        for (int tx = x0; tx <= x1; tx++) {
+            float bx = tx * T;
+            path.moveTo(bx, y + 14f);
+            for (int i = 0; i <= 8; i++) {
+                float px = bx + i * (T / 8f);
+                float py = y + 14f + sinf(t * 3.2f + tx * 1.1f + i * 0.7f) * 6f;
+                path.lineTo(px, py);
+            }
+            path.lineTo(bx + T, y + 26f);
+            path.lineTo(bx, y + 26f);
+            path.close();
+        }
+        c.drawPath(path, fill);
+
+        // bubbles are few and per-tile: keep them as circles
+        fill.setColor(0x80FFE9A0);
+        for (int tx = x0; tx <= x1; tx++) {
+            float bx = tx * T;
+            float b = h1(tx * 9 + ty * 5);
+            float bt = (t * 0.6f + b) % 1f;
+            if (bt < 0f) {
+                bt = 0f;
+            }
+            c.drawCircle(bx + b * (T - 20f) + 10f, y + T - bt * T * 0.7f, 4f + b * 5f, fill);
+        }
+    }
+
+    private void drawSpikeTile(Canvas c, int ty, int tx) {
+        final float T = Constants.TILE;
+        float x = tx * T;
+        float y = ty * T;
+        float wSeg = T / 3f;
+        fill.setColor(0xFFB9C2CC);
+        stroke.setColor(0xFF6E7885);
+        stroke.setStrokeWidth(3f);
+        path.reset();
+        for (int i = 0; i < 3; i++) {
+            path.moveTo(x + i * wSeg + 3f, y + T);
+            path.lineTo(x + i * wSeg + wSeg / 2f, y + T * 0.42f);
+            path.lineTo(x + i * wSeg + wSeg - 3f, y + T);
+            path.close();
+        }
+        c.drawPath(path, fill);
+        c.drawPath(path, stroke);
+        fill.setColor(0x55FFFFFF);
+        path.reset();
+        for (int i = 0; i < 3; i++) {
+            path.moveTo(x + i * wSeg + wSeg / 2f, y + T * 0.42f);
+            path.lineTo(x + i * wSeg + wSeg / 2f + 4f, y + T * 0.55f);
+            path.lineTo(x + i * wSeg + wSeg / 2f + 6f, y + T * 0.62f);
+            path.close();
+        }
+        c.drawPath(path, fill);
     }
 
     // ------------------------------------------------------------------
@@ -434,13 +720,166 @@ public final class Renderer {
             // subtle motion marker for vertical movers
             if (p.vertical) {
                 fill.setColor(0x66FFFFFF);
-                float bob = (float) Math.sin(g.worldTime * 4f) * 6f;
+                float bob = sinf(g.worldTime * 4f) * 6f;
                 path.reset();
                 path.moveTo(p.x + p.w / 2f - 9f, p.y - 12f + bob);
                 path.lineTo(p.x + p.w / 2f + 9f, p.y - 12f + bob);
                 path.lineTo(p.x + p.w / 2f, p.y - 24f + bob);
                 path.close();
                 c.drawPath(path, fill);
+            }
+        }
+    }
+
+    /** Accent colour per power-up type (also used for the HUD chips). */
+    private static int powerColor(PowerUp.Type t) {
+        switch (t) {
+            case SPEED:
+                return 0xFF2BD9A5;
+            case SHIELD:
+                return 0xFF4AA8FF;
+            case MAGNET:
+                return 0xFFE0483C;
+            case DOUBLE_JUMP:
+                return 0xFFFFC93C;
+            case EXTRA_LIFE:
+                return 0xFFFF6B8B;
+            default:
+                return 0xFFFFFFFF;
+        }
+    }
+
+    private void drawPowerUps(Canvas c, Game g) {
+        for (PowerUp pu : g.powerUps) {
+            if (pu.index >= 0 && g.level.powerUpTaken(pu.index)) {
+                continue;
+            }
+            float s = Constants.POWERUP_SIZE;
+            if (!visible(g, pu.x - s, pu.y - s, s * 2f, s * 2f)) {
+                continue;
+            }
+            float bob = sinf(g.worldTime * 2.2f + pu.phase) * 5f;
+            float spin = cosf(g.worldTime * 2.6f + pu.phase);
+            float sx = Math.max(0.34f, Math.abs(spin));
+            float r = s * 0.5f;
+            int col = powerColor(pu.type);
+            float cy = pu.y + bob;
+
+            // shadow on the ground below the pickup
+            fill.setColor(0x33000000);
+            c.drawOval(rect(pu.x - r * 0.7f, pu.y + r + 10f,
+                    pu.x + r * 0.7f, pu.y + r + 16f), fill);
+
+            // soft glow, pulsing with the bob
+            float pulse = 0.5f + 0.5f * sinf(g.worldTime * 3.1f + pu.phase);
+            fill.setColor((col & 0x00FFFFFF) | ((int) (40 + 50 * pulse) << 24));
+            c.drawCircle(pu.x, cy, r * (1.35f + 0.12f * pulse), fill);
+
+            c.save();
+            c.translate(pu.x, cy);
+            c.scale(sx, 1f);
+            // chip
+            fill.setColor(0xE01B2340);
+            c.drawCircle(0f, 0f, r, fill);
+            fill.setColor((col & 0x00FFFFFF) | 0x55000000);
+            c.drawCircle(0f, 0f, r * 0.86f, fill);
+            fill.setColor(col);
+            c.drawCircle(0f, 0f, r * 0.78f, fill);
+            stroke.setColor(0xAAFFFFFF);
+            stroke.setStrokeWidth(Math.max(1f, s * 0.055f));
+            c.drawCircle(0f, 0f, r, stroke);
+            drawPowerIcon(c, pu.type, r * 1.05f);
+            c.restore();
+
+            // sparkle while the chip faces the camera
+            if (Math.abs(spin) > 0.82f) {
+                fill.setColor(0xCCFFFFFF);
+                c.drawCircle(pu.x + r * 0.62f, cy - r * 0.62f, Math.max(1f, s * 0.075f), fill);
+            }
+        }
+    }
+
+    /**
+     * White glyph on the power-up chip, centred at the current origin.
+     * {@code size} is roughly the icon's diameter.
+     */
+    private void drawPowerIcon(Canvas c, PowerUp.Type type, float size) {
+        float h = size * 0.5f;
+        fill.setColor(0xFFFFFFFF);
+        switch (type) {
+            case SPEED: {
+                // boot: sole + shaft
+                path.reset();
+                path.moveTo(-h * 0.52f, -h * 0.62f);
+                path.lineTo(-h * 0.02f, -h * 0.62f);
+                path.lineTo(-h * 0.02f, h * 0.10f);
+                path.lineTo(h * 0.60f, h * 0.10f);
+                path.lineTo(h * 0.60f, h * 0.42f);
+                path.lineTo(-h * 0.52f, h * 0.42f);
+                path.close();
+                c.drawPath(path, fill);
+                fill.setColor(0x66000000);
+                c.drawRect(rect(-h * 0.52f, h * 0.24f, h * 0.60f, h * 0.42f), fill);
+                break;
+            }
+            case SHIELD: {
+                path.reset();
+                path.moveTo(0f, -h * 0.72f);
+                path.lineTo(h * 0.58f, -h * 0.42f);
+                path.lineTo(h * 0.58f, h * 0.06f);
+                path.quadTo(h * 0.48f, h * 0.62f, 0f, h * 0.78f);
+                path.quadTo(-h * 0.48f, h * 0.62f, -h * 0.58f, h * 0.06f);
+                path.lineTo(-h * 0.58f, -h * 0.42f);
+                path.close();
+                c.drawPath(path, fill);
+                fill.setColor(0x66000000);
+                path.reset();
+                path.moveTo(-h * 0.20f, -h * 0.52f);
+                path.lineTo(h * 0.20f, -h * 0.52f);
+                path.lineTo(h * 0.20f, h * 0.48f);
+                path.quadTo(0f, h * 0.58f, -h * 0.20f, h * 0.48f);
+                path.close();
+                c.drawPath(path, fill);
+                break;
+            }
+            case MAGNET: {
+                // U magnet with two poles
+                stroke.setColor(0xFFFFFFFF);
+                stroke.setStrokeWidth(Math.max(1f, size * 0.20f));
+                c.drawArc(rect(-h * 0.55f, -h * 0.62f, h * 0.55f, h * 0.62f), 0f, 180f, false, stroke);
+                stroke.setStrokeWidth(Math.max(1f, size * 0.20f));
+                c.drawLine(-h * 0.55f, 0f, -h * 0.55f, h * 0.58f, stroke);
+                c.drawLine(h * 0.55f, 0f, h * 0.55f, h * 0.58f, stroke);
+                fill.setColor(0xFFFFFFFF);
+                c.drawRect(rect(-h * 0.72f, h * 0.34f, -h * 0.38f, h * 0.64f), fill);
+                c.drawRect(rect(h * 0.38f, h * 0.34f, h * 0.72f, h * 0.64f), fill);
+                break;
+            }
+            case DOUBLE_JUMP: {
+                // two stacked up chevrons
+                for (int i = 0; i < 2; i++) {
+                    float oy = h * (i == 0 ? -0.42f : 0.16f);
+                    path.reset();
+                    path.moveTo(0f, oy - h * 0.34f);
+                    path.lineTo(h * 0.58f, oy + h * 0.22f);
+                    path.lineTo(h * 0.58f, oy + h * 0.52f);
+                    path.lineTo(0f, oy - h * 0.04f);
+                    path.lineTo(-h * 0.58f, oy + h * 0.52f);
+                    path.lineTo(-h * 0.58f, oy + h * 0.22f);
+                    path.close();
+                    c.drawPath(path, fill);
+                }
+                break;
+            }
+            case EXTRA_LIFE:
+            default: {
+                path.reset();
+                path.moveTo(0f, h * 0.70f);
+                path.cubicTo(-h * 1.10f, -h * 0.10f, -h * 0.62f, -h * 0.86f, 0f, -h * 0.28f);
+                path.cubicTo(h * 0.62f, -h * 0.86f, h * 1.10f, -h * 0.10f, 0f, h * 0.70f);
+                path.close();
+                c.drawPath(path, fill);
+                break;
             }
         }
     }
@@ -453,37 +892,43 @@ public final class Renderer {
             if (!visible(g, coin.x - 30f, coin.y - 30f, 60f, 60f)) {
                 continue;
             }
-            float spin = (float) Math.cos(g.worldTime * 4.2f + coin.spinPhase);
+            float spin = cosf(g.worldTime * 4.2f + coin.spinPhase);
             float sx = Math.max(0.18f, Math.abs(spin));
-            float bob = (float) Math.sin(g.worldTime * 2.6f + coin.spinPhase) * 6f;
+            float bob = sinf(g.worldTime * 2.6f + coin.spinPhase) * 6f;
             float r = coin.size / 2f;
+            float ccx = coin.x;
+            float ccy = coin.y + bob;
 
             fill.setColor(0x33000000);
-            c.drawOval(rect(coin.x - r * 0.8f, coin.y + r + 6f + bob,
-                    coin.x + r * 0.8f, coin.y + r + 12f + bob), fill);
+            c.drawOval(rect(ccx - r * 0.8f, coin.y + r + 6f + bob,
+                    ccx + r * 0.8f, coin.y + r + 12f + bob), fill);
 
-            c.save();
-            c.translate(coin.x, coin.y + bob);
-            c.scale(sx, 1f);
+            // The spin is a horizontal squeeze; drawing ellipses instead of
+            // save/scale/circle keeps the same picture with two fewer calls
+            // per coin (the canvas save/restore pair is not free on device).
             fill.setColor(0xFFFFC93C);
-            c.drawCircle(0f, 0f, r, fill);
+            c.drawOval(rect(ccx - r * sx, ccy - r, ccx + r * sx, ccy + r), fill);
             fill.setColor(0xFFFFE58A);
-            c.drawCircle(-r * 0.18f, -r * 0.18f, r * 0.62f, fill);
+            float ix = ccx - r * 0.18f * sx;
+            float iy = ccy - r * 0.18f;
+            float ir = r * 0.62f;
+            c.drawOval(rect(ix - ir * sx, iy - ir, ix + ir * sx, iy + ir), fill);
             stroke.setColor(0xFFD89A17);
             stroke.setStrokeWidth(3f);
-            c.drawCircle(0f, 0f, r - 1.5f, stroke);
+            float rr = r - 1.5f;
+            c.drawOval(rect(ccx - rr * sx, ccy - rr, ccx + rr * sx, ccy + rr), stroke);
+            // embossed cross (two bars, horizontally squeezed with the spin)
             fill.setColor(0xFFE8A81C);
-            rect(-r * 0.16f, -r * 0.44f, r * 0.16f, r * 0.44f);
-            c.drawRect(rect, fill);
-            rect(-r * 0.36f, -r * 0.14f, r * 0.36f, r * 0.14f);
-            c.drawRect(rect, fill);
-            c.restore();
+            c.drawRect(rect(ccx - r * 0.16f * sx, ccy - r * 0.44f,
+                    ccx + r * 0.16f * sx, ccy + r * 0.44f), fill);
+            c.drawRect(rect(ccx - r * 0.36f * sx, ccy - r * 0.14f,
+                    ccx + r * 0.36f * sx, ccy + r * 0.14f), fill);
 
             // glint
-            float gl = (float) Math.sin(g.worldTime * 3f + coin.spinPhase * 2f);
+            float gl = sinf(g.worldTime * 3f + coin.spinPhase * 2f);
             if (gl > 0.7f) {
                 fill.setColor(0xB3FFFFFF);
-                c.drawCircle(coin.x + r * 0.55f, coin.y - r * 0.55f + bob, 5f, fill);
+                c.drawCircle(ccx + r * 0.55f, coin.y - r * 0.55f + bob, 5f, fill);
             }
         }
     }
@@ -518,7 +963,7 @@ public final class Renderer {
 
         // feet
         if (!e.dead) {
-            float step = (float) Math.sin(e.animTime * 12f) * 6f;
+            float step = sinf(e.animTime * 12f) * 6f;
             fill.setColor(0xFF7E2C22);
             c.drawRoundRect(rect(-e.w * 0.34f, -8f + step, -e.w * 0.04f, 0f), 5f, 5f, fill);
             c.drawRoundRect(rect(e.w * 0.04f, -8f - step, e.w * 0.34f, 0f), 5f, 5f, fill);
@@ -582,7 +1027,7 @@ public final class Renderer {
     }
 
     private void drawFlyer(Canvas c, Game g, Enemy e) {
-        float flap = (float) Math.sin(g.worldTime * 14f + e.animTime * 2f);
+        float flap = sinf(g.worldTime * 14f + e.animTime * 2f);
         c.save();
         c.translate(e.x + e.w / 2f, e.y + e.h / 2f);
 
@@ -695,7 +1140,7 @@ public final class Renderer {
             c.drawRoundRect(rect(-w * 0.36f, -16f, -w * 0.02f, -2f), 5f, 5f, fill);
             c.drawRoundRect(rect(w * 0.04f, -20f, w * 0.34f, -8f), 5f, 5f, fill);
         } else if (moving) {
-            float swing = (float) Math.sin(run) * 9f;
+            float swing = sinf(run) * 9f;
             c.drawRoundRect(rect(-w * 0.34f + swing, -17f, -w * 0.02f + swing, -1f), 5f, 5f, fill);
             c.drawRoundRect(rect(w * 0.02f - swing, -17f, w * 0.34f - swing, -1f), 5f, 5f, fill);
         } else {
@@ -708,7 +1153,7 @@ public final class Renderer {
             c.drawRoundRect(rect(-w * 0.40f, -7f, w * 0.0f, -1f), 4f, 4f, fill);
             c.drawRoundRect(rect(w * 0.02f, -11f, w * 0.40f, -5f), 4f, 4f, fill);
         } else if (moving) {
-            float swing = (float) Math.sin(run) * 9f;
+            float swing = sinf(run) * 9f;
             c.drawRoundRect(rect(-w * 0.40f + swing, -7f, w * 0.0f + swing, -1f), 4f, 4f, fill);
             c.drawRoundRect(rect(w * 0.0f - swing, -7f, w * 0.40f - swing, -1f), 4f, 4f, fill);
         } else {
@@ -717,7 +1162,7 @@ public final class Renderer {
         }
 
         // scarf tail (behind body, flutters with speed)
-        float flutter = (float) Math.sin(g.worldTime * 16f) * 5f;
+        float flutter = sinf(g.worldTime * 16f) * 5f;
         float tail = 6f + Math.min(20f, Math.abs(p.vx) * 0.04f);
         fill.setColor(0xFFE14A4A);
         path.reset();
@@ -739,7 +1184,7 @@ public final class Renderer {
         c.drawRect(rect(-w * 0.08f, -h * 0.30f, w * 0.08f, -h * 0.22f), fill);
 
         // arms
-        float armSwing = moving ? (float) Math.sin(run + Math.PI) * 8f : (p.onGround ? 0f : -6f);
+        float armSwing = moving ? sinf(run + 3.1415927f) * 8f : (p.onGround ? 0f : -6f);
         fill.setColor(0xFF3560D2);
         c.drawRoundRect(rect(-w * 0.56f, -h * 0.62f + armSwing, -w * 0.38f, -h * 0.34f + armSwing), 7f, 7f, fill);
         c.drawRoundRect(rect(w * 0.38f, -h * 0.62f - armSwing, w * 0.56f, -h * 0.34f - armSwing), 7f, 7f, fill);
@@ -842,13 +1287,13 @@ public final class Renderer {
         for (int i = 0; i <= 8; i++) {
             float t = i / 8f;
             float px = x + 4f + fw * t;
-            float py = top + 6f + fh * t * 0.55f + (float) Math.sin(wave - t * 3f) * 7f;
+            float py = top + 6f + fh * t * 0.55f + sinf(wave - t * 3f) * 7f;
             path.lineTo(px, py);
         }
         for (int i = 8; i >= 0; i--) {
             float t = i / 8f;
             float px = x + 4f + fw * t;
-            float py = top + 6f + fh * 0.62f + fh * t * 0.55f + (float) Math.sin(wave - t * 3f) * 7f;
+            float py = top + 6f + fh * 0.62f + fh * t * 0.55f + sinf(wave - t * 3f) * 7f;
             path.lineTo(px, py);
         }
         path.close();
@@ -857,7 +1302,7 @@ public final class Renderer {
         fill.setColor(cleared ? 0xFFB8791A : 0xFFFFD34D);
         float scx = x + 4f + fw * 0.5f;
         float scy = top + 6f + fh * 0.55f;
-        drawStar(c, scx, scy + (float) Math.sin(wave - 1.5f) * 7f, 14f, 7f);
+        drawStar(c, scx, scy + sinf(wave - 1.5f) * 7f, 14f, 7f);
 
         // coin collector: a padlock hangs on the pole while the goal is shut
         if (g.goalLocked()) {
@@ -897,14 +1342,14 @@ public final class Renderer {
             for (int i = 0; i <= 6; i++) {
                 float t = i / 6f;
                 path.lineTo(x + T * 0.62f * t,
-                        top + T * 0.10f + (float) Math.sin(wave - t * 3f) * 5f);
+                        top + T * 0.10f + sinf(wave - t * 3f) * 5f);
             }
             path.lineTo(x, top + T * 0.52f);
             path.close();
             c.drawPath(path, fill);
             if (active) {
                 fill.setColor(0x44FFFFFF);
-                float pulse = 0.5f + 0.5f * (float) Math.sin(g.worldTime * 4f);
+                float pulse = 0.5f + 0.5f * sinf(g.worldTime * 4f);
                 c.drawCircle(x, top + T * 0.26f, 16f + pulse * 8f, fill);
             }
         }
@@ -936,9 +1381,9 @@ public final class Renderer {
         path.reset();
         for (int i = 0; i < 10; i++) {
             float r = (i % 2 == 0) ? outer : inner;
-            double a = -Math.PI / 2 + i * Math.PI / 5;
-            float px = cx + (float) Math.cos(a) * r;
-            float py = cy + (float) Math.sin(a) * r;
+            float a = -1.5707964f + i * 0.62831855f;
+            float px = cx + cosf(a) * r;
+            float py = cy + sinf(a) * r;
             if (i == 0) {
                 path.moveTo(px, py);
             } else {
@@ -963,14 +1408,14 @@ public final class Renderer {
         float pad = 18f;
         float scale = Math.min(sw, sh) / 480f;
         float boxH = 78f * scale;
+        int coinCount = g.level == null ? 0 : g.level.coinCount();
 
-        // score panel: dark backing plus a light border so it reads on any
-        // backdrop; values are large, white, hard-shadowed. The panel is
-        // sized to its value so the score can never overflow it.
-        String scoreStr = String.format(java.util.Locale.US, "%06d", g.score);
-        text.setTextSize(38f * scale);
-        float scoreW = text.measureText(scoreStr);
+        // --- score panel ------------------------------------------------
+        // Every label below is cached: the HUD used to rebuild "%06d" and the
+        // coin string (and re-measure them) on every single frame.
+        updateHudLabels(g, scale, coinCount);
         float boxW = Math.max(200f * scale, 32f * scale + scoreW);
+
         fill.setColor(0x99000000);
         c.drawRoundRect(rect(pad, pad, pad + boxW, pad + boxH), 16f, 16f, fill);
         stroke.setColor(0x88FFFFFF);
@@ -986,41 +1431,37 @@ public final class Renderer {
         text.setShadowLayer(5f, 0f, 3f, 0xCC000000);
         c.drawText(scoreStr, pad + 16f * scale, pad + 66f * scale, text);
 
-        // coin chip: sized to its text so the gold count can never overflow
+        // --- coin chip (level coins) ------------------------------------
         float cx0 = pad + boxW + 12f * scale;
-        String coinStr = g.coinsTaken + "/" + g.level.coinCount();
-        text.setTextSize(34f * scale);
-        float coinTextW = text.measureText(coinStr);
-        float coinW = Math.max(140f * scale, 62f * scale + coinTextW + 18f * scale);
+        float coinW = Math.max(140f * scale, 62f * scale + coinW0 + 18f * scale);
         fill.setColor(0x99000000);
         c.drawRoundRect(rect(cx0, pad, cx0 + coinW, pad + boxH), 16f, 16f, fill);
+        fill.setColor(0x99000000);
         c.drawRoundRect(rect(cx0, pad, cx0 + coinW, pad + boxH), 16f, 16f, stroke);
         float icX = cx0 + 34f * scale;
         float icY = pad + boxH / 2f;
-        fill.setColor(0xFFFFC93C);
-        c.drawCircle(icX, icY, 20f * scale, fill);
-        fill.setColor(0xFFFFE58A);
-        c.drawCircle(icX - 5f * scale, icY - 5f * scale, 10f * scale, fill);
+        drawCoinGlyph(c, icX, icY, 20f * scale);
         text.setTextSize(34f * scale);
         text.setColor(0xFFFFE08A);
         text.setShadowLayer(5f, 0f, 3f, 0xCC000000);
-        c.drawText(g.coinsTaken + "/" + g.level.coinCount(),
-                cx0 + 62f * scale, pad + boxH / 2f + 13f * scale, text);
+        c.drawText(coinStr, cx0 + 62f * scale, pad + boxH / 2f + 13f * scale, text);
 
-        // lives (hearts) under the score panel
-        float hy = pad + boxH + 14f * scale;
-        for (int i = 0; i < 3; i++) {
-            drawHeart(c, pad + 26f + i * 46f * scale, hy + 22f * scale, 20f * scale,
-                    i < g.lives ? 0xFFE4453A : 0x55FFFFFF);
-        }
-
-        // level + time (top centre), clamped so it can never collide with the
-        // left cluster or the pause/mute buttons.
+        // --- career wallet chip -----------------------------------------
+        // "next to the level panel": right of the level/time panel when the
+        // screen has room, otherwise tucked under the score cluster.
         float leftEnd = cx0 + coinW;
         float muteLeft = g.controls.muteX - g.controls.muteHitR;
         float cw = 300f * scale;
         float cx = Math.max(sw / 2f, leftEnd + cw / 2f + 14f * scale);
         cx = Math.min(cx, muteLeft - cw / 2f - 14f * scale);
+        float walletW = Math.max(128f * scale, 56f * scale + walletW0 + 18f * scale);
+        boolean walletInline = cx + cw / 2f + 12f * scale + walletW <= muteLeft - 6f * scale;
+        if (walletInline) {
+            float wx0 = cx + cw / 2f + 12f * scale;
+            drawWalletChip(c, g, wx0, pad, walletW, boxH, scale);
+        }
+
+        // --- level + time (top centre) ----------------------------------
         fill.setColor(0x99000000);
         c.drawRoundRect(rect(cx - cw / 2f, pad, cx + cw / 2f, pad + boxH), 16f, 16f, fill);
         c.drawRoundRect(rect(cx - cw / 2f, pad, cx + cw / 2f, pad + boxH), 16f, 16f, stroke);
@@ -1034,26 +1475,72 @@ public final class Renderer {
         text.setShadowLayer(5f, 0f, 3f, 0xCC000000);
         c.drawText(g.timeLabel(), cx, pad + 64f * scale, text);
 
-        // coin-collector status chip under the level panel
-        if (g.mode == Game.Mode.COIN_COLLECTOR && g.level.coinCount() > 0) {
+        // --- lives (hearts) under the score panel -----------------------
+        float hy = pad + boxH + 14f * scale;
+        int hearts = Math.min(5, Math.max(3, g.lives));
+        for (int i = 0; i < hearts; i++) {
+            drawHeart(c, pad + 26f * scale + i * 46f * scale, hy + 22f * scale, 20f * scale,
+                    i < g.lives ? 0xFFE4453A : 0x55FFFFFF);
+        }
+        if (g.lives > hearts) {
+            text.setTextSize(26f * scale);
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setColor(0xFFFFFFFF);
+            text.setShadowLayer(4f, 0f, 2f, 0xCC000000);
+            c.drawText("+" + (g.lives - hearts),
+                    pad + 26f * scale + hearts * 46f * scale, hy + 30f * scale, text);
+        }
+
+        // --- active power-ups: chips under the hearts -------------------
+        float chipY = hy + 52f * scale;
+        float chipX = pad + 6f * scale;
+        chipX = drawPowerChip(c, g, PowerUp.Type.SPEED, g.speedBoostTimer, chipX, chipY, scale);
+        chipX = drawPowerChip(c, g, PowerUp.Type.MAGNET, g.magnetTimer, chipX, chipY, scale);
+        chipX = drawPowerChip(c, g, PowerUp.Type.DOUBLE_JUMP, g.doubleJumpTimer, chipX, chipY, scale);
+
+        // --- shield pips -------------------------------------------------
+        if (g.shieldCharges > 0) {
+            float shY = chipY + 26f * scale;
+            int pips = Math.min(6, g.shieldCharges);
+            for (int i = 0; i < pips; i++) {
+                drawShieldPip(c, pad + 14f * scale + i * 30f * scale, shY, 12f * scale);
+            }
+        }
+
+        // --- wallet fallback position -----------------------------------
+        if (!walletInline) {
+            drawWalletChip(c, g, pad + boxW + 12f * scale, pad + boxH + 44f * scale,
+                    walletW, boxH * 0.62f, scale);
+        }
+
+        // --- coin-collector status chip under the level panel -----------
+        if (g.mode == Game.Mode.COIN_COLLECTOR && coinCount > 0) {
             boolean locked = g.goalLocked();
-            String s = locked
-                    ? "GOAL LOCKED — COLLECT " + g.coinGoalRequired() + " COINS"
-                    : "GOAL OPEN!";
             text.setTextSize(24f * scale);
             text.setTextAlign(Paint.Align.CENTER);
             text.setShadowLayer(4f, 0f, 2f, 0xCC000000);
             text.setColor(locked ? 0xFFFF9A3D : 0xFF9BE89B);
-            float chipY = pad + boxH + 34f * scale;
+            float chipY2 = pad + boxH + 34f * scale;
             fill.setColor(0x99000000);
-            float chipW = text.measureText(s) + 30f * scale;
-            c.drawRoundRect(rect(cx - chipW / 2f, chipY - 22f * scale,
-                    cx + chipW / 2f, chipY + 10f * scale), 12f, 12f, fill);
-            c.drawText(s, cx, chipY, text);
+            float chipW2 = goalW0 + 30f * scale;
+            c.drawRoundRect(rect(cx - chipW2 / 2f, chipY2 - 22f * scale,
+                    cx + chipW2 / 2f, chipY2 + 10f * scale), 12f, 12f, fill);
+            c.drawText(goalStr, cx, chipY2, text);
         }
 
-        // pause + mute buttons: dark disc plus light ring, drawn at the same
-        // radii used for hit testing.
+        // --- invulnerability flash (shield just soaked a hit) -----------
+        if (g.invulnTimer > 0f) {
+            float k = 0.5f + 0.5f * sinf(g.worldTime * 18f);
+            int a = (int) (110 * Math.min(1f, g.invulnTimer / Math.max(0.01f, Constants.INVULN_TIME)) * k);
+            stroke.setColor(Color.argb(Math.max(0, a), 150, 220, 255));
+            stroke.setStrokeWidth(Math.max(2f, 6f * scale));
+            float inset = 5f * scale;
+            c.drawRoundRect(rect(inset, inset, Math.max(inset, sw - inset),
+                    Math.max(inset, sh - inset)), 18f * scale, 18f * scale, stroke);
+        }
+
+        // --- pause + mute buttons ---------------------------------------
+        // Drawn at the same radii used for hit tests.
         Controls ctl = g.controls;
         fill.setColor(0x99000000);
         c.drawCircle(ctl.pauseX, ctl.pauseY, ctl.pauseHitR, fill);
@@ -1072,6 +1559,178 @@ public final class Renderer {
                 ctl.pauseX + bw * 1.6f, ctl.pauseY + bh / 2f), 4f, 4f, fill);
         // speaker glyph
         drawSpeaker(c, ctl.muteX, ctl.muteY, ctl.muteHitR, g.sound.isEnabled());
+    }
+
+    /**
+     * Refreshes the HUD label cache. Strings and their measured widths are
+     * rebuilt only when the underlying number (or the HUD scale) changes, so
+     * a steady frame does no string work and no measureText churn.
+     */
+    private void updateHudLabels(Game g, float scale, int coinCount) {
+        if (lblScale != scale) {
+            lblScale = scale;
+            scoreKey = Integer.MIN_VALUE;
+            coinKey = Integer.MIN_VALUE;
+            walletKey = Integer.MIN_VALUE;
+            goalKey = Integer.MIN_VALUE;
+        }
+        if (scoreKey != g.score) {
+            scoreKey = g.score;
+            scoreStr = pad6(g.score);
+            scoreW = textWidth(scoreStr, 38f * scale);
+        }
+        if (coinKey != g.coinsTaken || coinTotalKey != coinCount) {
+            coinKey = g.coinsTaken;
+            coinTotalKey = coinCount;
+            coinStr = g.coinsTaken + "/" + coinCount;
+            coinW0 = textWidth(coinStr, 34f * scale);
+        }
+        if (walletKey != g.profile.coins) {
+            walletKey = g.profile.coins;
+            walletStr = Integer.toString(g.profile.coins);
+            walletW0 = textWidth(walletStr, 30f * scale);
+        }
+        if (goalKey != g.coinGoalRequired() || goalLockedKey != g.goalLocked()) {
+            goalKey = g.coinGoalRequired();
+            goalLockedKey = g.goalLocked();
+            goalStr = goalLockedKey
+                    ? "GOAL LOCKED — COLLECT " + goalKey + " COINS"
+                    : "GOAL OPEN!";
+            goalW0 = textWidth(goalStr, 24f * scale);
+        }
+    }
+
+    private static String pad6(int v) {
+        char[] buf = new char[6];
+        int n = Math.max(0, Math.min(999999, v));
+        for (int i = 5; i >= 0; i--) {
+            buf[i] = (char) ('0' + n % 10);
+            n /= 10;
+        }
+        return new String(buf);
+    }
+
+    /** Draws a HUD power-up chip when the timer is running; returns the next x. */
+    private float drawPowerChip(Canvas c, Game g, PowerUp.Type type, float timer,
+                                float x, float y, float scale) {
+        if (timer <= 0f) {
+            return x;
+        }
+        int idx = type.ordinal() % 3;
+        int tenths = Math.max(0, (int) (timer * 10f));
+        if (chipKey[idx] != tenths) {
+            chipKey[idx] = tenths;
+            chipStr[idx] = tenthLabel(tenths);
+        }
+        float h = 34f * scale;
+        float iconR = 13f * scale;
+        float w = 14f * scale + iconR * 2f + 8f * scale + textWidth(chipStr[idx], 24f * scale) + 12f * scale;
+        int col = powerColor(type);
+        fill.setColor(0xCC101830);
+        c.drawRoundRect(rect(x, y - h / 2f, x + w, y + h / 2f), h / 2f, h / 2f, fill);
+        stroke.setColor((col & 0x00FFFFFF) | 0x99000000);
+        stroke.setStrokeWidth(Math.max(1.5f, 2f * scale));
+        c.drawRoundRect(rect(x, y - h / 2f, x + w, y + h / 2f), h / 2f, h / 2f, stroke);
+        // mini chip + icon
+        float icx = x + 14f * scale + iconR;
+        c.save();
+        c.translate(icx, y);
+        c.scale(1f, 1f);
+        fill.setColor(col);
+        c.drawCircle(0f, 0f, iconR, fill);
+        drawPowerIcon(c, type, iconR * 1.7f);
+        c.restore();
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(0xFFFFFFFF);
+        text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+        c.drawText(chipStr[idx], icx + iconR + 8f * scale, y + 8f * scale, text);
+        return x + w + 10f * scale;
+    }
+
+    /** "12.3s" label for a whole number of tenths, built at most once each. */
+    private static String tenthLabel(int tenths) {
+        int i = Math.min(tenths, TENTH_LABELS.length - 1);
+        String s = TENTH_LABELS[i];
+        if (s == null) {
+            s = (i / 10) + "." + (i % 10) + "s";
+            TENTH_LABELS[i] = s;
+        }
+        return s;
+    }
+
+    /**
+     * Width of {@code s} at the paint's current text size, with slack for the
+     * difference between real font metrics and the stub's
+     * {@code length * size * 0.5} approximation: layouts sized on
+     * {@code Paint.measureText} alone can clip on a device.
+     */
+    private float textWidth(String s, float size) {
+        if (s == null || s.isEmpty()) {
+            return 0f;
+        }
+        return Math.max(text.measureText(s), s.length() * size * 0.62f);
+    }
+
+    /** Decimal label for a small non-negative number, built at most once each. */
+    private static String num(int v) {
+        if (v >= 0 && v < NUM_LABELS.length) {
+            String s = NUM_LABELS[v];
+            if (s == null) {
+                s = Integer.toString(v);
+                NUM_LABELS[v] = s;
+            }
+            return s;
+        }
+        return Integer.toString(v);
+    }
+
+    private void drawShieldPip(Canvas c, float cx, float cy, float r) {
+        fill.setColor(0xFF4AA8FF);
+        path.reset();
+        path.moveTo(cx, cy - r);
+        path.lineTo(cx + r * 0.82f, cy - r * 0.55f);
+        path.lineTo(cx + r * 0.82f, cy + r * 0.1f);
+        path.quadTo(cx + r * 0.7f, cy + r * 0.85f, cx, cy + r * 1.1f);
+        path.quadTo(cx - r * 0.7f, cy + r * 0.85f, cx - r * 0.82f, cy + r * 0.1f);
+        path.lineTo(cx - r * 0.82f, cy - r * 0.55f);
+        path.close();
+        c.drawPath(path, fill);
+        fill.setColor(0x88FFFFFF);
+        c.drawCircle(cx - r * 0.2f, cy - r * 0.25f, Math.max(0.5f, r * 0.22f), fill);
+    }
+
+    private void drawWalletChip(Canvas c, Game g, float x, float y, float w, float h, float scale) {
+        fill.setColor(0x99000000);
+        c.drawRoundRect(rect(x, y, x + w, y + h), 16f, 16f, fill);
+        stroke.setColor(0x88FFFFFF);
+        stroke.setStrokeWidth(2.5f * scale);
+        c.drawRoundRect(rect(x, y, x + w, y + h), 16f, 16f, stroke);
+        float r = Math.max(4f, h * 0.20f);
+        float icx = x + 20f * scale + r;
+        drawCoinGlyph(c, icx, y + h / 2f, r);
+        text.setTextSize(30f * scale);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(0xFFFFE08A);
+        text.setShadowLayer(4f, 0f, 3f, 0xCC000000);
+        c.drawText(walletStr, icx + r + 8f * scale, y + h / 2f + 11f * scale, text);
+        // tiny "career wallet" hint under the number on tall enough chips
+        if (h > 40f * scale) {
+            text.setTextSize(15f * scale);
+            text.setColor(0xCCBFD4FF);
+            text.setShadowLayer(2f, 0f, 1f, 0xCC000000);
+            c.drawText("WALLET", icx + r + 8f * scale, y + h / 2f + 27f * scale, text);
+        }
+    }
+
+    private void drawCoinGlyph(Canvas c, float cx, float cy, float r) {
+        fill.setColor(0xFFFFC93C);
+        c.drawCircle(cx, cy, r, fill);
+        fill.setColor(0xFFFFE58A);
+        c.drawCircle(cx - r * 0.25f, cy - r * 0.25f, r * 0.5f, fill);
+        fill.setColor(0xFFE8A81C);
+        float s = r * 0.2f;
+        c.drawRect(rect(cx - s * 0.5f, cy - r * 0.62f, cx + s * 0.5f, cy + r * 0.62f), fill);
+        c.drawRect(rect(cx - r * 0.5f, cy - s * 0.5f, cx + r * 0.5f, cy + s * 0.5f), fill);
     }
 
     private void drawSpeaker(Canvas c, float cx, float cy, float r, boolean on) {
@@ -1234,31 +1893,37 @@ public final class Renderer {
                 break;
             case LEVEL_CLEARED:
                 scrim(c, sw, sh, 0.62f);
-                drawPanel(c, sw / 2f, sh / 2f, Math.min(sw * 0.7f, 720f * scale), 400f * scale);
+                drawPanel(c, sw / 2f, sh / 2f, Math.min(sw * 0.7f, 760f * scale), 430f * scale);
                 text.setTextAlign(Paint.Align.CENTER);
                 text.setTextSize(54f * scale);
                 text.setColor(0xFFFFD34D);
                 text.setShadowLayer(8f, 0f, 5f, 0xAA000000);
-                c.drawText("LEVEL CLEAR!", sw / 2f, sh / 2f - 130f * scale, text);
+                c.drawText("LEVEL CLEAR!", sw / 2f, sh / 2f - 152f * scale, text);
                 text.setTextSize(30f * scale);
                 text.setColor(0xFFFFFFFF);
-                c.drawText("Time  " + g.timeLabel(), sw / 2f, sh / 2f - 66f * scale, text);
+                c.drawText("Time  " + g.timeLabel(), sw / 2f, sh / 2f - 92f * scale, text);
                 text.setColor(0xFFBFD4FF);
                 c.drawText("Coins  " + g.coinsTaken + "/" + g.level.coinCount(),
-                        sw / 2f, sh / 2f - 20f * scale, text);
+                        sw / 2f, sh / 2f - 48f * scale, text);
                 text.setColor(0xFF9BE89B);
-                c.drawText("Time bonus  +" + g.bonusTime, sw / 2f, sh / 2f + 26f * scale, text);
+                c.drawText("Time bonus  +" + g.bonusTime, sw / 2f, sh / 2f - 4f * scale, text);
                 if (g.bonusCoins > 0) {
                     text.setColor(0xFFFFE08A);
-                    c.drawText("All coins  +" + g.bonusCoins, sw / 2f, sh / 2f + 66f * scale, text);
+                    c.drawText("All coins  +" + g.bonusCoins, sw / 2f, sh / 2f + 40f * scale, text);
                 } else {
                     text.setColor(0xFFBFD4FF);
-                    c.drawText("Score  " + g.score, sw / 2f, sh / 2f + 66f * scale, text);
+                    c.drawText("Score  " + g.score, sw / 2f, sh / 2f + 40f * scale, text);
                 }
                 text.setTextSize(38f * scale);
                 text.setColor(0xFFFFFFFF);
-                c.drawText("TOTAL  " + g.score, sw / 2f, sh / 2f + 118f * scale, text);
-                blinkText(c, "TAP TO CONTINUE", sw / 2f, sh / 2f + 175f * scale, 26f * scale, g);
+                c.drawText("TOTAL  " + g.score, sw / 2f, sh / 2f + 92f * scale, text);
+                // career wallet line: what this clear banked for the profile
+                text.setTextSize(26f * scale);
+                text.setColor(0xFF8FE3A8);
+                text.setShadowLayer(5f, 0f, 3f, 0xAA000000);
+                c.drawText("CAREER  +" + g.rewardCoins + " coins   (wallet "
+                        + g.profile.coins + ")", sw / 2f, sh / 2f + 134f * scale, text);
+                blinkText(c, "TAP TO CONTINUE", sw / 2f, sh / 2f + 188f * scale, 26f * scale, g);
                 break;
             case GAME_OVER:
                 scrim(c, sw, sh, 0.68f);
@@ -1300,7 +1965,7 @@ public final class Renderer {
                 text.setTextSize(34f * scale);
                 text.setColor(0xFFFFFFFF);
                 text.setShadowLayer(6f, 0f, 4f, 0x99000000);
-                c.drawText("All three peaks conquered", sw / 2f, wy, text);
+                c.drawText("All " + Levels.TEXT.length + " peaks conquered", sw / 2f, wy, text);
                 wy += 56f * scale;
                 text.setColor(0xFF9BE89B);
                 c.drawText("Final score  " + g.score, sw / 2f, wy, text);
@@ -1310,17 +1975,27 @@ public final class Renderer {
             case SETTINGS:
                 drawSettings(c, g, sw, sh, scale);
                 break;
+            case CAREER:
+                drawCareer(c, g, sw, sh, scale);
+                break;
+            case STORE:
+                drawStore(c, g, sw, sh, scale);
+                break;
             case PLAYING:
             default:
                 // feedback flash when the player bumps a locked goal
                 if (g.goalLockedTimer > 0f && g.mode == Game.Mode.COIN_COLLECTOR) {
-                    int need = Math.max(1, g.coinGoalRequired() - g.level.coinsTaken());
+                    // cached: this is the PLAYING path and must not build strings
+                    int need = Math.max(1, g.coinGoalRequired() - g.level.coinsTakenFast());
+                    if (need != needKey) {
+                        needKey = need;
+                        needStr = "GOAL LOCKED — NEED " + need + " MORE COINS";
+                    }
                     text.setTextAlign(Paint.Align.CENTER);
                     text.setTextSize(30f * scale);
                     text.setColor(0xFFFF9A3D);
                     text.setShadowLayer(6f, 0f, 4f, 0xAA000000);
-                    c.drawText("GOAL LOCKED — NEED " + need + " MORE COINS",
-                            sw / 2f, sh * 0.2f, text);
+                    c.drawText(needStr, sw / 2f, sh * 0.2f, text);
                 }
                 break;
         }
@@ -1330,7 +2005,7 @@ public final class Renderer {
         scrim(c, sw, sh, 0.45f);
         text.setTextAlign(Paint.Align.CENTER);
 
-        float bob = (float) Math.sin(g.worldTime * 2f) * 6f;
+        float bob = sinf(g.worldTime * 2f) * 6f;
         // title
         text.setTextSize(88f * scale);
         text.setColor(0xAA000000);
@@ -1345,30 +2020,23 @@ public final class Renderer {
         text.setShadowLayer(4f, 0f, 3f, 0x99000000);
         c.drawText("A TINY PLATFORM ADVENTURE", sw / 2f, sh * 0.185f + 40f * scale, text);
 
+        // active career badge (top-left, clear of the centred title)
+        drawCareerBadge(c, g, sw, scale);
+
         // side art, pushed to the edges so it never fights the buttons
         float y = sh * 0.52f;
         drawMenuHero(c, sw * 0.13f, y, scale * 0.9f, g);
         drawMenuEnemy(c, sw * 0.87f, y, scale * 0.9f, g);
         drawMenuCoin(c, sw * 0.87f - 130f * scale, y - 70f * scale, scale * 0.8f, g);
 
-        // menu buttons (START / CONTINUE / MODE / SOUND / small RESET)
+        // Every menu button is drawn from the rect Game laid out; styling only
+        // depends on which group the id belongs to, so drawing and hit testing
+        // can never disagree.
         for (Game.UiButton b : g.menuButtons) {
-            boolean small = b.id == Game.BTN_RESET;
-            float r = small ? 12f : 18f;
-            fill.setColor(small ? 0x99203A66 : 0xF21E3A6E);
-            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, fill);
-            stroke.setColor(small ? 0x66FFFFFF : 0xAAFFFFFF);
-            stroke.setStrokeWidth(small ? 2f : 3f);
-            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
-            if (!small) {
-                fill.setColor(0x2EFFFFFF);
-                c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h * 0.5f), r, r, fill);
-            }
-            float ts = small ? Math.max(16f, 20f * scale) : Math.max(24f, 30f * scale);
-            text.setTextSize(Math.min(ts, b.h * 0.5f));
-            text.setColor(small ? 0xCCFFFFFF : 0xFFFFFFFF);
-            text.setShadowLayer(4f, 0f, 3f, 0x99000000);
-            c.drawText(b.label, b.x + b.w / 2f, b.y + b.h * 0.68f, text);
+            boolean small = b.id == Game.BTN_SOUND || b.id == Game.BTN_RESET;
+            boolean row = b.id == Game.BTN_CAREER || b.id == Game.BTN_STORE
+                    || b.id == Game.BTN_SETTINGS;
+            drawMenuButton(c, b.label, b.x, b.y, b.w, b.h, scale, small, row);
         }
 
         text.setTextSize(20f * scale);
@@ -1378,9 +2046,369 @@ public final class Renderer {
                 sw / 2f, sh * 0.885f, text);
     }
 
+    /** One home-screen button; {@code small}/{@code row} pick the styling group. */
+    private void drawMenuButton(Canvas c, String label, float x, float y, float w, float h,
+                                float scale, boolean small, boolean row) {
+        float r = Math.max(2f, (small ? 12f : 18f) * Math.max(scale, 0.4f));
+        fill.setColor(small ? 0x99203A66 : row ? 0xE61E3A6E : 0xF21E3A6E);
+        c.drawRoundRect(rect(x, y, x + w, y + h), r, r, fill);
+        stroke.setColor(small ? 0x66FFFFFF : 0xAAFFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, (small ? 2f : 3f) * Math.max(scale, 0.4f)));
+        c.drawRoundRect(rect(x, y, x + w, y + h), r, r, stroke);
+        if (!small) {
+            fill.setColor(0x2EFFFFFF);
+            c.drawRoundRect(rect(x, y, x + w, y + h * 0.5f), r, r, fill);
+        }
+        float ts = small ? Math.max(16f, 20f * scale)
+                : row ? Math.max(20f, 26f * scale) : Math.max(24f, 30f * scale);
+        ts = Math.min(ts, h * 0.52f);
+        // never let a long label run outside its own button
+        float glyphW = 0.62f * Math.max(1, label == null ? 1 : label.length());
+        ts = Math.min(ts, w / glyphW);
+        text.setTextSize(Math.max(0f, ts));
+        text.setColor(small ? 0xCCFFFFFF : 0xFFFFFFFF);
+        text.setShadowLayer(small ? 3f : 4f, 0f, 3f, 0x99000000);
+        c.drawText(label == null ? "" : label, x + w / 2f, y + h * 0.68f, text);
+    }
+
+    /** Active-career line: avatar tint, name, wallet and continue level. */
+    private void drawCareerBadge(Canvas c, Game g, float sw, float scale) {
+        Profile p = g.profile;
+        if (p == null) {
+            return;
+        }
+        boolean compact = sw < 760f;
+        float pad = Math.max(5f, 12f * scale);
+        float h = Math.max(20f, 44f * scale);
+        float dot = h * 0.36f;
+        float x = pad;
+        float y = pad;
+        text.setTextSize(Math.max(6f, 22f * scale));
+        int key = (p.name.hashCode() * 31 + p.coins) * 31 + p.levelIndex;
+        if (badgeKey != key || badgeScale != scale) {
+            badgeKey = key;
+            badgeScale = scale;
+            badgeNameW = compact ? 0f : textWidth(p.name, Math.max(6f, 22f * scale));
+            badgeCoinsW = textWidth(num(p.coins), Math.max(6f, 20f * scale));
+            badgeLvlW = textWidth("LVL " + (p.levelIndex + 1), Math.max(6f, 20f * scale));
+        }
+        float gap = Math.max(3f, 10f * scale);
+        float w = pad * 2f + dot * 2f + gap
+                + (compact ? 0f : badgeNameW + gap)
+                + dot * 1.6f + gap + badgeCoinsW + gap
+                + badgeLvlW;
+        // keep the badge clear of a narrow title
+        if (!compact && w > sw * 0.38f) {
+            compact = true;
+            w = pad * 2f + dot * 2f + gap + dot * 1.6f + gap + badgeCoinsW + gap + badgeLvlW;
+        }
+        fill.setColor(0xD9151F38);
+        c.drawRoundRect(rect(x, y, x + w, y + h), h / 2f, h / 2f, fill);
+        stroke.setColor(0x77FFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, 2f * scale));
+        c.drawRoundRect(rect(x, y, x + w, y + h), h / 2f, h / 2f, stroke);
+        // avatar tint dot
+        float ax = x + pad + dot;
+        fill.setColor(avatarColor(p.colorIndex));
+        c.drawCircle(ax, y + h / 2f, dot, fill);
+        stroke.setColor(0xAAFFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, 2f * scale));
+        c.drawCircle(ax, y + h / 2f, dot, stroke);
+        float tx = ax + dot + gap;
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+        if (!compact) {
+            text.setTextSize(Math.max(6f, 22f * scale));
+            text.setColor(0xFFFFFFFF);
+            c.drawText(p.name, tx, y + h / 2f + 8f * scale, text);
+            tx += badgeNameW + gap;
+        }
+        // coin wallet
+        float cr = dot * 0.8f;
+        drawCoinGlyph(c, tx + cr, y + h / 2f, cr);
+        tx += cr * 2f + gap;
+        text.setTextSize(Math.max(6f, 20f * scale));
+        text.setColor(0xFFFFE08A);
+        c.drawText(num(p.coins), tx, y + h / 2f + 7f * scale, text);
+        tx += badgeCoinsW + gap;
+        text.setColor(0xFFBFD4FF);
+        c.drawText("LVL " + (p.levelIndex + 1), tx, y + h / 2f + 7f * scale, text);
+        text.setTextAlign(Paint.Align.CENTER);
+    }
+
+    // ------------------------------------------------------------------
+    // career + store screens (rects and panel sizes come from Game)
+    // ------------------------------------------------------------------
+
+    private void drawCareer(Canvas c, Game g, float sw, float sh, float scale) {
+        scrim(c, sw, sh, 0.66f);
+        float pw = g.careerPanelW();
+        float ph = g.careerPanelH();
+        drawPanel(c, sw / 2f, sh / 2f, pw, ph);
+        float left = (sw - pw) / 2f;
+        float top = (sh - ph) / 2f;
+
+        // Header sits in the band above the rows Game laid out (rowsTop is
+        // top + panelH * 0.16), so nothing here can overlap a row.
+        float headerY = top + Math.min(52f * scale, ph * 0.075f);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(Math.max(8f, 38f * scale));
+        text.setColor(0xFFFFD34D);
+        text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
+        c.drawText("CAREERS", left + pw * 0.06f, headerY, text);
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(Math.max(6f, 20f * scale));
+        text.setColor(0xFFBFD4FF);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText(g.profiles.size() + (g.profiles.size() == 1 ? " CAREER" : " CAREERS"),
+                left + pw * 0.94f, headerY, text);
+        text.setTextAlign(Paint.Align.CENTER);
+
+        // profile rows: one per Game.careerButtons BTN_PROFILE_ROW rect
+        float rowsBottom = top + ph * 0.16f;
+        for (Game.UiButton b : g.careerButtons) {
+            int id = b.id - Game.BTN_PROFILE_ROW;
+            if (id < 0 || id >= g.profiles.size() || b.id >= Game.BTN_UPGRADE_ROW) {
+                continue;
+            }
+            drawCareerRow(c, g.profiles.get(id), id == g.activeProfile, b, scale);
+            rowsBottom = Math.max(rowsBottom, b.y + b.h);
+        }
+        if (g.careerRowCount() == 0) {
+            // Game has not laid the rows out (state forced without the tap flow):
+            // still say something useful instead of an empty panel.
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(Math.max(6f, 24f * scale));
+            text.setColor(0xCCFFFFFF);
+            c.drawText(g.profiles.isEmpty() ? "no careers yet" : "careers load on open",
+                    sw / 2f, top + ph * 0.5f, text);
+        }
+
+        // NEW / CONFIRM / BACK
+        for (Game.UiButton b : g.careerButtons) {
+            if (b.id < Game.BTN_PROFILE_ROW) {
+                drawOverlayButton(c, b, scale, b.id == Game.BTN_DELETE_PROFILE);
+            }
+        }
+
+        float cMsgY = Math.max(rowsBottom + 26f * scale,
+                footerTop(g.careerButtons, top + ph) - 10f * scale);
+        drawMessage(c, g.careerMsg, g.careerMsgTimer, sw / 2f,
+                Math.min(cMsgY, footerTop(g.careerButtons, top + ph) - 4f), scale);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(Math.max(5f, 17f * scale));
+        text.setColor(0x99FFFFFF);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText("each career keeps its own coins, upgrades and progress",
+                sw / 2f, Math.min(top + ph + 24f * scale, sh - 8f * scale), text);
+    }
+
+    private void drawCareerRow(Canvas c, Profile p, boolean active, Game.UiButton b, float scale) {
+        float r = Math.max(2f, 14f * scale);
+        fill.setColor(active ? 0xE62C5AA8 : 0xB4101826);
+        c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, fill);
+        stroke.setColor(active ? 0xFFFFD34D : 0x55FFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, (active ? 3f : 2f) * scale));
+        c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
+
+        float dot = Math.min(b.h * 0.28f, 22f * scale);
+        float ax = b.x + dot * 2.2f;
+        fill.setColor(avatarColor(p.colorIndex));
+        c.drawCircle(ax, b.y + b.h / 2f, Math.max(1f, dot), fill);
+        stroke.setColor(0xAAFFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, 1.5f * scale));
+        c.drawCircle(ax, b.y + b.h / 2f, Math.max(1f, dot), stroke);
+
+        float tx = ax + dot * 1.6f;
+        float nameSize = Math.min(b.h * 0.34f, 30f * scale);
+        float subSize = Math.min(b.h * 0.26f, 20f * scale);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(Math.max(5f, nameSize));
+        text.setColor(0xFFFFFFFF);
+        text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+        c.drawText(p.name, tx, b.y + b.h * (b.h > 34f ? 0.44f : 0.62f), text);
+        if (b.h > 34f) {
+            text.setTextSize(Math.max(4f, subSize));
+            text.setColor(0xFFBFD4FF);
+            c.drawText("LEVEL " + (p.levelIndex + 1) + "  •  COINS " + p.coins,
+                    tx, b.y + b.h * 0.78f, text);
+        }
+        // right side: best score / active marker
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(Math.max(4f, subSize));
+        text.setColor(0xFFFFE08A);
+        c.drawText("BEST " + p.bestScore, b.x + b.w - 18f * scale, b.y + b.h * 0.62f, text);
+        if (active) {
+            text.setTextSize(Math.max(4f, subSize * 0.92f));
+            text.setColor(0xFF9BE89B);
+            c.drawText("ACTIVE", b.x + b.w - 18f * scale, b.y + b.h * 0.34f, text);
+        }
+        text.setTextAlign(Paint.Align.CENTER);
+    }
+
+    private void drawStore(Canvas c, Game g, float sw, float sh, float scale) {
+        scrim(c, sw, sh, 0.66f);
+        float pw = g.storePanelW();
+        float ph = g.storePanelH();
+        float left = (sw - pw) / 2f;
+        float top = (sh - ph) / 2f;
+        drawPanel(c, sw / 2f, sh / 2f, pw, ph);
+
+        // Header band above the rows (rowsTop is top + panelH * 0.17):
+        // title on the left, wallet on the right.
+        float headerY = top + Math.min(52f * scale, ph * 0.075f);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(Math.max(8f, 38f * scale));
+        text.setColor(0xFFFFD34D);
+        text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
+        c.drawText("STORE", left + pw * 0.06f, headerY, text);
+
+        float wSize = Math.max(6f, 24f * scale);
+        String walletLine = "WALLET " + num(g.profile.coins);
+        float walletTextW = textWidth(walletLine, wSize);
+        float wRight = left + pw * 0.94f;
+        float wGlyphR = Math.max(4f, 12f * scale);
+        drawCoinGlyph(c, wRight - walletTextW - 12f * scale - wGlyphR, headerY - 9f * scale, wGlyphR);
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setColor(0xFFFFE08A);
+        text.setShadowLayer(3f, 0f, 3f, 0xCC000000);
+        c.drawText(walletLine, wRight, headerY, text);
+        text.setTextAlign(Paint.Align.CENTER);
+
+        float rowsBottom = top + ph * 0.17f;
+        for (Game.UiButton b : g.storeButtons) {
+            int id = b.id - Game.BTN_UPGRADE_ROW;
+            if (id >= 0 && id < Upgrades.COUNT && b.id >= Game.BTN_UPGRADE_ROW) {
+                drawStoreRow(c, g, id, b, scale);
+                rowsBottom = Math.max(rowsBottom, b.y + b.h);
+            }
+        }
+        if (g.storeButtons.isEmpty()) {
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(Math.max(6f, 24f * scale));
+            text.setColor(0xCCFFFFFF);
+            c.drawText("upgrades load on open", sw / 2f, top + ph * 0.55f, text);
+        }
+        for (Game.UiButton b : g.storeButtons) {
+            if (b.id == Game.BTN_BACK) {
+                drawOverlayButton(c, b, scale, false);
+            }
+        }
+
+        float sMsgY = Math.max(rowsBottom + 26f * scale,
+                footerTop(g.storeButtons, top + ph) - 10f * scale);
+        drawMessage(c, g.storeMsg, g.storeMsgTimer, sw / 2f,
+                Math.min(sMsgY, footerTop(g.storeButtons, top + ph) - 4f), scale);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(Math.max(5f, 17f * scale));
+        text.setColor(0x99FFFFFF);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText("upgrades are permanent and shared by this career only",
+                sw / 2f, Math.min(top + ph + 24f * scale, sh - 8f * scale), text);
+    }
+
+    private void drawStoreRow(Canvas c, Game g, int id, Game.UiButton b, float scale) {
+        int level = g.profile.upgradeLevel(id);
+        boolean maxed = level >= Upgrades.MAX[id];
+        boolean afford = !maxed && g.profile.canAfford(id);
+        // cache the row's strings: they only change when the level changes
+        if (storeKey[id] != level) {
+            storeKey[id] = level;
+            storeEff[id] = maxed ? "MAX LEVEL" : Upgrades.effect(id, level + 1);
+            storePrice[id] = maxed ? "MAX" : Integer.toString(g.profile.nextPrice(id));
+        }
+        float r = Math.max(2f, 14f * scale);
+        fill.setColor(afford ? 0xD9203A66 : 0x99101826);
+        c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, fill);
+        stroke.setColor(afford ? 0xFF9BE89B : 0x44FFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, 2f * scale));
+        c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
+
+        text.setTextAlign(Paint.Align.LEFT);
+        float nameSize = Math.min(b.h * 0.30f, 26f * scale);
+        text.setTextSize(Math.max(5f, nameSize));
+        text.setColor(maxed ? 0xFFBFD4FF : afford ? 0xFFFFFFFF : 0x99FFFFFF);
+        text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+        c.drawText(Upgrades.NAME[id], b.x + 16f * scale, b.y + b.h * 0.44f, text);
+        text.setTextSize(Math.max(4f, Math.min(b.h * 0.22f, 18f * scale)));
+        text.setColor(afford ? 0xFFBFD4FF : 0x88FFFFFF);
+        c.drawText(storeEff[id], b.x + 16f * scale, b.y + b.h * 0.80f, text);
+
+        // level pips: filled squares for owned levels
+        float pipS = Math.max(2f, Math.min(b.h * 0.14f, 11f * scale));
+        float pipsW = Upgrades.MAX[id] * (pipS * 2.1f);
+        float px = b.x + b.w - 18f * scale - pipsW;
+        for (int i = 0; i < Upgrades.MAX[id]; i++) {
+            fill.setColor(i < level ? 0xFFFFD34D : 0x44FFFFFF);
+            c.drawRoundRect(rect(px + i * pipS * 2.1f, b.y + b.h * 0.30f,
+                    px + i * pipS * 2.1f + pipS, b.y + b.h * 0.30f + pipS), 2f, 2f, fill);
+        }
+        float priceSize = Math.max(5f, Math.min(b.h * 0.28f, 24f * scale));
+        String price = maxed ? "MAX" : storePrice[id];
+        float priceW = textWidth(price, priceSize);
+        float pRight = b.x + b.w - 18f * scale;
+        if (!maxed) {
+            drawCoinGlyph(c, pRight - priceW - 10f * scale, b.y + b.h * 0.64f,
+                    Math.max(2f, priceSize * 0.44f));
+        }
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(priceSize);
+        text.setColor(maxed ? 0xFF9BE89B : afford ? 0xFFFFE08A : 0x88FFFFFF);
+        c.drawText(price, pRight, b.y + b.h * 0.74f, text);
+        text.setTextAlign(Paint.Align.CENTER);
+    }
+
+    /** Generic footer button for the career/store screens (Back/New/Delete). */
+    private void drawOverlayButton(Canvas c, Game.UiButton b, float scale, boolean danger) {
+        float r = Math.max(2f, 14f * scale);
+        fill.setColor(danger ? 0xE68C2C2C : 0xF21E3A6E);
+        c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, fill);
+        stroke.setColor(danger ? 0xFFFF9A8A : 0xAAFFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, 3f * scale));
+        c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
+        float ts = Math.min(Math.max(18f, 26f * scale), b.h * 0.5f);
+        String label = b.label == null ? "" : b.label;
+        ts = Math.min(ts, b.w / (0.62f * Math.max(1, label.length())));
+        text.setTextSize(Math.max(0f, ts));
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setColor(0xFFFFFFFF);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText(label, b.x + b.w / 2f, b.y + b.h * 0.68f, text);
+    }
+
+    /** Transient confirmation line (store purchase / career delete). */
+    private void drawMessage(Canvas c, String msg, float timer, float cx, float y, float scale) {
+        if (timer <= 0f || msg == null || msg.isEmpty()) {
+            return;
+        }
+        float a = Math.min(1f, timer * 2.5f);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(Math.max(6f, 22f * scale));
+        text.setColor(Color.argb((int) (255 * a), 155, 232, 155));
+        text.setShadowLayer(4f, 0f, 3f, 0xAA000000);
+        c.drawText(msg, cx, y, text);
+    }
+
+    /** Top edge of the footer button row (Back / New / Delete), or a fallback. */
+    private static float footerTop(java.util.List<Game.UiButton> buttons, float fallback) {
+        float top = Float.MAX_VALUE;
+        for (Game.UiButton b : buttons) {
+            if (b.id == Game.BTN_BACK || b.id == Game.BTN_NEW_PROFILE
+                    || b.id == Game.BTN_DELETE_PROFILE) {
+                top = Math.min(top, b.y);
+            }
+        }
+        return top == Float.MAX_VALUE ? fallback : top;
+    }
+
+    private static int avatarColor(int colorIndex) {
+        int i = Math.floorMod(colorIndex, AVATAR.length);
+        return AVATAR[i];
+    }
+
     private void drawMenuHero(Canvas c, float x, float y, float scale, Game g) {
         c.save();
-        c.translate(x, y + (float) Math.sin(g.worldTime * 3f) * 6f);
+        c.translate(x, y + sinf(g.worldTime * 3f) * 6f);
         c.scale(2.1f * scale, 2.1f * scale);
         fill.setColor(0x66000000);
         c.drawOval(rect(-24f, 44f, 24f, 58f), fill);
@@ -1411,7 +2439,7 @@ public final class Renderer {
         fill.setColor(0xFFE14A4A);
         path.reset();
         path.moveTo(-6f, -16f);
-        path.lineTo(-34f, -6f + (float) Math.sin(g.worldTime * 6f) * 5f);
+        path.lineTo(-34f, -6f + sinf(g.worldTime * 6f) * 5f);
         path.lineTo(-6f, 2f);
         path.close();
         c.drawPath(path, fill);
@@ -1420,7 +2448,7 @@ public final class Renderer {
 
     private void drawMenuEnemy(Canvas c, float x, float y, float scale, Game g) {
         c.save();
-        c.translate(x, y + (float) Math.sin(g.worldTime * 3f + 1f) * 6f);
+        c.translate(x, y + sinf(g.worldTime * 3f + 1f) * 6f);
         c.scale(2.0f * scale, 2.0f * scale);
         fill.setColor(0x66000000);
         c.drawOval(rect(-26f, 42f, 26f, 56f), fill);
@@ -1456,8 +2484,8 @@ public final class Renderer {
 
     private void drawMenuCoin(Canvas c, float x, float y, float scale, Game g) {
         c.save();
-        c.translate(x, y + (float) Math.sin(g.worldTime * 3f + 2f) * 6f);
-        float spin = Math.max(0.2f, Math.abs((float) Math.cos(g.worldTime * 3f)));
+        c.translate(x, y + sinf(g.worldTime * 3f + 2f) * 6f);
+        float spin = Math.max(0.2f, Math.abs(cosf(g.worldTime * 3f)));
         c.scale(spin * 2.0f * scale, 2.0f * scale);
         fill.setColor(0xFFFFC93C);
         c.drawCircle(0f, 0f, 26f, fill);
@@ -1555,7 +2583,7 @@ public final class Renderer {
     }
 
     private void blinkText(Canvas c, String s, float x, float y, float size, Game g) {
-        float a = 0.55f + 0.45f * (float) Math.sin(g.worldTime * 4f);
+        float a = 0.55f + 0.45f * sinf(g.worldTime * 4f);
         text.setTextSize(size);
         text.setTextAlign(Paint.Align.CENTER);
         text.setShadowLayer(8f, 0f, 5f, 0xAA000000);
@@ -1589,10 +2617,5 @@ public final class Renderer {
     private RectF rect(float l, float t, float r, float b) {
         rect.set(l, t, r, b);
         return rect;
-    }
-
-    private static float h1(int n) {
-        float x = (float) Math.sin(n * 12.9898f + 78.233f) * 43758.5453f;
-        return x - (float) Math.floor(x);
     }
 }

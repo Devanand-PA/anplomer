@@ -31,6 +31,16 @@ public final class Player {
     public float runCycle;     // used by the renderer for leg animation
     private float stepTimer;
 
+    // ---- career upgrades + power-ups ----------------------------------
+    /** Run-speed multiplier from upgrades and the SPEED power-up. */
+    public float speedMul = 1f;
+    /** Jump-velocity multiplier from the JUMP upgrade. */
+    public float jumpMul = 1f;
+    /** True while the DOUBLE_JUMP power-up is active. */
+    public boolean doubleJumpEnabled;
+    /** Mid-air jumps left for the current airborne period. */
+    public int airJumps;
+
     // renderer helpers
     public float squash = 1f;     // >1 stretches vertically
     public float landFlash;
@@ -54,6 +64,7 @@ public final class Player {
         squash = 1f;
         landFlash = 0;
         prevBottom = y + h;
+        airJumps = 0;
     }
 
     public float centerX() {
@@ -89,11 +100,12 @@ public final class Player {
         if (in.right) {
             dir += 1f;
         }
+        float maxSpeed = Constants.RUN_SPEED * speedMul;
         if (dir != 0f) {
             float accel = onGround ? Constants.ACCEL_GROUND : Constants.ACCEL_AIR;
             vx += dir * accel * dt;
-            if (Math.signum(vx) == dir && Math.abs(vx) > Constants.RUN_SPEED) {
-                vx = dir * Constants.RUN_SPEED;
+            if (Math.signum(vx) == dir && Math.abs(vx) > maxSpeed) {
+                vx = dir * maxSpeed;
             }
             facingRight = dir > 0f;
         } else {
@@ -112,8 +124,9 @@ public final class Player {
         jumpBuffer -= dt;
         coyote -= dt;
 
+        float jumpVel = Constants.JUMP_VELOCITY * jumpMul;
         if (jumpBuffer > 0f && coyote > 0f) {
-            vy = -Constants.JUMP_VELOCITY;
+            vy = -jumpVel;
             onGround = false;
             coyote = 0f;
             jumpBuffer = 0f;
@@ -121,11 +134,21 @@ public final class Player {
             if (listener != null) {
                 listener.onJump();
             }
+        } else if (jumpBuffer > 0f && doubleJumpEnabled && airJumps > 0 && !onGround) {
+            // DOUBLE_JUMP power-up: one extra kick in mid-air, slightly weaker
+            // than a ground jump so it reads as a recovery move.
+            vy = -jumpVel * 0.92f;
+            airJumps--;
+            jumpBuffer = 0f;
+            squash = 1.22f;
+            if (listener != null) {
+                listener.onJump();
+            }
         }
 
         // variable jump height: releasing early cuts the rise
         if (prevJumpHeld && !in.jumpHeld && vy < 0f) {
-            float cut = -Constants.JUMP_VELOCITY * Constants.JUMP_CUT;
+            float cut = -jumpVel * Constants.JUMP_CUT;
             if (vy < cut) {
                 vy = cut;
             }
@@ -153,6 +176,7 @@ public final class Player {
         moveAxis(0f, vy * dt, lvl, plats);
 
         if (onGround) {
+            airJumps = doubleJumpEnabled ? 1 : 0;
             coyote = Constants.COYOTE_TIME;
             if (!wasGround && fallSpeed > 420f) {
                 impact = fallSpeed;

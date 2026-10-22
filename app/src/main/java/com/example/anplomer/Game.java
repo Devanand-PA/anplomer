@@ -11,7 +11,7 @@ import java.util.List;
 public final class Game implements Player.Listener {
 
     public enum State {
-        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS
+        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE
     }
 
     /**
@@ -85,7 +85,16 @@ public final class Game implements Player.Listener {
     public static final int BTN_SOUND = 6;
     public static final int BTN_RESET = 7;
     public static final int BTN_SETTINGS = 8;
-    public static final int BTN_BACK = 9;   // settings back button
+    public static final int BTN_BACK = 9;   // settings/career/store back button
+    public static final int BTN_CAREER = 10;
+    public static final int BTN_STORE = 11;
+    public static final int BTN_NEW_PROFILE = 12;
+    public static final int BTN_DELETE_PROFILE = 13;
+
+    /** Career rows are {@code BTN_PROFILE_ROW + profileIndex}. */
+    public static final int BTN_PROFILE_ROW = 100;
+    /** Store rows are {@code BTN_UPGRADE_ROW + Upgrades id}. */
+    public static final int BTN_UPGRADE_ROW = 200;
 
     // settings slider ids
     public static final int SLIDER_MUSIC = 0;
@@ -99,6 +108,7 @@ public final class Game implements Player.Listener {
     public final List<Enemy> enemies = new ArrayList<>();
     public final List<MovingPlatform> platforms = new ArrayList<>();
     public final List<Coin> coins = new ArrayList<>();
+    public final List<PowerUp> powerUps = new ArrayList<>();
 
     public SoundSink sound;
     public State state = State.MENU;
@@ -108,13 +118,18 @@ public final class Game implements Player.Listener {
 
     public int score;
     public int coinsTaken;
-    public int lives = 3;
+    public int lives = Constants.START_LIVES;
     public float levelTime;
     public float stateTime;
     public float worldTime;
 
     public int bonusTime;
     public int bonusCoins;
+    /** Coins banked into the career wallet for this level clear. */
+    public int rewardCoins;
+
+    /** Coins picked up since the current run started (HUD + results screen). */
+    public int runCoins;
 
     public float screenWidth;
     public float screenHeight;
@@ -138,19 +153,50 @@ public final class Game implements Player.Listener {
 
     /** Home-screen buttons; CONTINUE is only present when a save exists. */
     public final List<UiButton> menuButtons = new ArrayList<>();
+    /** Career screen: one row per profile, then NEW / DELETE / BACK. */
+    public final List<UiButton> careerButtons = new ArrayList<>();
+    /** Store screen: one row per upgrade, then BACK. */
+    public final List<UiButton> storeButtons = new ArrayList<>();
 
     /** Selected game mode. */
     public Mode mode = Mode.CLASSIC;
 
-    // ---- persistence ----------------------------------------------------
+    // ---- careers -------------------------------------------------------
+    /** Live career list (same Profile instances the save holds). */
+    public final List<Profile> profiles = new ArrayList<>();
+    /** Index of the active career in {@link #profiles}. */
+    public int activeProfile;
+    /** The active career; never null. */
+    public Profile profile;
+
+    // ---- power-up state ------------------------------------------------
+    public float speedBoostTimer;
+    public float magnetTimer;
+    public float doubleJumpTimer;
+    /** Grace period after a shield soaks a hit. */
+    public float invulnTimer;
+    /** Shield charges; each absorbs one hit. */
+    public int shieldCharges;
+
+    // ---- persistence ---------------------------------------------------
     private final SaveStore store;
     /** Loaded at construction; written back whenever something changes. */
     private SaveState save = SaveState.defaults();
     /** Arms the two-tap confirmation for resetting the save. */
     private boolean resetArmed;
     private float resetArmTimer;
+    /** Arms the two-tap confirmation for deleting the active career. */
+    private boolean deleteArmed;
+    private float deleteArmTimer;
     /** Seconds left to flash the "goal locked" message in coin collector. */
     public float goalLockedTimer;
+
+    /** Store feedback line ("PURCHASED", "NOT ENOUGH COINS", ...). */
+    public String storeMsg = "";
+    public float storeMsgTimer;
+    /** Career feedback line ("CAREER FULL", "KEEP ONE CAREER", ...). */
+    public String careerMsg = "";
+    public float careerMsgTimer;
 
     /** State to return to when the settings overlay closes. */
     private State settingsReturn = State.MENU;
@@ -160,6 +206,12 @@ public final class Game implements Player.Listener {
     public boolean checkpointActive;
     private float checkpointX, checkpointY;
     private final float[] tap = new float[2];
+
+    // cached HUD strings (the renderer asks every frame; do not allocate)
+    private int timeLabelSecond = -1;
+    private String timeLabelCache = "0:00";
+    private int levelLabelIndex = -1;
+    private String levelLabelCache = "";
 
     public Game(SoundSink sound) {
         this(sound, null);
@@ -173,8 +225,11 @@ public final class Game implements Player.Listener {
         this.store = store;
         if (store != null) {
             save = SaveState.decode(store.load());
-            mode = Mode.values()[save.mode];
+        } else {
+            save = SaveState.defaults();
         }
+        syncProfiles();
+        mode = Mode.values()[Math.max(0, Math.min(save.mode, Mode.values().length - 1))];
         musicVolume = save.music;
         moveScalePct = save.buttons;
         if (sound != null) {
@@ -187,10 +242,116 @@ public final class Game implements Player.Listener {
         screenHeight = 480f;
         controls = Controls.compute(screenWidth, screenHeight, moveScalePct / 100f);
         rebuildMenuButtons();
-        layoutMenuButtons();
+        rebuildCareerButtons();
+        rebuildStoreButtons();
         layoutPauseButtons();
         layoutSettings();
-        loadLevel(Math.min(save.levelIndex, Levels.TEXT.length - 1));
+        lives = profile.startLives();
+        loadLevel(profile.levelIndex);
+    }
+
+    // ---- careers -------------------------------------------------------
+
+    /** Re-points the live career list at the save's list and re-selects. */
+    private void syncProfiles() {
+        profiles.clear();
+        profiles.addAll(save.profiles);
+        if (profiles.isEmpty()) {
+            save.profiles.add(new Profile("PLAYER 1", 0));
+            profiles.addAll(save.profiles);
+        }
+        activeProfile = Math.max(0, Math.min(save.active, profiles.size() - 1));
+        save.active = activeProfile;
+        profile = profiles.get(activeProfile);
+    }
+
+    /** Switches the active career, carrying its own progress into the menu. */
+    public void selectProfile(int index) {
+        if (index < 0 || index >= profiles.size()) {
+            return;
+        }
+        activeProfile = index;
+        save.active = index;
+        profile = profiles.get(index);
+        deleteArmed = false;
+        loadLevel(profile.levelIndex);
+        persist();
+        rebuildMenuButtons();
+        rebuildCareerButtons();
+        sound.play(SoundSink.SELECT);
+    }
+
+    /** Creates a career with an auto-name and makes it active. */
+    public void newProfile() {
+        if (profiles.size() >= SaveState.MAX_PROFILES) {
+            careerMsg = "CAREER FULL";
+            careerMsgTimer = 2f;
+            sound.play(SoundSink.SELECT);
+            return;
+        }
+        String name = Profile.suggestName(profiles);
+        Profile p = new Profile(name, profiles.size() % Profile.COLORS);
+        save.profiles.add(p);
+        save.active = save.profiles.size() - 1;
+        syncProfiles();
+        deleteArmed = false;
+        loadLevel(profile.levelIndex);
+        persist();
+        rebuildMenuButtons();
+        rebuildCareerButtons();
+        sound.play(SoundSink.POWERUP);
+    }
+
+    /** Two-tap delete of the active career; the last one is kept. */
+    public void deleteProfileTap() {
+        if (profiles.size() <= 1) {
+            careerMsg = "CANNOT DELETE LAST CAREER";
+            careerMsgTimer = 2f;
+            sound.play(SoundSink.SELECT);
+            return;
+        }
+        if (!deleteArmed) {
+            deleteArmed = true;
+            deleteArmTimer = 3f;
+            rebuildCareerButtons();
+            sound.play(SoundSink.SELECT);
+            return;
+        }
+        deleteArmed = false;
+        save.removeProfile(activeProfile);
+        syncProfiles();
+        loadLevel(profile.levelIndex);
+        persist();
+        rebuildMenuButtons();
+        rebuildCareerButtons();
+        careerMsg = "CAREER DELETED";
+        careerMsgTimer = 1.8f;
+        sound.play(SoundSink.SELECT);
+    }
+
+    // ---- store ---------------------------------------------------------
+
+    /** Buys the next level of an upgrade for the active career. */
+    public void buyUpgrade(int id) {
+        int price = profile.nextPrice(id);
+        if (price < 0) {
+            storeMsg = "MAX LEVEL";
+            storeMsgTimer = 1.8f;
+            sound.play(SoundSink.SELECT);
+            return;
+        }
+        if (profile.coins < price) {
+            storeMsg = "NOT ENOUGH COINS";
+            storeMsgTimer = 1.8f;
+            sound.play(SoundSink.SELECT);
+            return;
+        }
+        profile.buy(id);
+        storeMsg = "PURCHASED  " + Upgrades.NAME[id];
+        storeMsgTimer = 2f;
+        sound.play(SoundSink.PURCHASE);
+        persist();
+        rebuildStoreButtons();
     }
 
     // ---- sizing -------------------------------------------------------
@@ -211,6 +372,8 @@ public final class Game implements Player.Listener {
         layoutPauseButtons();
         layoutMenuButtons();
         layoutSettings();
+        layoutCareerButtons();
+        layoutStoreButtons();
     }
 
     private void layoutPauseButtons() {
@@ -235,30 +398,38 @@ public final class Game implements Player.Listener {
     private void rebuildMenuButtons() {
         menuButtons.clear();
         menuButtons.add(new UiButton("START GAME", BTN_START));
-        if (save.levelIndex > 0) {
-            menuButtons.add(new UiButton("CONTINUE  •  LEVEL " + (save.levelIndex + 1), BTN_CONTINUE));
+        if (profile.levelIndex > 0) {
+            menuButtons.add(new UiButton("CONTINUE  •  LEVEL " + (profile.levelIndex + 1),
+                    BTN_CONTINUE));
         }
         menuButtons.add(new UiButton("MODE:  " + mode.label, BTN_MODE));
-        menuButtons.add(new UiButton("SOUND:  " + (save.sound ? "ON" : "OFF"), BTN_SOUND));
+        menuButtons.add(new UiButton("CAREER", BTN_CAREER));
+        menuButtons.add(new UiButton("STORE", BTN_STORE));
         menuButtons.add(new UiButton("SETTINGS", BTN_SETTINGS));
+        menuButtons.add(new UiButton("SOUND:  " + (save.sound ? "ON" : "OFF"), BTN_SOUND));
         menuButtons.add(new UiButton(resetArmed ? "TAP AGAIN TO CONFIRM" : "RESET SAVE", BTN_RESET));
         layoutMenuButtons();
     }
 
+    /**
+     * Three groups: a main column (START / CONTINUE / MODE), a row of the
+     * secondary screens (CAREER / STORE / SETTINGS) and a small bottom row
+     * (SOUND / RESET SAVE). Grouping keeps the stack short enough to fit on a
+     * 480 px-tall landscape screen with the title above it.
+     */
     private void layoutMenuButtons() {
         if (menuButtons.isEmpty() || screenWidth <= 0f || screenHeight <= 0f) {
             return;
         }
         float bw = Math.min(screenWidth * 0.42f, 560f);
-        // Five buttons in the worst case: keep them compact so the stack fits
-        // between the subtitle and the reset button on short screens.
-        float bh = Math.max(42f, screenHeight * 0.08f);
-        float gap = bh * 0.26f;
+        float bh = Math.max(40f, screenHeight * 0.072f);
+        float gap = bh * 0.24f;
         float x = (screenWidth - bw) / 2f;
-        float top = screenHeight * 0.29f;
+        float top = screenHeight * 0.27f;
+
         for (UiButton b : menuButtons) {
-            if (b.id == BTN_RESET) {
-                continue;   // laid out separately below
+            if (!isMenuColumn(b.id)) {
+                continue;
             }
             b.x = x;
             b.y = top;
@@ -266,14 +437,239 @@ public final class Game implements Player.Listener {
             b.h = bh;
             top += bh + gap;
         }
+
+        int rowCount = 0;
         for (UiButton b : menuButtons) {
-            if (b.id != BTN_RESET) {
+            if (isMenuRow(b.id)) {
+                rowCount++;
+            }
+        }
+        if (rowCount > 0) {
+            float rowH = bh * 0.88f;
+            float rw = (bw - gap * (rowCount - 1)) / rowCount;
+            float rx = x;
+            for (UiButton b : menuButtons) {
+                if (!isMenuRow(b.id)) {
+                    continue;
+                }
+                b.x = rx;
+                b.y = top;
+                b.w = rw;
+                b.h = rowH;
+                rx += rw + gap;
+            }
+            top += rowH + gap;
+        }
+
+        float smallH = Math.max(30f, bh * 0.46f);
+        float smallW = bw * 0.48f;
+        float totalW = smallW * 2f + gap;
+        float sx = (screenWidth - totalW) / 2f;
+        float sy = screenHeight * 0.94f - smallH;
+        int smallIndex = 0;
+        for (UiButton b : menuButtons) {
+            if (!isMenuSmall(b.id)) {
                 continue;
             }
-            b.w = bw * 0.52f;
-            b.h = Math.max(30f, bh * 0.42f);
-            b.x = (screenWidth - b.w) / 2f;
-            b.y = screenHeight * 0.93f - b.h / 2f;
+            b.x = sx + smallIndex * (smallW + gap);
+            b.y = sy;
+            b.w = smallW;
+            b.h = smallH;
+            smallIndex++;
+        }
+    }
+
+    private static boolean isMenuColumn(int id) {
+        return id == BTN_START || id == BTN_CONTINUE || id == BTN_MODE;
+    }
+
+    private static boolean isMenuRow(int id) {
+        return id == BTN_CAREER || id == BTN_STORE || id == BTN_SETTINGS;
+    }
+
+    private static boolean isMenuSmall(int id) {
+        return id == BTN_SOUND || id == BTN_RESET;
+    }
+
+    // ---- career / store layout ----------------------------------------
+
+    public float careerPanelW() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenWidth * 0.86f, 900f * scale);
+    }
+
+    public float careerPanelH() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenHeight * 0.9f, 560f * scale);
+    }
+
+    public float storePanelW() {
+        return careerPanelW();
+    }
+
+    public float storePanelH() {
+        return careerPanelH();
+    }
+
+    private void rebuildCareerButtons() {
+        careerButtons.clear();
+        for (int i = 0; i < profiles.size(); i++) {
+            careerButtons.add(new UiButton(profiles.get(i).name, BTN_PROFILE_ROW + i));
+        }
+        careerButtons.add(new UiButton("NEW CAREER", BTN_NEW_PROFILE));
+        careerButtons.add(new UiButton(deleteArmed ? "CONFIRM" : "DELETE", BTN_DELETE_PROFILE));
+        careerButtons.add(new UiButton("BACK", BTN_BACK));
+        layoutCareerButtons();
+    }
+
+    private void layoutCareerButtons() {
+        if (careerButtons.isEmpty() || screenWidth <= 0f || screenHeight <= 0f) {
+            return;
+        }
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        float pw = careerPanelW();
+        float ph = careerPanelH();
+        float left = (screenWidth - pw) / 2f;
+        float top = (screenHeight - ph) / 2f;
+
+        int rows = careerRowCount();
+        float rowH = Math.max(30f, Math.min(52f * scale, ph * 0.10f));
+        float rowGap = rowH * 0.20f;
+        float rowsTop = top + ph * 0.16f;
+        float rx = left + pw * 0.06f;
+        float rw = pw * 0.88f;
+        int i = 0;
+        for (UiButton b : careerButtons) {
+            if (b.id < BTN_PROFILE_ROW) {
+                continue;
+            }
+            b.x = rx;
+            b.y = rowsTop + i * (rowH + rowGap);
+            b.w = rw;
+            b.h = rowH;
+            i++;
+        }
+        float bh = Math.max(34f, Math.min(ph * 0.11f, 58f * scale));
+        float by = top + ph - bh - ph * 0.07f;
+        float gap = rowGap;
+        float bw = (pw * 0.88f - 2f * gap) / 3f;
+        UiButton newB = findCareerButton(BTN_NEW_PROFILE);
+        UiButton delB = findCareerButton(BTN_DELETE_PROFILE);
+        UiButton backB = findCareerButton(BTN_BACK);
+        if (newB != null) {
+            newB.x = rx;
+            newB.y = by;
+            newB.w = bw;
+            newB.h = bh;
+        }
+        if (delB != null) {
+            delB.x = rx + bw + gap;
+            delB.y = by;
+            delB.w = bw;
+            delB.h = bh;
+        }
+        if (backB != null) {
+            backB.x = rx + 2f * (bw + gap);
+            backB.y = by;
+            backB.w = bw;
+            backB.h = bh;
+        }
+        // rows never overlap the footer: the panel scales with the screen, so
+        // clamp the row height to what fits above the buttons.
+        float maxRowH = Math.max(24f, (by - rowsTop - rowGap * (rows - 1)) / Math.max(rows, 1));
+        if (rowH > maxRowH) {
+            int k = 0;
+            for (UiButton b : careerButtons) {
+                if (b.id < BTN_PROFILE_ROW) {
+                    continue;
+                }
+                b.h = maxRowH;
+                b.y = rowsTop + k * (maxRowH + rowGap);
+                k++;
+            }
+        }
+    }
+
+    private UiButton findCareerButton(int id) {
+        for (UiButton b : careerButtons) {
+            if (b.id == id) {
+                return b;
+            }
+        }
+        return null;
+    }
+
+    /** Number of career rows among {@link #careerButtons}. */
+    public int careerRowCount() {
+        int n = 0;
+        for (UiButton b : careerButtons) {
+            if (b.id >= BTN_PROFILE_ROW && b.id < BTN_UPGRADE_ROW) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private void rebuildStoreButtons() {
+        storeButtons.clear();
+        for (int id = 0; id < Upgrades.COUNT; id++) {
+            storeButtons.add(new UiButton(Upgrades.NAME[id], BTN_UPGRADE_ROW + id));
+        }
+        storeButtons.add(new UiButton("BACK", BTN_BACK));
+        layoutStoreButtons();
+    }
+
+    private void layoutStoreButtons() {
+        if (storeButtons.isEmpty() || screenWidth <= 0f || screenHeight <= 0f) {
+            return;
+        }
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        float pw = storePanelW();
+        float ph = storePanelH();
+        float left = (screenWidth - pw) / 2f;
+        float top = (screenHeight - ph) / 2f;
+        int rows = Upgrades.COUNT;
+        float rowH = Math.max(26f, Math.min(46f * scale, ph * 0.085f));
+        float rowGap = rowH * 0.18f;
+        float rowsTop = top + ph * 0.17f;
+        float rx = left + pw * 0.06f;
+        float rw = pw * 0.88f;
+        int i = 0;
+        for (UiButton b : storeButtons) {
+            if (b.id < BTN_UPGRADE_ROW) {
+                continue;
+            }
+            b.x = rx;
+            b.y = rowsTop + i * (rowH + rowGap);
+            b.w = rw;
+            b.h = rowH;
+            i++;
+        }
+        float bh = Math.max(34f, Math.min(ph * 0.11f, 58f * scale));
+        float by = top + ph - bh - ph * 0.07f;
+        UiButton backB = null;
+        for (UiButton b : storeButtons) {
+            if (b.id == BTN_BACK) {
+                backB = b;
+            }
+        }
+        if (backB != null) {
+            backB.w = pw * 0.44f;
+            backB.h = bh;
+            backB.x = (screenWidth - backB.w) / 2f;
+            backB.y = by;
+        }
+        float maxRowH = Math.max(22f, (by - rowsTop - rowGap * (rows - 1)) / Math.max(rows, 1));
+        if (rowH > maxRowH) {
+            int k = 0;
+            for (UiButton b : storeButtons) {
+                if (b.id < BTN_UPGRADE_ROW) {
+                    continue;
+                }
+                b.h = maxRowH;
+                b.y = rowsTop + k * (maxRowH + rowGap);
+                k++;
+            }
         }
     }
 
@@ -283,6 +679,7 @@ public final class Game implements Player.Listener {
         save.sound = sound != null && sound.isEnabled();
         save.music = musicVolume;
         save.buttons = moveScalePct;
+        save.active = activeProfile;
         if (store != null) {
             store.store(save.encode());
         }
@@ -402,14 +799,26 @@ public final class Game implements Player.Listener {
         }
     }
 
-    /** Continue on the last saved level with a fresh run. */
+    // ---- run flow -------------------------------------------------------
+
+    /** Continue on the active career's saved level with a fresh run. */
     private void continueGame() {
+        startRun(profile.levelIndex);
+    }
+
+    private void startRun(int index) {
         score = 0;
         coinsTaken = 0;
-        lives = 3;
+        runCoins = 0;
+        lives = profile.startLives();
+        speedBoostTimer = 0f;
+        magnetTimer = 0f;
+        doubleJumpTimer = 0f;
+        invulnTimer = 0f;
+        shieldCharges = profile.startingShields();
         input.consumePause();   // swallow edges armed on other screens
         input.consumeMute();
-        loadLevel(Math.min(save.levelIndex, Levels.TEXT.length - 1));
+        loadLevel(index);
         setState(State.PLAYING);
         sound.play(SoundSink.SELECT);
     }
@@ -455,8 +864,8 @@ public final class Game implements Player.Listener {
         if (reset != null) {
             reset.label = "RESET SAVE";
         }
-        save = SaveState.defaults();
-        persist();
+        save.copyFrom(SaveState.defaults());
+        syncProfiles();
         mode = Mode.CLASSIC;
         musicVolume = save.music;
         moveScalePct = save.buttons;
@@ -465,7 +874,11 @@ public final class Game implements Player.Listener {
             sound.setMusicVolume(save.music / 100f);
         }
         applyControlScale();
+        lives = profile.startLives();
+        loadLevel(profile.levelIndex);
         rebuildMenuButtons();
+        rebuildCareerButtons();
+        rebuildStoreButtons();
         sound.play(SoundSink.SELECT);
     }
 
@@ -477,27 +890,45 @@ public final class Game implements Player.Listener {
         levelTime = 0f;
         checkpointActive = false;
         goalLockedTimer = 0f;
+        speedBoostTimer = 0f;
+        magnetTimer = 0f;
+        doubleJumpTimer = 0f;
+        invulnTimer = 0f;
+        shieldCharges = profile.startingShields();
         spawnEntities();
         player.respawn(level.startX, level.startY);
         camera.resize(Math.max(screenWidth, 1f), Math.max(screenHeight, 1f));
         camera.snapTo(player.centerX(), player.centerY(), level);
         // Auto-save: the level just entered becomes the continue point, so
         // losing all lives restarts here instead of at the first level.
-        save.levelIndex = levelIndex;
-        save.unlocked = Math.max(save.unlocked, Math.min(levelIndex + 1, Levels.TEXT.length));
+        profile.levelIndex = levelIndex;
+        profile.unlocked = Math.max(profile.unlocked,
+                Math.min(levelIndex + 1, Levels.TEXT.length));
+        save.active = activeProfile;
         persist();
+        rebuildMenuButtons();
     }
 
-    /** Rebuild enemies/platforms/coins; collected coins stay collected. */
+    /** Rebuild enemies/platforms/coins/power-ups; collected items stay collected. */
     private void spawnEntities() {
         enemies.clear();
         platforms.clear();
         coins.clear();
+        powerUps.clear();
 
         int idx = 0;
         for (float[] s : level.coinSpawns) {
             if (!level.coinTaken(idx)) {
                 coins.add(new Coin(s[0], s[1], idx, (float) Math.random() * 6.28f));
+            }
+            idx++;
+        }
+        idx = 0;
+        for (float[] s : level.powerUpSpawns) {
+            if (!level.powerUpTaken(idx)) {
+                PowerUp.Type type = PowerUp.Type.values()[(int) s[2]];
+                powerUps.add(new PowerUp(type, s[0], s[1], idx,
+                        (float) Math.random() * 6.28f));
             }
             idx++;
         }
@@ -520,18 +951,14 @@ public final class Game implements Player.Listener {
     }
 
     public void newGame() {
-        score = 0;
-        coinsTaken = 0;
-        lives = 3;
-        input.consumePause();   // swallow edges armed on other screens
-        input.consumeMute();
-        loadLevel(0);
-        setState(State.PLAYING);
-        sound.play(SoundSink.SELECT);
+        startRun(0);
     }
 
     /** Called when the app is backgrounded so the run does not keep ticking. */
     public void forcePause() {
+        // Backgrounding is also a save point: coins picked up since the last
+        // write would otherwise be lost if the process is killed.
+        persist();
         if (state == State.PLAYING) {
             setState(State.PAUSED);
         }
@@ -556,6 +983,11 @@ public final class Game implements Player.Listener {
         checkpointActive = false;
         coinsTaken = level.coinsTaken();
         score = keepScore;
+        speedBoostTimer = 0f;
+        magnetTimer = 0f;
+        doubleJumpTimer = 0f;
+        invulnTimer = 0f;
+        shieldCharges = profile.startingShields();
         spawnEntities();
         player.respawn(level.startX, level.startY);
         camera.snapTo(player.centerX(), player.centerY(), level);
@@ -574,6 +1006,25 @@ public final class Game implements Player.Listener {
             if (resetArmTimer <= 0f) {
                 resetArmed = false;
                 rebuildMenuButtons();
+            }
+        }
+        if (deleteArmTimer > 0f) {
+            deleteArmTimer -= dt;
+            if (deleteArmTimer <= 0f && deleteArmed) {
+                deleteArmed = false;
+                rebuildCareerButtons();
+            }
+        }
+        if (storeMsgTimer > 0f) {
+            storeMsgTimer -= dt;
+            if (storeMsgTimer <= 0f) {
+                storeMsg = "";
+            }
+        }
+        if (careerMsgTimer > 0f) {
+            careerMsgTimer -= dt;
+            if (careerMsgTimer <= 0f) {
+                careerMsg = "";
             }
         }
         if (goalLockedTimer > 0f) {
@@ -610,6 +1061,12 @@ public final class Game implements Player.Listener {
             case SETTINGS:
                 updateSettings();
                 break;
+            case CAREER:
+                updateCareer();
+                break;
+            case STORE:
+                updateStore();
+                break;
             default:
                 break;
         }
@@ -645,6 +1102,12 @@ public final class Game implements Player.Listener {
                     case BTN_SETTINGS:
                         openSettings();
                         break;
+                    case BTN_CAREER:
+                        openCareer();
+                        break;
+                    case BTN_STORE:
+                        openStore();
+                        break;
                     case BTN_RESET:
                         resetSaveTap();
                         break;
@@ -653,6 +1116,83 @@ public final class Game implements Player.Listener {
                 }
                 return;
             }
+        }
+    }
+
+    private void openCareer() {
+        deleteArmed = false;
+        careerMsg = "";
+        careerMsgTimer = 0f;
+        rebuildCareerButtons();
+        setState(State.CAREER);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void closeCareer() {
+        persist();
+        rebuildMenuButtons();
+        setState(State.MENU);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void updateCareer() {
+        if (input.consumeBack()) {
+            closeCareer();
+            return;
+        }
+        if (!input.consumeTap(tap)) {
+            return;
+        }
+        for (UiButton b : careerButtons) {
+            if (!b.contains(tap[0], tap[1])) {
+                continue;
+            }
+            if (b.id >= BTN_PROFILE_ROW && b.id < BTN_UPGRADE_ROW) {
+                selectProfile(b.id - BTN_PROFILE_ROW);
+            } else if (b.id == BTN_NEW_PROFILE) {
+                newProfile();
+            } else if (b.id == BTN_DELETE_PROFILE) {
+                deleteProfileTap();
+            } else if (b.id == BTN_BACK) {
+                closeCareer();
+            }
+            return;
+        }
+    }
+
+    private void openStore() {
+        storeMsg = "";
+        storeMsgTimer = 0f;
+        rebuildStoreButtons();
+        setState(State.STORE);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void closeStore() {
+        persist();
+        rebuildMenuButtons();
+        setState(State.MENU);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void updateStore() {
+        if (input.consumeBack()) {
+            closeStore();
+            return;
+        }
+        if (!input.consumeTap(tap)) {
+            return;
+        }
+        for (UiButton b : storeButtons) {
+            if (!b.contains(tap[0], tap[1])) {
+                continue;
+            }
+            if (b.id >= BTN_UPGRADE_ROW) {
+                buyUpgrade(b.id - BTN_UPGRADE_ROW);
+            } else if (b.id == BTN_BACK) {
+                closeStore();
+            }
+            return;
         }
     }
 
@@ -704,6 +1244,8 @@ public final class Game implements Player.Listener {
         if (state == State.LEVEL_CLEARED) {
             int next = levelIndex + 1;
             if (next >= Levels.TEXT.length) {
+                profile.recordScore(score);
+                persist();
                 setState(State.WIN);
                 sound.play(SoundSink.WIN);
             } else {
@@ -714,6 +1256,8 @@ public final class Game implements Player.Listener {
             // Losing all lives resets to the last saved level, not level 1.
             continueGame();
         } else {
+            persist();
+            rebuildMenuButtons();
             setState(State.MENU);
         }
     }
@@ -733,9 +1277,33 @@ public final class Game implements Player.Listener {
         }
 
         levelTime += dt;
+        profile.addPlaySeconds(dt);
+
+        // ---- power-up timers ----
+        if (speedBoostTimer > 0f) {
+            speedBoostTimer = Math.max(0f, speedBoostTimer - dt);
+        }
+        if (magnetTimer > 0f) {
+            magnetTimer = Math.max(0f, magnetTimer - dt);
+        }
+        if (doubleJumpTimer > 0f) {
+            doubleJumpTimer = Math.max(0f, doubleJumpTimer - dt);
+        }
+        if (invulnTimer > 0f) {
+            invulnTimer = Math.max(0f, invulnTimer - dt);
+        }
+
+        // ---- upgrades + power-ups feed the body ----
+        player.speedMul = profile.runSpeedMul()
+                * (speedBoostTimer > 0f ? Constants.SPEED_BOOST_MUL : 1f);
+        player.jumpMul = profile.jumpMul();
+        player.doubleJumpEnabled = doubleJumpTimer > 0f;
 
         // 1. platforms move, carrying anyone standing on them
-        for (MovingPlatform p : platforms) {
+        // (indexed loops on the frame path: an enhanced-for allocates an
+        // iterator per loop per frame, which is pure GC pressure)
+        for (int i = 0; i < platforms.size(); i++) {
+            MovingPlatform p = platforms.get(i);
             boolean riding = !player.dead && player.onGround
                     && p.supports(player.x, player.w, player.y + player.h);
             p.update(dt);
@@ -747,8 +1315,8 @@ public final class Game implements Player.Listener {
         player.separateFrom(platforms);
 
         // 2. enemies
-        for (Enemy e : enemies) {
-            e.update(dt, level);
+        for (int i = 0; i < enemies.size(); i++) {
+            enemies.get(i).update(dt, level);
         }
 
         // 3. player physics
@@ -756,7 +1324,8 @@ public final class Game implements Player.Listener {
 
         // 4. player vs enemies
         if (!player.dead) {
-            for (Enemy e : enemies) {
+            for (int i = 0; i < enemies.size(); i++) {
+                Enemy e = enemies.get(i);
                 if (e.dead) {
                     continue;
                 }
@@ -770,12 +1339,13 @@ public final class Game implements Player.Listener {
                     player.vy = -Constants.STOMP_BOUNCE;
                     player.squash = 1.32f;
                     score += Constants.SCORE_STOMP;
+                    profile.stomps++;
                     camera.shake(7f, 0.18f);
                     sound.play(SoundSink.STOMP);
                     particles.poof(e.centerX(), e.y + 8f, 10, 0xFF8BD0FF);
                     particles.dust(e.centerX(), e.y + e.h, 5, e.facing);
-                } else {
-                    killPlayer();
+                } else if (invulnTimer <= 0f) {
+                    hurtPlayer();
                     break;
                 }
             }
@@ -783,33 +1353,54 @@ public final class Game implements Player.Listener {
 
         // 5. hazards & pits
         if (!player.dead) {
-            boolean hit = level.hazardOverlap(player.x + 7f, player.y + 10f, player.w - 14f, player.h - 14f);
+            boolean hit = level.hazardOverlap(player.x + 7f, player.y + 10f,
+                    player.w - 14f, player.h - 14f);
             boolean fell = player.y > (level.h + 1) * Constants.TILE;
-            if (hit || fell) {
-                killPlayer();
+            if (fell) {
+                killPlayer();          // a pit is fatal even through a shield
+            } else if (hit) {
+                hurtPlayer();
             }
         }
 
-        // 6. coins
+        // 6. coins (+ magnet attraction while active)
         if (!player.dead) {
+            float magnet = profile.magnetRadius()
+                    + (magnetTimer > 0f ? Constants.MAGNET_RADIUS : 0f);
+            float pcx = player.centerX();
+            float pcy = player.centerY();
             for (int i = 0; i < coins.size(); i++) {
                 Coin c = coins.get(i);
                 if (level.coinTaken(c.index)) {
                     continue;
                 }
-                if (c.overlaps(player.x, player.y, player.w, player.h)) {
-                    level.takeCoin(c.index);
-                    coinsTaken++;
-                    score += Constants.SCORE_COIN;
-                    sound.play(SoundSink.COIN);
-                    particles.sparkle(c.x, c.y, 9);
+                boolean touch = c.overlaps(player.x, player.y, player.w, player.h);
+                if (!touch && magnet > 0f) {
+                    float dx = c.x - pcx;
+                    float dy = c.y - pcy;
+                    touch = dx * dx + dy * dy <= magnet * magnet;
+                }
+                if (touch) {
+                    collectCoin(c);
+                }
+            }
+        }
+
+        // 6b. power-ups
+        if (!player.dead) {
+            for (int i = powerUps.size() - 1; i >= 0; i--) {
+                PowerUp pu = powerUps.get(i);
+                if (pu.overlaps(player.x, player.y, player.w, player.h)) {
+                    powerUps.remove(i);
+                    collectPowerUp(pu);
                 }
             }
         }
 
         // 7. checkpoints
         if (!player.dead && !checkpointActive) {
-            for (float[] cp : level.checkpointSpawns) {
+            for (int i = 0; i < level.checkpointSpawns.size(); i++) {
+                float[] cp = level.checkpointSpawns.get(i);
                 if (Level.rectsOverlap(player.x, player.y, player.w, player.h,
                         cp[0], cp[1], Constants.TILE, Constants.TILE * 1.6f)) {
                     checkpointActive = true;
@@ -846,6 +1437,8 @@ public final class Game implements Player.Listener {
             lives--;
             if (lives <= 0) {
                 lives = 0;
+                profile.recordScore(score);
+                persist();
                 setState(State.GAME_OVER);
                 sound.play(SoundSink.GAME_OVER);
             } else {
@@ -860,12 +1453,62 @@ public final class Game implements Player.Listener {
         camera.update(dt, tx, ty, level);
     }
 
+    private void collectCoin(Coin c) {
+        level.takeCoin(c.index);
+        coinsTaken++;
+        runCoins += Constants.COINS_PER_PICKUP;
+        profile.coins += Constants.COINS_PER_PICKUP;
+        profile.coinsCollected += Constants.COINS_PER_PICKUP;
+        score += Constants.SCORE_COIN;
+        sound.play(SoundSink.COIN);
+        particles.sparkle(c.x, c.y, 9);
+    }
+
+    private void collectPowerUp(PowerUp pu) {
+        level.takePowerUp(pu.index);
+        float mul = profile.powerTimeMul();
+        switch (pu.type) {
+            case SPEED:
+                speedBoostTimer = Constants.POWERUP_TIME * mul;
+                break;
+            case SHIELD:
+                shieldCharges = Math.min(3, shieldCharges + 1);
+                break;
+            case MAGNET:
+                magnetTimer = Constants.MAGNET_TIME * mul;
+                break;
+            case DOUBLE_JUMP:
+                doubleJumpTimer = Constants.DOUBLE_JUMP_TIME * mul;
+                player.doubleJumpEnabled = true;
+                player.airJumps = Math.max(player.airJumps, 1);
+                break;
+            case EXTRA_LIFE:
+                lives = Math.min(Constants.MAX_LIVES, lives + 1);
+                break;
+            default:
+                break;
+        }
+        score += Constants.SCORE_POWERUP;
+        sound.play(SoundSink.POWERUP);
+        camera.shake(3f, 0.12f);
+        particles.sparkle(pu.x, pu.y, 14);
+        particles.poof(pu.x, pu.y, 8, 0xFFB6F0FF);
+    }
+
     private void levelCleared() {
         int left = Math.max(0, level.parTime - (int) levelTime);
         bonusTime = left * Constants.SCORE_TIME_UNIT;
         boolean allCoins = level.coinCount() > 0 && level.coinsTaken() >= level.coinCount();
         bonusCoins = allCoins ? Constants.SCORE_ALL_COINS : 0;
         score += bonusTime + bonusCoins;
+        // Career wallet: every clear pays, a full-coin clear pays more.
+        rewardCoins = Constants.COINS_LEVEL_CLEAR
+                + (allCoins ? Constants.COINS_ALL_COINS : 0);
+        profile.coins += rewardCoins;
+        runCoins += rewardCoins;
+        profile.levelsCleared++;
+        profile.recordScore(score);
+        persist();
         setState(State.LEVEL_CLEARED);
         sound.play(SoundSink.CLEAR);
         camera.shake(6f, 0.25f);
@@ -880,10 +1523,36 @@ public final class Game implements Player.Listener {
         player.deadTimer = Constants.RESPAWN_DELAY;
         player.vy = -Constants.DEATH_POP;
         player.vx = 0f;
+        shieldCharges = 0;
+        speedBoostTimer = 0f;
+        magnetTimer = 0f;
+        doubleJumpTimer = 0f;
+        invulnTimer = 0f;
+        profile.deaths++;
         sound.play(SoundSink.DIE);
         camera.shake(12f, 0.35f);
         particles.poof(player.centerX(), player.centerY(), 16, 0xFFF4F4F4);
         particles.poof(player.centerX(), player.centerY(), 8, 0xFFE4453A);
+    }
+
+    /**
+     * One hit from an enemy or a hazard: a shield charge soaks it (plus a short
+     * invulnerability so the same hazard cannot chain), otherwise it kills.
+     */
+    public void hurtPlayer() {
+        if (player.dead || invulnTimer > 0f) {
+            return;
+        }
+        if (shieldCharges > 0) {
+            shieldCharges--;
+            invulnTimer = Constants.INVULN_TIME;
+            sound.play(SoundSink.HURT);
+            camera.shake(9f, 0.28f);
+            particles.poof(player.centerX(), player.centerY(), 12, 0xFF7FD8FF);
+            particles.sparkle(player.centerX(), player.centerY(), 8);
+            return;
+        }
+        killPlayer();
     }
 
     private void respawnPlayer() {
@@ -891,6 +1560,11 @@ public final class Game implements Player.Listener {
         float ry = checkpointActive ? checkpointY : level.startY;
         spawnEntities();
         player.respawn(rx, ry);
+        speedBoostTimer = 0f;
+        magnetTimer = 0f;
+        doubleJumpTimer = 0f;
+        invulnTimer = 0f;
+        shieldCharges = 0;
         camera.snapTo(player.centerX(), player.centerY(), level);
         particles.respawnBurst(player.centerX(), player.centerY(), 14);
     }
@@ -932,13 +1606,17 @@ public final class Game implements Player.Listener {
     }
 
     public String levelLabel() {
-        return "LEVEL " + (levelIndex + 1);
+        if (levelLabelIndex != levelIndex) {
+            levelLabelIndex = levelIndex;
+            levelLabelCache = "LEVEL " + (levelIndex + 1);
+        }
+        return levelLabelCache;
     }
 
     /** True while the coin-collector gate is still shut. */
     public boolean goalLocked() {
         return mode == Mode.COIN_COLLECTOR && level.coinCount() > 0
-                && level.coinsTaken() < coinGoalRequired();
+                && level.coinsTakenFast() < coinGoalRequired();
     }
 
     /** Coins needed to open the goal in coin-collector mode. */
@@ -949,8 +1627,15 @@ public final class Game implements Player.Listener {
         return Math.max(1, Math.round(level.coinCount() * COIN_GOAL_SHARE));
     }
 
+    /** Elapsed level time as m:ss; recomputed only when the second changes. */
     public String timeLabel() {
         int t = (int) levelTime;
-        return String.format(java.util.Locale.US, "%d:%02d", t / 60, t % 60);
+        if (t != timeLabelSecond) {
+            timeLabelSecond = t;
+            int m = t / 60;
+            int s = t % 60;
+            timeLabelCache = m + (s < 10 ? ":0" : ":") + s;
+        }
+        return timeLabelCache;
     }
 }

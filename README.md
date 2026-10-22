@@ -1,8 +1,10 @@
 # Anplomer
 
-A complete, self-contained 2D platformer for Android. Three hand-designed levels,
-on-screen touch controls, parallax scenery, particles and procedural sound.
-No third-party or AndroidX dependencies — plain Java 17 + `SurfaceView`/`Canvas`.
+A complete, self-contained 2D platformer for Android. Eight hand-designed levels,
+five power-ups, per-player career profiles with a coin store of permanent
+upgrades, on-screen touch controls, parallax scenery, particles and procedural
+sound. No third-party or AndroidX dependencies — plain Java 17 +
+`SurfaceView`/`Canvas`.
 
 ```
 app/src/main/java/com/example/anplomer/
@@ -15,7 +17,10 @@ app/src/main/java/com/example/anplomer/
 ├── Enemy.java            walkers (turn at walls/ledges) and sine flyers
 ├── MovingPlatform.java   horizontal / vertical movers that carry riders
 ├── Coin.java  Camera.java  Particles.java  SoundSink.java
-├── SaveState.java        persisted progress (level, unlocks, mode, sound) as plain data
+├── PowerUp.java          pickup glyphs (speed, shield, magnet, double jump, life)
+├── Profile.java          one career: name, colour, wallet, unlock, stats, upgrades
+├── Upgrades.java         store catalogue: names, descriptions, prices, effects
+├── SaveState.java        persisted prefs + every career profile (v3 pipe format)
 ├── SaveStore.java        persistence interface (SharedPreferences impl lives in GameView)
 ├── Game.java             state machine + simulation (no android.* imports)
 ├── Renderer.java         all drawing (vector art, no bitmaps)
@@ -44,6 +49,12 @@ The title screen is a real menu, not a "tap to play" poster:
 * **MODE: CLASSIC / COIN COLLECTOR** — in *Coin Collector* the goal flag is
   padlocked until ~60 % of the level's coins are collected; the HUD shows a
   `GOAL LOCKED` chip and bumping the flag flashes how many coins are missing.
+* **CAREER** — the career screen: one row per profile (name, colour, wallet,
+  unlocked levels), plus **NEW CAREER** and a two-tap **DELETE**. Up to six
+  careers; the active one is saved and resumed.
+* **STORE** — spend the active career's coins on six permanent upgrades:
+  speed, jump, extra lives, magnet radius, power-up duration and a starting
+  shield. Prices rise with each level bought; maxed rows read `MAX`.
 * **SOUND: ON / OFF** and a small **RESET SAVE** with a two-tap confirm.
 
 Progress auto-saves through a `SaveStore` interface (`Game` passes plain data;
@@ -55,13 +66,59 @@ the whole flow (autosave, continue, retry-at-saved-level, mode gating).
 
 ## Gameplay
 
-* **Level 1 — Emerald Meadow** (152 tiles, par 50s, 55 coins)
-* **Level 2 — Sunset Ruins** (170 tiles, par 65s, 58 coins, movers over lava)
-* **Level 3 — Moonlit Peak** (190 tiles, par 80s, 55 coins, long mover ferries)
+| # | Level | Width | Par | Coins | Movers | New hazard mix |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Emerald Meadow | 152 | 50s | 55 | 0 | gentle gaps, walkers |
+| 2 | Sunset Ruins | 170 | 65s | 58 | 4 | first lava ferries, flyers |
+| 3 | Moonlit Peak | 190 | 80s | 55 | 4 | long ferries, bat swarms |
+| 4 | Crystal Caverns | 195 | 90s | 66 | 4 | stone shelves, vertical movers |
+| 5 | Ember Forge | 210 | 100s | 70 | 5 | lava channels, spike fields |
+| 6 | Windy Bluffs | 239 | 115s | 78 | 4 | flyer swarms, wide gaps |
+| 7 | Frozen Spire | 240 | 120s | 77 | 5 | stair shelves, tight hops |
+| 8 | Starfall Summit | 255 | 130s | 75 | 5 | everything, longest climb |
 
 Stomp enemies to bounce, grab coins, touch the flag to clear a level.
-Checkpoints respawn you in place; three lives per level; running out of lives
-returns you to the last saved level (see *Home screen, saves and modes*).
+Checkpoints respawn you in place; three lives per level (more with the *Lives*
+upgrade); running out of lives returns you to the last saved level (see
+*Home screen, saves and modes*).
+
+### Power-ups
+
+Five pickups live in the air along each level and are drawn as glowing
+glyphs with their own colour:
+
+| Glyph | Power-up | Effect |
+| --- | --- | --- |
+| `S` | Speed | ×1.45 run speed for `POWERUP_TIME` (12 s, longer with the *Power* upgrade) |
+| `H` | Shield | one free hit; the HUD shows shield pips |
+| `A` | Magnet | pulls nearby coins in for 10 s (radius scales with the *Magnet* upgrade) |
+| `J` | Double jump | one extra mid-air jump for 15 s |
+| `L` | Extra life | +1 life immediately |
+
+Power-ups survive a respawn (you do not have to re-collect the same one), each
+level carries between one and five of them, and the HUD lists every active
+timer with seconds remaining.
+
+### Careers and the coin store
+
+Every coin you pick up and every level you clear pays into the **active
+career's wallet** (a level clear pays 8 coins, +12 more for collecting every
+coin). The store turns that wallet into permanent, per-career upgrades:
+
+| Upgrade | Effect per level | Max | Base price |
+| --- | --- | --- | --- |
+| Speed | +6 % run speed | 5 | 25 |
+| Jump | +5 % jump velocity | 5 | 25 |
+| Lives | +1 starting life | 3 | 60 |
+| Magnet | +45 px pickup radius | 3 | 40 |
+| Power | +15 % power-up duration | 4 | 35 |
+| Shield | start each level with a shield | 2 | 90 |
+
+Each tier costs more than the last, purchases persist in the save file, and
+the store refuses a purchase you cannot afford (with a message, not a crash).
+Careers are independent: separate wallet, separate unlocked level, separate
+upgrade levels and lifetime stats (coins, level, best score, stomps, deaths,
+play time).
 
 ### Controls (touch)
 
@@ -77,6 +134,43 @@ with, and a tap on them raises the same edge as their keyboard keys.
 
 Keyboard is supported too: arrows/WASD, `Space`/`W`/`Up` to jump, `P`/`Esc` pause,
 `M` mute, `R` restart level.
+
+## Performance
+
+The v1 loop locked the canvas, drew, and posted again as fast as the device
+would go; a 60 Hz simulation was being rendered at whatever rate the GPU
+allowed, and the frame budget was spent on thousands of draw calls.
+
+What changed:
+
+* **Paced loop.** `GameView` now targets `FRAME_NS = 16_666_667` and sleeps the
+  remainder of each frame, and it skips `lockCanvas`/draw entirely while the
+  surface is not ready or the host is paused. Idle menu frames no longer burn
+  a full core.
+* **Draw-call diet.** Sprites are drawn from cached geometry instead of
+  rebuilding `Path` objects every frame; repeated shapes (coins, clouds,
+  hills, tiles) share one path/paint state per frame; the parallax layers are
+  pre-transformed instead of per-shape `save/restore`. On level 1 at
+  2400×1080 the frame went from **679 to 374 draw calls** (worst level 487),
+  and 1280×720 is at 300.
+* **No per-frame allocation** in the steady-state player/camera/enemy update
+  paths: index loops instead of iterators over hot lists, cached HUD label
+  strings, and no `Math.pow` in the camera lerp (it is now
+  `1 - 3.9·dt`, clamped).
+* **Cheaper collision queries**: `Level` keeps counters for taken coins and
+  power-ups so the HUD does not rescan the grid, and solid/hazard overlap tests
+  reject by bounding box before touching the tile grid.
+
+`tools/run_bench.sh` measures it headlessly (the stub `Canvas` records calls,
+no device needed):
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./tools/run_bench.sh 600
+# 2400x1080 L1   0.032 ms/frame   374 draws/frame
+# 2400x1080 L8   0.026 ms/frame   487 draws/frame
+# 1280x720  L1   0.020 ms/frame   300 draws/frame
+# career overlay 0.027 ms/frame   352 draws/frame
+```
 
 ## Build
 
@@ -110,9 +204,15 @@ python3 tools/make_levels.py --check    # validate only
 python3 tools/make_levels.py --print    # ASCII preview of every level
 ```
 
+The glyphs are `#` ground, `=` stone, `~` lava, `^` spike, `o` coin, `g` walker,
+`b` flyer, `M`/`V` horizontal/vertical mover, `P` start, `C` checkpoint,
+`G` goal — plus the power-ups `S` speed, `H` shield, `A` magnet, `J` double
+jump and `L` extra life.
+
 The generator enforces fairness rules (spikes clear of pit edges and landing
 zones, no flyer inside a required jump arc, no rise taller than the jump can
-clear, every platform reachable) and refuses to overwrite a glyph silently.
+clear, every platform reachable, every power-up within a jump of walkable
+ground) and refuses to overwrite a glyph silently.
 
 ## Tests
 
@@ -165,13 +265,46 @@ Current status:
 
 ```
 RENDERER SMOKE OK: no exceptions, all geometry finite, all states/palettes/sizes drawn
-level 1 OK  (24.6s sim, 1476 frames, score 2460, coins 22/55, deaths 0)
-level 2 OK  (31.8s sim, 1909 frames, score 2740, coins 20/58, deaths 0)
-level 3 OK  (40.5s sim, 2432 frames, score 2800, coins 20/55, deaths 1)
+level 1 OK  (24.6s sim, 1478 frames, score 2510, coins 21/55, deaths 0)
+level 2 OK  (31.9s sim, 1913 frames, score 3390, coins 23/58, deaths 0)
+level 3 OK  (41.7s sim, 2501 frames, score 2590, coins 20/55, deaths 1)
+level 4 OK  (40.1s sim, 2407 frames, score 2800, coins 21/66, deaths 0)
+level 5 OK  (50.4s sim, 3024 frames, score 3700, coins 23/70, deaths 1)
+level 6 OK  (40.8s sim, 2446 frames, score 2650, coins 19/78, deaths 0)
+level 7 OK  (48.2s sim, 2891 frames, score 3920, coins 26/77, deaths 1)
+level 8 OK  (47.0s sim, 2818 frames, score 3990, coins 26/75, deaths 0)
 smoke OK: menu -> play -> pause -> resume -> resize
-save OK: autosave, continue, and retry-at-saved-level
+save OK: v3 autosave, continue, retry-at-saved-level, career round trip, v1/v2 migration
 coinrush OK: gate locked, then opens at the threshold
+powerups OK: all five pickups, timer expiry, one-hit shield, magnet, persistence across respawn
+career OK: create/select/two-tap delete, per-career wallets and levels, active career persisted
+store OK: prices, deduction, refusal, max clamp, and every upgrade effect reaches the simulation
+wallet OK: clear pays 8 coins once, into the active career
 ```
+
+The suite also covers the career/store round trip: two careers with different
+wallets and unlocked levels, switching between them, two-tap delete, buying an
+upgrade and confirming its effect reaches the simulation (speed multiplier,
+jump multiplier, extra lives, magnet radius, power-up duration, starting
+shield), plus migration of v1 and v2 save blobs into a single career.
+
+### Off-device screen dumps
+
+`shots/new/` holds frames rasterised on the JVM by `RendererSmoke`:
+
+```
+DUMP_SHOTS=$PWD/shots/new JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./tools/run_headless_test.sh
+```
+
+- `menu.png` — home screen with the active-career badge and the three button groups
+- `career.png` — career list with an active row, wallet and level per career
+- `store.png` — store rows with effect, pips, price and the wallet header
+- `level4-caverns.png`, `level8-summit.png` — the new palettes plus the power-up
+  chips, shield pip and wallet chip in the HUD
+
+These come from the `java.awt` rasteriser in `tools/RendererSmoke.java`, whose
+font metrics differ from Android's, so treat them as *geometry* evidence (layout,
+sprites, palettes, HUD placement) rather than pixel-exact screenshots.
 
 ## Device verification
 

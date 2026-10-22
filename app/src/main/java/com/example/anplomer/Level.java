@@ -11,6 +11,10 @@ import java.util.List;
  *  '~' lava (hazard)     'o' coin                   'E' walker enemy
  *  'B' flyer enemy       'M' horizontal mover       'V' vertical mover
  *  'P' player start      'C' checkpoint             'G' goal flag
+ *
+ *  power-ups (all spawn in air, at the tile centre, like coins):
+ *  'S' speed boots       'H' shield                 'A' coin magnet
+ *  'J' double jump       'L' extra life
  * </pre>
  */
 public final class Level {
@@ -29,6 +33,13 @@ public final class Level {
     public static final char CHECKPOINT = 'C';
     public static final char GOAL = 'G';
 
+    // power-ups
+    public static final char POWER_SPEED = 'S';
+    public static final char POWER_SHIELD = 'H';
+    public static final char POWER_MAGNET = 'A';
+    public static final char POWER_JUMP = 'J';
+    public static final char POWER_LIFE = 'L';
+
     public final int w;
     public final int h;
     private final char[] tiles;
@@ -41,9 +52,13 @@ public final class Level {
     public final List<float[]> flyerSpawns = new ArrayList<>();    // {x,y}
     public final List<float[]> moverSpawns = new ArrayList<>();    // {x,y,verticalFlag}
     public final List<float[]> checkpointSpawns = new ArrayList<>();
+    /** Power-up spawns as {worldX, worldY, PowerUp.Type.ordinal()}. */
+    public final List<float[]> powerUpSpawns = new ArrayList<>();
 
     /** coins already taken this life; persists across respawns. */
     private final boolean[] coinTaken;
+    /** power-ups already taken this life; persists across respawns. */
+    private final boolean[] powerUpTaken;
 
     /** par time in seconds for the level-clear time bonus. */
     public int parTime = 60;
@@ -95,6 +110,16 @@ public final class Level {
                     case CHECKPOINT:
                         checkpointSpawns.add(new float[]{wx, wy});
                         break;
+                    case POWER_SPEED:
+                    case POWER_SHIELD:
+                    case POWER_MAGNET:
+                    case POWER_JUMP:
+                    case POWER_LIFE:
+                        powerUpSpawns.add(new float[]{
+                                wx + Constants.TILE / 2f,
+                                wy + Constants.TILE / 2f,
+                                powerUpOrdinal(c)});
+                        break;
                     default:
                         break;
                 }
@@ -109,6 +134,25 @@ public final class Level {
             goalY = (h - 3) * Constants.TILE;
         }
         this.coinTaken = new boolean[coinSpawns.size()];
+        this.powerUpTaken = new boolean[powerUpSpawns.size()];
+    }
+
+    /** Maps a level glyph to its {@link PowerUp.Type} ordinal. */
+    private static float powerUpOrdinal(char c) {
+        switch (c) {
+            case POWER_SPEED:
+                return PowerUp.Type.SPEED.ordinal();
+            case POWER_SHIELD:
+                return PowerUp.Type.SHIELD.ordinal();
+            case POWER_MAGNET:
+                return PowerUp.Type.MAGNET.ordinal();
+            case POWER_JUMP:
+                return PowerUp.Type.DOUBLE_JUMP.ordinal();
+            case POWER_LIFE:
+                return PowerUp.Type.EXTRA_LIFE.ordinal();
+            default:
+                return 0f;
+        }
     }
 
     // ---- queries ------------------------------------------------------
@@ -211,11 +255,15 @@ public final class Level {
     }
 
     public void takeCoin(int index) {
-        coinTaken[index] = true;
+        if (index >= 0 && index < coinTaken.length && !coinTaken[index]) {
+            coinTaken[index] = true;
+            coinsTakenCount++;
+        }
     }
 
     public void resetCoins() {
         java.util.Arrays.fill(coinTaken, false);
+        coinsTakenCount = 0;
     }
 
     public int coinsTaken() {
@@ -230,5 +278,36 @@ public final class Level {
 
     public int coinCount() {
         return coinTaken.length;
+    }
+
+    // ---- power-ups ----------------------------------------------------
+
+    public boolean powerUpTaken(int index) {
+        return index >= 0 && index < powerUpTaken.length && powerUpTaken[index];
+    }
+
+    public void takePowerUp(int index) {
+        if (index >= 0 && index < powerUpTaken.length && !powerUpTaken[index]) {
+            powerUpTaken[index] = true;
+            powerUpsTakenCount++;
+        }
+    }
+
+    public int powerUpCount() {
+        return powerUpTaken.length;
+    }
+
+    /** Cached coin count so the HUD can ask every frame without an O(n) scan. */
+    private int coinsTakenCount;
+    /** Cached power-up count, same reason. */
+    private int powerUpsTakenCount;
+
+    public int powerUpsTakenFast() {
+        return powerUpsTakenCount;
+    }
+
+    /** Number of coins taken, maintained incrementally. */
+    public int coinsTakenFast() {
+        return coinsTakenCount;
     }
 }

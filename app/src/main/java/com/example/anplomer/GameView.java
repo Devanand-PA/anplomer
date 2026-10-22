@@ -17,6 +17,8 @@ import android.view.SurfaceView;
 public final class GameView extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 
     private static final float STEP = 1f / 60f;
+    /** Target frame period (~60 fps); the loop sleeps out the remainder. */
+    private static final long FRAME_NS = 16_666_667L;
     private static final String TAG = "AnplomerView";
 
     private final Game game;
@@ -135,12 +137,31 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
         float accumulator = 0f;
 
         while (running) {
-            if (!surfaceReady) {
+            long frameStart = SystemClock.elapsedRealtimeNanos();
+
+            // Backgrounding is applied on the loop thread too: the UI thread
+            // only raises the flag, keeping all Game mutation here. It is
+            // handled even while frozen so the pending pause is never lost.
+            if (pendingForcePause) {
+                pendingForcePause = false;
+                game.forcePause();
+                game.input.reset();
+            }
+
+            // Frozen (host not visible) or no surface: draw nothing at all.
+            // The old loop kept locking and redrawing the same stale frame at
+            // whatever rate the CPU allowed, which burned battery for pixels
+            // nobody could see.
+            if (!surfaceReady || hostPaused) {
+                accumulator = 0f;
+                last = frameStart;
                 sleepQuietly(16);
                 continue;
             }
+
             Canvas canvas = getHolder().lockCanvas();
             if (canvas == null) {
+                last = SystemClock.elapsedRealtimeNanos();
                 sleepQuietly(16);
                 continue;
             }
@@ -159,30 +180,18 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
                     game.resize(canvas.getWidth(), canvas.getHeight());
                 }
 
-                // Backgrounding is applied on the loop thread too: the UI
-                // thread only raises the flag, keeping all Game mutation here.
-                if (pendingForcePause) {
-                    pendingForcePause = false;
-                    game.forcePause();
-                    game.input.reset();
+                if (dt > 0.25f) {
+                    dt = 0.25f;   // never spiral after a long stall
                 }
-
-                if (hostPaused) {
-                    accumulator = 0f;       // drop time spent in the background
-                } else {
-                    if (dt > 0.25f) {
-                        dt = 0.25f;   // never spiral after a long stall
-                    }
-                    accumulator += dt;
-                    int steps = 0;
-                    while (accumulator >= STEP && steps < 4) {
-                        game.update(STEP);
-                        accumulator -= STEP;
-                        steps++;
-                    }
-                    if (steps == 4) {
-                        accumulator = 0f;
-                    }
+                accumulator += dt;
+                int steps = 0;
+                while (accumulator >= STEP && steps < 4) {
+                    game.update(STEP);
+                    accumulator -= STEP;
+                    steps++;
+                }
+                if (steps == 4) {
+                    accumulator = 0f;
                 }
 
                 renderer.draw(game, canvas, canvas.getWidth(), canvas.getHeight());
@@ -203,6 +212,16 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
                 } catch (IllegalStateException ignored) {
                     // surface vanished between lock and post — safe to ignore
                 }
+            }
+
+            // Pace the loop. lockCanvas() does not block on vsync, so without
+            // this the thread renders as fast as the CPU allows (a full core
+            // per second of play, and a hot phone). Rendering beats the target
+            // simply skips the sleep and stays smooth.
+            long spent = SystemClock.elapsedRealtimeNanos() - frameStart;
+            long restNs = FRAME_NS - spent;
+            if (restNs > 2_000_000L) {
+                sleepQuietly(restNs / 1_000_000L);
             }
         }
     }

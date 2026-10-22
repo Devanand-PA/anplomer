@@ -17,6 +17,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 EMPTY, GROUND, STONE = ".", "#", "="
 SPIKE, LAVA, COIN, WALKER, FLYER = "^", "~", "o", "E", "B"
 MOVER_H, MOVER_V, START, CHECK, GOAL = "M", "V", "P", "C", "G"
+POWER = "SHAJL"            # speed, shield, magnet, double jump, extra life
 
 
 class Level:
@@ -85,6 +86,11 @@ class Level:
     def goal(self, x, surface):
         self.put(x, surface - 1, GOAL)
 
+    def power(self, x, y, kind):
+        """Place a power-up glyph; `kind` must be one of POWER."""
+        assert kind in POWER, f"unknown power-up glyph {kind!r}"
+        self.put(x, y, kind)
+
     def rows(self):
         return ["".join(r) for r in self.g]
 
@@ -128,6 +134,7 @@ def level1() -> Level:
     L.arc(89, 91, 10)
 
     L.checkpoint(95, 12)
+    L.power(103, 10, "H")
     L.stone(99, 101, 10)
     L.coins(range(99, 102), 9)
     L.stone(105, 107, 9)
@@ -170,6 +177,7 @@ def level2() -> Level:
     L.coins([19, 23, 25], 9)
 
     L.walker(29, 12)
+    L.power(33, 10, "J")
     L.stone(31, 34, 9)
     L.coins(range(31, 35), 8)
     L.flyer(45, 5)
@@ -241,6 +249,7 @@ def level3() -> Level:
     L.arc(19, 21, 10)
 
     L.walker(27, 12)
+    L.power(29, 9, "A")
     L.flyer(31, 7)
     L.stone(32, 35, 9)
     L.coins(range(32, 36), 8)
@@ -299,6 +308,429 @@ def level3() -> Level:
     return L
 
 
+
+# ----------------------------------------------------------------------
+# LEVEL 4 — Crystal Caverns: stone shelves, vertical movers, long caverns
+# ----------------------------------------------------------------------
+def level4() -> Level:
+    L = Level(195, 90, "Crystal Caverns")
+    L.seg(0, 17, 12)
+    L.start(2, 12)
+    L.coins(range(6, 11), 10)
+    L.walker(13, 12)
+    L.power(15, 10, "H")                 # shield before the first gap
+    L.arc(18, 20, 10)
+
+    L.seg(21, 37, 12)
+    L.stone(24, 27, 9)
+    L.coins(range(24, 28), 8)
+    L.spikes([34], 12)
+    L.coins(range(35, 38), 10)
+
+    L.lava(38, 46, 13)
+    L.mover_h(42, 11)
+    L.coins([39, 42, 45], 9)
+
+    L.seg(47, 62, 12)
+    L.walker(49, 12)
+    L.stone(53, 56, 9)
+    L.coins(range(53, 57), 8)
+    L.arc(60, 62, 10)
+
+    L.seg(66, 82, 12)
+    L.power(69, 10, "A")                 # magnet over open ground
+    L.spikes([76, 77], 12)
+    L.coins(range(78, 83), 10)
+
+    L.seg(86, 102, 12)
+    L.checkpoint(90, 12)
+    L.stone(94, 97, 9)
+    L.coins(range(94, 98), 8)
+
+    L.lava(103, 111, 13)
+    L.mover_h(107, 11)
+    L.mover_v(107, 4)
+    L.coins([104, 107, 110], 9)
+
+    L.seg(112, 128, 12)
+    L.coins(range(118, 123), 10)
+    L.spikes([125], 12)
+    L.arc(129, 131, 10)
+
+    L.seg(132, 152, 10)
+    L.stone(136, 139, 7)
+    L.coins(range(136, 140), 6)
+    L.power(142, 8, "J")                 # double jump on the high shelf
+    L.spikes([149], 10)
+    L.coins(range(150, 153), 8)
+
+    L.lava(153, 161, 13)
+    L.mover_h(157, 11)
+    L.coins([154, 157, 160], 9)
+
+    L.seg(162, 178, 12)
+    L.checkpoint(166, 12)
+    L.coins(range(169, 174), 10)
+    L.walker(176, 12)
+    L.arc(179, 181, 10)
+
+    L.seg(182, 194, 10)
+    L.power(185, 8, "L")                 # extra life before the summit
+    L.walker(188, 10)
+    L.coins(range(190, 193), 8)
+    L.goal(192, 10)
+    return L
+
+
+# ----------------------------------------------------------------------
+# LEVEL 5 — Ember Forge: lava channels, spikes and ferry platforms
+# ----------------------------------------------------------------------
+def level5() -> Level:
+    L = Level(210, 100, "Ember Forge")
+    L.seg(0, 15, 12)
+    L.start(2, 12)
+    L.coins(range(6, 10), 10)
+    L.walker(12, 12)
+    L.arc(16, 18, 10)
+
+    L.seg(19, 34, 12)
+    L.spikes([25, 26], 12)
+    L.coins(range(27, 31), 10)
+
+    L.lava(35, 43, 13)
+    L.mover_h(39, 11)
+    L.coins([36, 39, 42], 9)
+
+    L.seg(44, 59, 12)
+    L.walker(46, 12)
+    L.stone(50, 53, 9)
+    L.coins(range(50, 54), 8)
+    L.arc(57, 59, 10)
+
+    L.seg(63, 79, 12)
+    L.power(66, 9, "S")                  # speed boots on clear flat ground
+    L.coins(range(69, 74), 10)
+    L.walker(76, 12)
+    L.arc(80, 82, 10)
+
+    L.seg(83, 99, 12)
+    L.checkpoint(87, 12)
+    L.spikes([90, 91], 12)
+    L.coins(range(92, 97), 10)
+    L.flyer(98, 6)
+
+    L.lava(100, 108, 13)
+    L.mover_h(104, 11)
+    L.mover_v(104, 4)
+    L.coins([101, 104, 107], 9)
+
+    L.seg(109, 125, 12)
+    L.walker(112, 12)
+    L.stone(116, 119, 9)
+    L.coins(range(116, 120), 8)
+    L.power(122, 9, "H")
+    L.arc(123, 125, 10)
+
+    L.seg(129, 145, 12)
+    L.spikes([135, 136], 12)
+    L.coins(range(137, 142), 10)
+    L.flyer(143, 5)
+
+    L.lava(146, 154, 13)
+    L.mover_h(150, 11)
+    L.coins([147, 150, 153], 9)
+
+    L.seg(155, 171, 12)
+    L.checkpoint(159, 12)
+    L.walker(161, 12)
+    L.stone(163, 166, 9)
+    L.coins(range(163, 167), 8)
+    L.power(169, 9, "A")
+    L.arc(172, 174, 10)
+
+    L.seg(175, 191, 10)
+    L.coins(range(181, 186), 8)
+    L.spikes([188], 10)
+
+    L.lava(192, 200, 13)
+    L.mover_h(196, 11)
+    L.coins([193, 196, 199], 9)
+
+    L.seg(201, 209, 12)
+    L.power(203, 9, "L")
+    L.walker(205, 12)
+    L.coins(range(206, 209), 10)
+    L.goal(207, 12)
+    return L
+
+
+# ----------------------------------------------------------------------
+# LEVEL 6 — Windy Bluffs: flyer swarms, coin runs, wide gaps
+# ----------------------------------------------------------------------
+def level6() -> Level:
+    L = Level(239, 115, "Windy Bluffs")
+    L.seg(0, 16, 12)
+    L.start(2, 12)
+    L.coins(range(6, 11), 10)
+    L.flyer(14, 6)
+    L.arc(17, 19, 10)
+
+    L.seg(20, 36, 12)
+    L.walker(23, 12)
+    L.stone(26, 29, 9)
+    L.coins(range(26, 30), 8)
+    L.power(33, 10, "J")
+    L.arc(37, 39, 10)
+
+    L.seg(40, 56, 11)
+    L.flyer(48, 5)
+    L.coins(range(50, 55), 9)
+
+    L.lava(57, 65, 13)
+    L.mover_h(61, 11)
+    L.coins([58, 61, 64], 9)
+
+    L.seg(66, 82, 12)
+    L.checkpoint(70, 12)
+    L.flyer(74, 6)
+    L.spikes([77, 78], 12)
+    L.coins(range(79, 83), 10)
+    L.arc(83, 85, 10)
+
+    L.seg(86, 102, 12)
+    L.stone(93, 96, 9)
+    L.coins(range(93, 97), 8)
+    L.flyer(100, 4)
+
+    L.seg(106, 122, 11)
+    L.walker(109, 11)
+    L.coins(range(112, 117), 9)
+    L.flyer(119, 7)
+
+    L.lava(123, 131, 13)
+    L.mover_h(127, 11)
+    L.mover_v(127, 4)
+    L.coins([124, 127, 130], 9)
+
+    L.seg(132, 148, 12)
+    L.checkpoint(136, 12)
+    L.stone(142, 145, 9)
+    L.coins(range(142, 146), 8)
+    L.power(147, 10, "A")
+    L.arc(149, 151, 10)
+
+    L.seg(152, 168, 12)
+    L.flyer(155, 6)
+    L.coins(range(158, 163), 10)
+
+    L.lava(169, 177, 13)
+    L.mover_h(173, 11)
+    L.coins([170, 173, 176], 9)
+
+    L.seg(178, 194, 12)
+    L.spikes([184, 185], 12)
+    L.coins(range(186, 191), 10)
+    L.flyer(193, 5)
+
+    L.arc(195, 197, 10)
+
+    L.seg(198, 214, 10)
+    L.power(201, 8, "L")
+    L.coins(range(207, 212), 8)
+
+    L.arc(215, 217, 10)
+
+    L.seg(218, 238, 10)
+    L.power(221, 8, "L")
+    L.walker(224, 10)
+    L.coins(range(227, 232), 8)
+    L.flyer(236, 5)
+    L.goal(233, 10)
+    return L
+
+
+# ----------------------------------------------------------------------
+# LEVEL 7 — Frozen Spire: stair shelves, tight hops, ice-cold ferries
+# ----------------------------------------------------------------------
+def level7() -> Level:
+    L = Level(240, 120, "Frozen Spire")
+    L.seg(0, 17, 12)
+    L.start(2, 12)
+    L.coins(range(6, 11), 10)
+    L.walker(14, 12)
+    L.power(16, 10, "H")
+    L.arc(18, 20, 10)
+
+    L.seg(21, 37, 12)
+    L.stone(24, 27, 9)
+    L.coins(range(24, 28), 8)
+    L.walker(31, 12)
+    L.spikes([33, 34], 12)
+    L.arc(38, 40, 10)
+
+    L.seg(41, 57, 12)
+    L.walker(44, 12)
+    L.stone(48, 51, 9)
+    L.coins(range(48, 52), 8)
+    L.coins(range(54, 58), 10)
+
+    L.lava(58, 66, 13)
+    L.mover_h(62, 11)
+    L.coins([59, 62, 65], 9)
+
+    L.seg(67, 83, 12)
+    L.checkpoint(71, 12)
+    L.walker(74, 12)
+    L.stone(78, 81, 9)
+    L.coins(range(78, 82), 8)
+    L.arc(84, 86, 10)
+
+    L.seg(87, 103, 10)
+    L.stone(91, 94, 7)
+    L.coins(range(91, 95), 6)
+    L.power(97, 8, "J")
+    L.walker(100, 10)
+
+    L.seg(107, 123, 12)
+    L.flyer(110, 6)
+    L.coins(range(113, 118), 10)
+    L.spikes([120], 12)
+
+    L.lava(124, 132, 13)
+    L.mover_h(128, 11)
+    L.mover_v(128, 4)
+    L.coins([125, 128, 131], 9)
+
+    L.seg(133, 149, 12)
+    L.checkpoint(137, 12)
+    L.walker(140, 12)
+    L.stone(144, 147, 9)
+    L.coins(range(144, 148), 8)
+    L.power(148, 9, "A")
+    L.arc(150, 152, 10)
+
+    L.seg(153, 169, 12)
+    L.spikes([159, 160], 12)
+    L.coins(range(161, 166), 10)
+    L.flyer(168, 5)
+
+    L.lava(170, 178, 13)
+    L.mover_h(174, 11)
+    L.coins([171, 174, 177], 9)
+
+    L.seg(179, 195, 12)
+    L.stone(186, 189, 9)
+    L.coins(range(186, 190), 8)
+    L.spikes([192], 12)
+
+    L.seg(199, 215, 12)
+    L.walker(202, 12)
+    L.coins(range(205, 210), 10)
+    L.flyer(213, 4)
+
+    L.lava(216, 224, 13)
+    L.mover_h(220, 11)
+    L.coins([217, 220, 223], 9)
+
+    L.seg(225, 239, 12)
+    L.power(228, 9, "L")
+    L.walker(231, 12)
+    L.coins(range(233, 238), 10)
+    L.goal(237, 12)
+    return L
+
+
+# ----------------------------------------------------------------------
+# LEVEL 8 — Starfall Summit: the finale, every hazard in one climb
+# ----------------------------------------------------------------------
+def level8() -> Level:
+    L = Level(255, 130, "Starfall Summit")
+    L.seg(0, 17, 12)
+    L.start(2, 12)
+    L.coins(range(6, 11), 10)
+    L.walker(14, 12)
+    L.power(16, 10, "H")
+    L.arc(18, 20, 10)
+
+    L.seg(21, 37, 12)
+    L.stone(24, 27, 9)
+    L.coins(range(24, 28), 8)
+    L.walker(31, 12)
+    L.spikes([33, 34], 12)
+    L.arc(38, 40, 10)
+
+    L.seg(41, 57, 11)
+    L.walker(44, 11)
+    L.stone(48, 51, 8)
+    L.coins(range(48, 52), 7)
+    L.power(55, 9, "S")                  # speed on a clean stretch
+    L.coins(range(58, 62), 10)
+
+    L.lava(62, 70, 13)
+    L.mover_h(66, 11)
+    L.coins([63, 66, 69], 9)
+
+    L.seg(71, 87, 12)
+    L.checkpoint(75, 12)
+    L.spikes([81, 82], 12)
+    L.coins(range(83, 88), 10)
+
+    L.seg(91, 107, 12)
+    L.flyer(94, 6)
+    L.stone(97, 100, 9)
+    L.coins(range(97, 101), 8)
+    L.walker(104, 12)
+
+    L.lava(108, 116, 13)
+    L.mover_h(112, 11)
+    L.mover_v(112, 4)
+    L.coins([109, 112, 115], 9)
+
+    L.seg(117, 133, 12)
+    L.checkpoint(121, 12)
+    L.walker(124, 12)
+    L.coins(range(127, 132), 10)
+    L.power(132, 9, "J")
+    L.arc(134, 136, 10)
+
+    L.seg(137, 153, 12)
+    L.spikes([143, 144], 12)
+    L.coins(range(145, 150), 10)
+    L.flyer(152, 5)
+
+    L.seg(157, 173, 11)
+    L.walker(160, 11)
+    L.stone(164, 167, 8)
+    L.coins(range(164, 168), 7)
+    L.flyer(171, 7)
+
+    L.lava(174, 182, 13)
+    L.mover_h(178, 11)
+    L.coins([175, 178, 181], 9)
+
+    L.seg(183, 199, 12)
+    L.spikes([189, 190], 12)
+    L.coins(range(191, 196), 10)
+    L.power(198, 10, "A")
+
+    L.seg(203, 219, 12)
+    L.stone(210, 213, 9)
+    L.coins(range(210, 214), 8)
+    L.spikes([216], 12)
+
+    L.lava(220, 228, 13)
+    L.mover_h(224, 11)
+    L.coins([221, 224, 227], 9)
+
+    L.seg(229, 254, 12)
+    L.power(232, 9, "L")
+    L.walker(235, 12)
+    L.coins(range(238, 243), 10)
+    L.flyer(246, 5)
+    L.walker(249, 12)
+    L.goal(251, 12)
+    return L
+
 # ----------------------------------------------------------------------
 # validation
 # ----------------------------------------------------------------------
@@ -332,7 +764,7 @@ def validate(L: Level) -> list[str]:
     # every marker must sit in the air
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
-            if ch in (COIN, WALKER, FLYER, START, GOAL, CHECK, MOVER_H, MOVER_V, SPIKE):
+            if ch in (COIN, WALKER, FLYER, START, GOAL, CHECK, MOVER_H, MOVER_V, SPIKE) or ch in POWER:
                 if rows[y][x] in (GROUND, STONE, LAVA):
                     errs.append(f"{ch} at {x},{y} is buried in terrain")
             if ch == WALKER:
@@ -407,6 +839,21 @@ def validate(L: Level) -> list[str]:
         else:
             x += 1
 
+    # power-ups must be within a jump of some walkable surface
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch not in POWER:
+                continue
+            reachable = False
+            for dx in range(-3, 4):
+                nx = x + dx
+                if 0 <= nx < L.w and surfaces[nx] is not None:
+                    if 0 <= surfaces[nx] - y <= 3:
+                        reachable = True
+                        break
+            if not reachable:
+                errs.append(f"power-up {ch} at {x},{y} is not within a jump of ground")
+
     # height steps between adjacent columns (ignore gaps)
     for x in range(L.w - 1):
         a, b = surfaces[x], surfaces[x + 1]
@@ -432,6 +879,8 @@ def emit(levels: list[Level]) -> str:
         " *  #  ground     =  stone      ^  spikes     ~  lava      o  coin",
         " *  E  walker     B  flyer      M  h-mover    V  v-mover",
         " *  P  start      C  checkpoint G  goal       .  empty",
+        " *  S  speed      H  shield     A  magnet     J  double jump",
+        " *  L  extra life",
         " * </pre>",
         " */",
         "public final class Levels {",
@@ -459,7 +908,8 @@ def emit(levels: list[Level]) -> str:
 
 def main():
     check_only = "--check" in sys.argv
-    levels = [level1(), level2(), level3()]
+    levels = [level1(), level2(), level3(), level4(), level5(),
+              level6(), level7(), level8()]
     ok = True
     for L in levels:
         errs = validate(L)
@@ -467,8 +917,9 @@ def main():
         n_walk = "".join(L.rows()).count(WALKER)
         n_fly = "".join(L.rows()).count(FLYER)
         n_mov = "".join(L.rows()).count(MOVER_H) + "".join(L.rows()).count(MOVER_V)
+        n_pow = sum("".join(L.rows()).count(c) for c in POWER)
         print(f"[{L.name}] {L.w}x{H} par={L.par}s coins={n_coins} walkers={n_walk} "
-              f"flyers={n_fly} movers={n_mov}")
+              f"flyers={n_fly} movers={n_mov} powerups={n_pow}")
         for e in errs:
             ok = False
             print(f"   ERROR: {e}")

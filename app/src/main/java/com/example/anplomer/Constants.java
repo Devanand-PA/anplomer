@@ -54,7 +54,40 @@ public final class Constants {
     public static final int SCORE_COIN = 100;
     public static final int SCORE_STOMP = 200;
     public static final int SCORE_ALL_COINS = 1000;
+    public static final int SCORE_POWERUP = 150;
     public static final int SCORE_TIME_UNIT = 10;   // per second under par
+
+
+    // ---- power-ups ----------------------------------------------------
+    public static final float POWERUP_SIZE = 46f;
+    /** Base seconds a timed power-up lasts (scaled by the POWER upgrade). */
+    public static final float POWERUP_TIME = 12f;
+    /** Run-speed multiplier while SPEED is active. */
+    public static final float SPEED_BOOST_MUL = 1.45f;
+    /** Seconds the MAGNET power-up lasts. */
+    public static final float MAGNET_TIME = 10f;
+    /** Base pickup-attraction radius while MAGNET is active (world units). */
+    public static final float MAGNET_RADIUS = 300f;
+    /** Seconds the DOUBLE_JUMP power-up lasts. */
+    public static final float DOUBLE_JUMP_TIME = 15f;
+    /** Grace after a shield soaks a hit, so it cannot be re-hit instantly. */
+    public static final float INVULN_TIME = 1.2f;
+    public static final int MAX_LIVES = 9;
+    public static final int START_LIVES = 3;
+
+    // ---- career / store ----------------------------------------------
+    /** Coins banked per coin picked up. */
+    public static final int COINS_PER_PICKUP = 1;
+    /** Coins awarded for clearing a level. */
+    public static final int COINS_LEVEL_CLEAR = 8;
+    /** Extra coins for clearing a level with every coin collected. */
+    public static final int COINS_ALL_COINS = 12;
+
+    // per-level upgrade effects (see Upgrades / Profile)
+    public static final float UPGRADE_SPEED_STEP = 0.04f;
+    public static final float UPGRADE_JUMP_STEP = 0.03f;
+    public static final float UPGRADE_MAGNET_STEP = 90f;
+    public static final float UPGRADE_POWER_STEP = 0.15f;
 
     // ---- flow ---------------------------------------------------------
     public static final float LEVEL_FAIL_SECONDS = 150f;

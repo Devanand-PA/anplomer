@@ -83,6 +83,16 @@ public final class SoundManager implements SoundSink {
             double f = 660 + 330 * Math.min(1, t / 0.12);
             return Math.sin(6.283185 * f * t) * 0.9;
         }, 0.34));
+        // Power-up pickup: a bright three-note rise, distinct from the two-note
+        // coin so the player can hear "that was not a coin".
+        define(SoundSink.POWERUP, arpeggio(0.30, new double[]{659.25, 880.0, 1318.5}, 0.36));
+        // Store purchase: a short two-tone "ka-ching".
+        define(SoundSink.PURCHASE, concat(
+                synth(0.07, (t, n) -> Math.sin(6.283185 * 784 * t) * 0.9, 0.25),
+                synth(0.22, (t, n) -> {
+                    double f = 1046.5 + 523.25 * Math.min(1, t / 0.05);
+                    return Math.sin(6.283185 * f * t) * 0.85;
+                }, 0.20)));
 
         // looping background music, synthesised the same way as the effects
         defineMusic(musicLoop());
