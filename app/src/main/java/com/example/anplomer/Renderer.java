@@ -1671,6 +1671,34 @@ public final class Renderer {
         return Math.max(text.measureText(s), s.length() * size * 0.62f);
     }
 
+    /**
+     * Largest text size, at most {@code desired}, that keeps {@code s} inside
+     * {@code maxW} pixels. Boxed labels go through this so a long string shrinks
+     * to fit its button, chip or row instead of spilling over the border: the
+     * frame layout only knows the rect, it cannot know the font's advance
+     * widths, and real metrics differ from the stub's approximation.
+     */
+    private float fitSize(String s, float maxW, float desired) {
+        float size = Math.max(1f, desired);
+        if (s == null || s.isEmpty() || maxW <= 1f) {
+            return size;
+        }
+        text.setTextSize(size);
+        float w = textWidth(s, size);
+        if (w > maxW) {
+            size = Math.max(1f, size * (maxW / w));
+            text.setTextSize(size);
+        }
+        return size;
+    }
+
+    /** Centred overlay line that shrinks until it fits {@code maxW}. */
+    private void drawCenteredFit(Canvas c, String s, float cx, float y, float maxW, float size) {
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(fitSize(s, maxW, size));
+        c.drawText(s, cx, y, text);
+    }
+
     /** Decimal label for a small non-negative number, built at most once each. */
     private static String num(int v) {
         if (v >= 0 && v < NUM_LABELS.length) {
@@ -1708,17 +1736,19 @@ public final class Renderer {
         float r = Math.max(4f, h * 0.20f);
         float icx = x + 20f * scale + r;
         drawCoinGlyph(c, icx, y + h / 2f, r);
-        text.setTextSize(30f * scale);
+        float textX = icx + r + 8f * scale;
+        float textMax = Math.max(10f, x + w - textX - 8f * scale);
         text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(fitSize(walletStr, textMax, 30f * scale));
         text.setColor(0xFFFFE08A);
         text.setShadowLayer(4f, 0f, 3f, 0xCC000000);
-        c.drawText(walletStr, icx + r + 8f * scale, y + h / 2f + 11f * scale, text);
+        c.drawText(walletStr, textX, y + h / 2f + 11f * scale, text);
         // tiny "career wallet" hint under the number on tall enough chips
         if (h > 40f * scale) {
-            text.setTextSize(15f * scale);
+            text.setTextSize(fitSize("WALLET", textMax, 15f * scale));
             text.setColor(0xCCBFD4FF);
             text.setShadowLayer(2f, 0f, 1f, 0xCC000000);
-            c.drawText("WALLET", icx + r + 8f * scale, y + h / 2f + 27f * scale, text);
+            c.drawText("WALLET", textX, y + h / 2f + 27f * scale, text);
         }
     }
 
@@ -1879,50 +1909,55 @@ public final class Renderer {
                     stroke.setColor(0xAAFFFFFF);
                     stroke.setStrokeWidth(3f);
                     c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), 18f, 18f, stroke);
-                    text.setTextSize(Math.max(26f * scale, Math.min(36f * scale, b.h * 0.52f)));
+                    text.setTextSize(fitSize(b.label, b.w - 26f * scale,
+                            Math.max(26f * scale, Math.min(36f * scale, b.h * 0.52f))));
                     text.setColor(0xFFFFFFFF);
                     text.setShadowLayer(4f, 0f, 3f, 0x99000000);
                     c.drawText(b.label, b.x + b.w / 2f, b.y + b.h * 0.66f, text);
                     text.setShadowLayer(6f, 0f, 4f, 0x99000000);
                 }
-                text.setTextSize(22f * scale);
                 text.setColor(0xCCFFFFFF);
                 text.setShadowLayer(4f, 0f, 3f, 0x99000000);
-                c.drawText("R restart  •  back to resume  •  M sound",
-                        sw / 2f, Math.min(ptop + ptotal + 32f * scale, sh - 12f * scale), text);
+                drawCenteredFit(c, "R restart  •  back to resume  •  M sound", sw / 2f,
+                        Math.min(ptop + ptotal + 32f * scale, sh - 12f * scale),
+                        sw * 0.9f, 22f * scale);
                 break;
             case LEVEL_CLEARED:
                 scrim(c, sw, sh, 0.62f);
-                drawPanel(c, sw / 2f, sh / 2f, Math.min(sw * 0.7f, 760f * scale), 430f * scale);
-                text.setTextAlign(Paint.Align.CENTER);
-                text.setTextSize(54f * scale);
+                float clrPanelW = Math.min(sw * 0.7f, 760f * scale);
+                float clrW = clrPanelW - 56f * scale;
+                drawPanel(c, sw / 2f, sh / 2f, clrPanelW, 430f * scale);
                 text.setColor(0xFFFFD34D);
                 text.setShadowLayer(8f, 0f, 5f, 0xAA000000);
-                c.drawText("LEVEL CLEAR!", sw / 2f, sh / 2f - 152f * scale, text);
-                text.setTextSize(30f * scale);
+                drawCenteredFit(c, "LEVEL CLEAR!", sw / 2f, sh / 2f - 152f * scale,
+                        clrW, 54f * scale);
                 text.setColor(0xFFFFFFFF);
-                c.drawText("Time  " + g.timeLabel(), sw / 2f, sh / 2f - 92f * scale, text);
+                drawCenteredFit(c, "Time  " + g.timeLabel(), sw / 2f,
+                        sh / 2f - 92f * scale, clrW, 30f * scale);
                 text.setColor(0xFFBFD4FF);
-                c.drawText("Coins  " + g.coinsTaken + "/" + g.level.coinCount(),
-                        sw / 2f, sh / 2f - 48f * scale, text);
+                drawCenteredFit(c, "Coins  " + g.coinsTaken + "/" + g.level.coinCount(),
+                        sw / 2f, sh / 2f - 48f * scale, clrW, 30f * scale);
                 text.setColor(0xFF9BE89B);
-                c.drawText("Time bonus  +" + g.bonusTime, sw / 2f, sh / 2f - 4f * scale, text);
+                drawCenteredFit(c, "Time bonus  +" + g.bonusTime, sw / 2f,
+                        sh / 2f - 4f * scale, clrW, 30f * scale);
                 if (g.bonusCoins > 0) {
                     text.setColor(0xFFFFE08A);
-                    c.drawText("All coins  +" + g.bonusCoins, sw / 2f, sh / 2f + 40f * scale, text);
+                    drawCenteredFit(c, "All coins  +" + g.bonusCoins, sw / 2f,
+                            sh / 2f + 40f * scale, clrW, 30f * scale);
                 } else {
                     text.setColor(0xFFBFD4FF);
-                    c.drawText("Score  " + g.score, sw / 2f, sh / 2f + 40f * scale, text);
+                    drawCenteredFit(c, "Score  " + g.score, sw / 2f,
+                            sh / 2f + 40f * scale, clrW, 30f * scale);
                 }
-                text.setTextSize(38f * scale);
                 text.setColor(0xFFFFFFFF);
-                c.drawText("TOTAL  " + g.score, sw / 2f, sh / 2f + 92f * scale, text);
+                drawCenteredFit(c, "TOTAL  " + g.score, sw / 2f, sh / 2f + 92f * scale,
+                        clrW, 38f * scale);
                 // career wallet line: what this clear banked for the profile
-                text.setTextSize(26f * scale);
                 text.setColor(0xFF8FE3A8);
                 text.setShadowLayer(5f, 0f, 3f, 0xAA000000);
-                c.drawText("CAREER  +" + g.rewardCoins + " coins   (wallet "
-                        + g.profile.coins + ")", sw / 2f, sh / 2f + 134f * scale, text);
+                drawCenteredFit(c, "CAREER  +" + g.rewardCoins + " coins   (wallet "
+                        + g.profile.coins + ")", sw / 2f, sh / 2f + 134f * scale,
+                        clrW, 26f * scale);
                 blinkText(c, "TAP TO CONTINUE", sw / 2f, sh / 2f + 188f * scale, 26f * scale, g);
                 break;
             case GAME_OVER:
@@ -1937,15 +1972,18 @@ public final class Renderer {
                 text.setShadowLayer(10f, 0f, 6f, 0xAA000000);
                 c.drawText("GAME OVER", sw / 2f, oy, text);
                 oy += 92f * scale;
-                text.setTextSize(34f * scale);
                 text.setColor(0xFFFFFFFF);
                 text.setShadowLayer(6f, 0f, 4f, 0x99000000);
-                c.drawText("Final score  " + g.score, sw / 2f, oy, text);
+                drawCenteredFit(c, "Final score  " + g.score, sw / 2f, oy,
+                        sw * 0.86f, 34f * scale);
                 oy += 50f * scale;
                 text.setColor(0xFFBFD4FF);
-                c.drawText("Coins collected  " + g.coinsTaken, sw / 2f, oy, text);
+                drawCenteredFit(c, "Coins collected  " + g.coinsTaken, sw / 2f, oy,
+                        sw * 0.86f, 34f * scale);
                 oy += 62f * scale;
-                blinkText(c, "TAP TO RETRY  •  " + g.levelLabel(), sw / 2f, oy, 32f * scale, g);
+                blinkText(c, "TAP TO RETRY  •  " + g.levelLabel(), sw / 2f, oy,
+                        fitSize("TAP TO RETRY  •  " + g.levelLabel(), sw * 0.86f,
+                                32f * scale), g);
                 oy += 46f * scale;
                 text.setTextSize(22f * scale);
                 text.setColor(0xCCFFFFFF);
@@ -1962,13 +2000,14 @@ public final class Renderer {
                 text.setShadowLayer(12f, 0f, 7f, 0xAA000000);
                 c.drawText("YOU WIN!", sw / 2f, wy, text);
                 wy += 98f * scale;
-                text.setTextSize(34f * scale);
                 text.setColor(0xFFFFFFFF);
                 text.setShadowLayer(6f, 0f, 4f, 0x99000000);
-                c.drawText("All " + Levels.TEXT.length + " peaks conquered", sw / 2f, wy, text);
+                drawCenteredFit(c, "All " + Levels.TEXT.length + " peaks conquered",
+                        sw / 2f, wy, sw * 0.86f, 34f * scale);
                 wy += 56f * scale;
                 text.setColor(0xFF9BE89B);
-                c.drawText("Final score  " + g.score, sw / 2f, wy, text);
+                drawCenteredFit(c, "Final score  " + g.score, sw / 2f, wy,
+                        sw * 0.86f, 34f * scale);
                 wy += 68f * scale;
                 blinkText(c, "TAP FOR TITLE", sw / 2f, wy, 30f * scale, g);
                 break;
@@ -1980,6 +2019,9 @@ public final class Renderer {
                 break;
             case STORE:
                 drawStore(c, g, sw, sh, scale);
+                break;
+            case HELP:
+                drawHelp(c, g, sw, sh, scale);
                 break;
             case PLAYING:
             default:
@@ -2039,11 +2081,18 @@ public final class Renderer {
             drawMenuButton(c, b.label, b.x, b.y, b.w, b.h, scale, small, row);
         }
 
-        text.setTextSize(20f * scale);
+        String hint = "auto-saves the level you reach  •  losing all lives returns here";
+        float smallTop = sh;
+        for (Game.UiButton b : g.menuButtons) {
+            if (b.id == Game.BTN_SOUND || b.id == Game.BTN_RESET) {
+                smallTop = Math.min(smallTop, b.y);
+            }
+        }
+        float hintY = Math.min(sh * 0.885f, smallTop - 14f * scale);
+        text.setTextSize(fitSize(hint, sw * 0.92f, 20f * scale));
         text.setColor(0xCCFFFFFF);
         text.setShadowLayer(4f, 0f, 3f, 0x99000000);
-        c.drawText("auto-saves the level you reach  •  losing all lives returns here",
-                sw / 2f, sh * 0.885f, text);
+        c.drawText(hint, sw / 2f, hintY, text);
     }
 
     /** One home-screen button; {@code small}/{@code row} pick the styling group. */
@@ -2063,8 +2112,7 @@ public final class Renderer {
                 : row ? Math.max(20f, 26f * scale) : Math.max(24f, 30f * scale);
         ts = Math.min(ts, h * 0.52f);
         // never let a long label run outside its own button
-        float glyphW = 0.62f * Math.max(1, label == null ? 1 : label.length());
-        ts = Math.min(ts, w / glyphW);
+        ts = fitSize(label, w - 24f * scale, ts);
         text.setTextSize(Math.max(0f, ts));
         text.setColor(small ? 0xCCFFFFFF : 0xFFFFFFFF);
         text.setShadowLayer(small ? 3f : 4f, 0f, 3f, 0x99000000);
@@ -2093,14 +2141,32 @@ public final class Renderer {
             badgeLvlW = textWidth("LVL " + (p.levelIndex + 1), Math.max(6f, 20f * scale));
         }
         float gap = Math.max(3f, 10f * scale);
-        float w = pad * 2f + dot * 2f + gap
-                + (compact ? 0f : badgeNameW + gap)
-                + dot * 1.6f + gap + badgeCoinsW + gap
-                + badgeLvlW;
-        // keep the badge clear of a narrow title
-        if (!compact && w > sw * 0.38f) {
-            compact = true;
-            w = pad * 2f + dot * 2f + gap + dot * 1.6f + gap + badgeCoinsW + gap + badgeLvlW;
+        float cluster = dot * 1.6f + gap + badgeCoinsW + gap + badgeLvlW;
+        float nameW = compact ? 0f : badgeNameW;
+        float w = pad * 2f + dot * 2f + gap + nameW + (compact ? 0f : gap) + cluster;
+        // Keep the badge clear of the title: the title is centred and huge, so
+        // measure it instead of guessing. A long name shrinks first, and is
+        // dropped only when the space left cannot carry it legibly.
+        text.setTextSize(88f * scale);
+        float maxBadgeW = Math.min(sw * 0.38f,
+                sw / 2f - textWidth("ANPLOMER", 88f * scale) / 2f - 18f * scale);
+        if (maxBadgeW < pad * 2f + dot * 2f + gap + cluster) {
+            // no room beside the title (small phone, landscape): the title wins
+            return;
+        }
+        if (!compact && w > maxBadgeW) {
+            float room = maxBadgeW - (pad * 2f + dot * 2f + gap + cluster + gap);
+            if (room > 34f * scale) {
+                badgeNameW = room;
+                nameW = room;
+            } else {
+                compact = true;
+                nameW = 0f;
+            }
+            w = pad * 2f + dot * 2f + gap + (compact ? 0f : nameW + gap) + cluster;
+        }
+        if (w > maxBadgeW) {
+            w = Math.max(dot * 4f + pad * 2f, maxBadgeW);
         }
         fill.setColor(0xD9151F38);
         c.drawRoundRect(rect(x, y, x + w, y + h), h / 2f, h / 2f, fill);
@@ -2117,22 +2183,26 @@ public final class Renderer {
         float tx = ax + dot + gap;
         text.setTextAlign(Paint.Align.LEFT);
         text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
-        if (!compact) {
-            text.setTextSize(Math.max(6f, 22f * scale));
+        if (!compact && nameW > 0f) {
+            text.setTextSize(fitSize(p.name, nameW, Math.max(6f, 22f * scale)));
             text.setColor(0xFFFFFFFF);
             c.drawText(p.name, tx, y + h / 2f + 8f * scale, text);
-            tx += badgeNameW + gap;
+            tx += nameW + gap;
         }
         // coin wallet
         float cr = dot * 0.8f;
         drawCoinGlyph(c, tx + cr, y + h / 2f, cr);
         tx += cr * 2f + gap;
-        text.setTextSize(Math.max(6f, 20f * scale));
+        text.setTextSize(fitSize(num(p.coins), Math.max(16f, x + w - tx - 30f * scale),
+                Math.max(6f, 20f * scale)));
         text.setColor(0xFFFFE08A);
         c.drawText(num(p.coins), tx, y + h / 2f + 7f * scale, text);
         tx += badgeCoinsW + gap;
         text.setColor(0xFFBFD4FF);
-        c.drawText("LVL " + (p.levelIndex + 1), tx, y + h / 2f + 7f * scale, text);
+        String lvlStr = "LVL " + (p.levelIndex + 1);
+        text.setTextSize(fitSize(lvlStr, Math.max(20f, x + w - tx - 6f * scale),
+                Math.max(6f, 20f * scale)));
+        c.drawText(lvlStr, tx, y + h / 2f + 7f * scale, text);
         text.setTextAlign(Paint.Align.CENTER);
     }
 
@@ -2157,10 +2227,12 @@ public final class Renderer {
         text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
         c.drawText("CAREERS", left + pw * 0.06f, headerY, text);
         text.setTextAlign(Paint.Align.RIGHT);
-        text.setTextSize(Math.max(6f, 20f * scale));
+        String countStr = g.profiles.size()
+                + (g.profiles.size() == 1 ? " CAREER" : " CAREERS");
+        text.setTextSize(fitSize(countStr, pw * 0.40f, Math.max(6f, 20f * scale)));
         text.setColor(0xFFBFD4FF);
         text.setShadowLayer(3f, 0f, 2f, 0x99000000);
-        c.drawText(g.profiles.size() + (g.profiles.size() == 1 ? " CAREER" : " CAREERS"),
+        c.drawText(countStr,
                 left + pw * 0.94f, headerY, text);
         text.setTextAlign(Paint.Align.CENTER);
 
@@ -2199,8 +2271,12 @@ public final class Renderer {
         text.setTextSize(Math.max(5f, 17f * scale));
         text.setColor(0x99FFFFFF);
         text.setShadowLayer(3f, 0f, 2f, 0x99000000);
-        c.drawText("each career keeps its own coins, upgrades and progress",
-                sw / 2f, Math.min(top + ph + 24f * scale, sh - 8f * scale), text);
+        String foot = "each career keeps its own coins, upgrades and progress";
+        float footY = Math.min(footerBottom(g.careerButtons, top + ph) + 18f * scale,
+                top + ph - 10f * scale);
+        footY = Math.min(footY, sh - 8f * scale);
+        text.setTextSize(fitSize(foot, pw * 0.94f, Math.max(5f, 17f * scale)));
+        c.drawText(foot, sw / 2f, footY, text);
     }
 
     private void drawCareerRow(Canvas c, Profile p, boolean active, Game.UiButton b, float scale) {
@@ -2222,16 +2298,25 @@ public final class Renderer {
         float tx = ax + dot * 1.6f;
         float nameSize = Math.min(b.h * 0.34f, 30f * scale);
         float subSize = Math.min(b.h * 0.26f, 20f * scale);
+        // reserve the right-hand BEST/ACTIVE column so a long name cannot
+        // run underneath it
+        float bestSize = Math.max(4f, subSize);
+        float rightW = textWidth("BEST " + p.bestScore, bestSize) + 22f * scale;
+        if (active) {
+            rightW = Math.max(rightW,
+                    textWidth("ACTIVE", Math.max(4f, subSize * 0.92f)) + 22f * scale);
+        }
+        float nameMax = Math.max(24f, b.w - (tx - b.x) - rightW - 12f * scale);
         text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(Math.max(5f, nameSize));
         text.setColor(0xFFFFFFFF);
         text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+        text.setTextSize(fitSize(p.name, nameMax, Math.max(5f, nameSize)));
         c.drawText(p.name, tx, b.y + b.h * (b.h > 34f ? 0.44f : 0.62f), text);
         if (b.h > 34f) {
-            text.setTextSize(Math.max(4f, subSize));
+            String sub = "LEVEL " + (p.levelIndex + 1) + "  •  COINS " + p.coins;
+            text.setTextSize(fitSize(sub, nameMax, Math.max(4f, subSize)));
             text.setColor(0xFFBFD4FF);
-            c.drawText("LEVEL " + (p.levelIndex + 1) + "  •  COINS " + p.coins,
-                    tx, b.y + b.h * 0.78f, text);
+            c.drawText(sub, tx, b.y + b.h * 0.78f, text);
         }
         // right side: best score / active marker
         text.setTextAlign(Paint.Align.RIGHT);
@@ -2263,13 +2348,14 @@ public final class Renderer {
         text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
         c.drawText("STORE", left + pw * 0.06f, headerY, text);
 
-        float wSize = Math.max(6f, 24f * scale);
         String walletLine = "WALLET " + num(g.profile.coins);
+        float wSize = fitSize(walletLine, pw * 0.40f, Math.max(6f, 24f * scale));
         float walletTextW = textWidth(walletLine, wSize);
         float wRight = left + pw * 0.94f;
         float wGlyphR = Math.max(4f, 12f * scale);
         drawCoinGlyph(c, wRight - walletTextW - 12f * scale - wGlyphR, headerY - 9f * scale, wGlyphR);
         text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(wSize);
         text.setColor(0xFFFFE08A);
         text.setShadowLayer(3f, 0f, 3f, 0xCC000000);
         c.drawText(walletLine, wRight, headerY, text);
@@ -2303,8 +2389,12 @@ public final class Renderer {
         text.setTextSize(Math.max(5f, 17f * scale));
         text.setColor(0x99FFFFFF);
         text.setShadowLayer(3f, 0f, 2f, 0x99000000);
-        c.drawText("upgrades are permanent and shared by this career only",
-                sw / 2f, Math.min(top + ph + 24f * scale, sh - 8f * scale), text);
+        String foot = "upgrades are permanent and shared by this career only";
+        float footY = Math.min(footerBottom(g.storeButtons, top + ph) + 18f * scale,
+                top + ph - 10f * scale);
+        footY = Math.min(footY, sh - 8f * scale);
+        text.setTextSize(fitSize(foot, pw * 0.94f, Math.max(5f, 17f * scale)));
+        c.drawText(foot, sw / 2f, footY, text);
     }
 
     private void drawStoreRow(Canvas c, Game g, int id, Game.UiButton b, float scale) {
@@ -2326,11 +2416,16 @@ public final class Renderer {
 
         text.setTextAlign(Paint.Align.LEFT);
         float nameSize = Math.min(b.h * 0.30f, 26f * scale);
-        text.setTextSize(Math.max(5f, nameSize));
+        float effSize = Math.max(4f, Math.min(b.h * 0.22f, 18f * scale));
+        // reserve the right-hand pips/price column before sizing the text
+        float rightBlock = Math.max(Upgrades.MAX[id] * (Math.max(2f, Math.min(b.h * 0.14f, 11f * scale)) * 2.1f),
+                maxed ? textWidth("MAX", effSize) : textWidth(storePrice[id], effSize) * 1.1f);
+        float leftMax = Math.max(30f, b.w - 16f * scale - rightBlock - 26f * scale);
         text.setColor(maxed ? 0xFFBFD4FF : afford ? 0xFFFFFFFF : 0x99FFFFFF);
         text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+        text.setTextSize(fitSize(Upgrades.NAME[id], leftMax, Math.max(5f, nameSize)));
         c.drawText(Upgrades.NAME[id], b.x + 16f * scale, b.y + b.h * 0.44f, text);
-        text.setTextSize(Math.max(4f, Math.min(b.h * 0.22f, 18f * scale)));
+        text.setTextSize(fitSize(storeEff[id], leftMax, effSize));
         text.setColor(afford ? 0xFFBFD4FF : 0x88FFFFFF);
         c.drawText(storeEff[id], b.x + 16f * scale, b.y + b.h * 0.80f, text);
 
@@ -2366,9 +2461,9 @@ public final class Renderer {
         stroke.setColor(danger ? 0xFFFF9A8A : 0xAAFFFFFF);
         stroke.setStrokeWidth(Math.max(1f, 3f * scale));
         c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
-        float ts = Math.min(Math.max(18f, 26f * scale), b.h * 0.5f);
         String label = b.label == null ? "" : b.label;
-        ts = Math.min(ts, b.w / (0.62f * Math.max(1, label.length())));
+        float ts = fitSize(label, b.w - 24f * scale,
+                Math.min(Math.max(18f, 26f * scale), b.h * 0.5f));
         text.setTextSize(Math.max(0f, ts));
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(0xFFFFFFFF);
@@ -2399,6 +2494,18 @@ public final class Renderer {
             }
         }
         return top == Float.MAX_VALUE ? fallback : top;
+    }
+
+    /** Bottom edge of the footer button row (Back / New / Delete), or a fallback. */
+    private static float footerBottom(java.util.List<Game.UiButton> buttons, float fallback) {
+        float bottom = -Float.MAX_VALUE;
+        for (Game.UiButton b : buttons) {
+            if (b.id == Game.BTN_BACK || b.id == Game.BTN_NEW_PROFILE
+                    || b.id == Game.BTN_DELETE_PROFILE) {
+                bottom = Math.max(bottom, b.y + b.h);
+            }
+        }
+        return bottom == -Float.MAX_VALUE ? fallback : bottom;
     }
 
     private static int avatarColor(int colorIndex) {
@@ -2500,6 +2607,121 @@ public final class Renderer {
         c.restore();
     }
 
+    /** Rows of the in-game tutorial: label + one-line explanation. */
+    private static final String[][] HELP_ROWS = {
+            {"MOVE", "arrows  /  A  D"},
+            {"JUMP", "jump button  /  W  /  space"},
+            {"PAUSE", "pause button  /  P"},
+            {"COINS", "+100 score, +1 career coin"},
+            {"ENEMIES", "stomp them from above"},
+            {"HAZARDS", "spikes, lava and pits cost a life"},
+            {"CHECKPOINT", "a flag saves your respawn"},
+            {"GOAL", "reach the flag to clear the level"},
+            {"CAREERS", "own wallet, unlocks and upgrades"},
+            {"STORE", "spend career coins on upgrades"},
+            {"COLLECTOR", "60% of the coins opens the goal"},
+            {"AUTO-SAVE", "progress saves as you reach it"},
+    };
+
+    /** Power-up legend shown at the bottom of the tutorial. */
+    private static final PowerUp.Type[] HELP_POWERS = {
+            PowerUp.Type.SPEED, PowerUp.Type.SHIELD, PowerUp.Type.MAGNET,
+            PowerUp.Type.DOUBLE_JUMP, PowerUp.Type.EXTRA_LIFE
+    };
+
+    /** The "HOW TO PLAY" overlay: one screen, every component explained. */
+    private void drawHelp(Canvas c, Game g, float sw, float sh, float scale) {
+        scrim(c, sw, sh, 0.72f);
+        float pw = g.helpPanelW();
+        float ph = g.helpPanelH();
+        float left = (sw - pw) / 2f;
+        float top = (sh - ph) / 2f;
+        drawPanel(c, sw / 2f, sh / 2f, pw, ph);
+
+        text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
+        text.setColor(0xFFFFD34D);
+        drawCenteredFit(c, "HOW TO PLAY", sw / 2f, top + Math.min(56f * scale, ph * 0.11f),
+                pw - 48f * scale, 40f * scale);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        text.setColor(0xCCBFD4FF);
+        drawCenteredFit(c, "everything in one screen  •  tap BACK when you are done",
+                sw / 2f, top + Math.min(88f * scale, ph * 0.175f),
+                pw - 48f * scale, 17f * scale);
+
+        Game.UiButton back = g.helpButtons.isEmpty() ? null : g.helpButtons.get(0);
+        float backTop = back == null ? top + ph - 60f * scale : back.y;
+        boolean twoCol = pw >= ph * 1.15f;
+        int rows = HELP_ROWS.length;
+        int perCol = twoCol ? (rows + 1) / 2 : rows;
+        int cols = twoCol ? 2 : 1;
+        float contentTop = top + Math.min(112f * scale, ph * 0.22f);
+        // Reserve room for the power-up legend when the panel is tall enough.
+        // The height is built from its parts so the caption can never land on
+        // the BACK button.
+        float step = Math.min(96f * scale, (pw - 80f * scale) / HELP_POWERS.length);
+        float iconR = Math.min(14f * scale, step * 0.18f);
+        float letterSize = Math.max(6f, Math.min(16f * scale, step * 0.22f));
+        float capSize = Math.max(5f, Math.min(14f * scale, step * 0.18f));
+        float strip = 2f * iconR + letterSize + capSize + 16f * scale;
+        boolean showStrip = ph > 380f * scale;
+        float contentBottom = backTop - (showStrip ? strip : 0f) - 10f * scale;
+        float rowH = Math.max(12f, Math.min(48f * scale,
+                (contentBottom - contentTop) / Math.max(1, perCol)));
+        float colW = (pw - 56f * scale) / cols;
+        float x0 = left + 28f * scale;
+        float labelW = colW * 0.34f;
+        for (int i = 0; i < rows; i++) {
+            int col = twoCol ? i / perCol : 0;
+            int row = twoCol ? i % perCol : i;
+            float x = x0 + col * colW;
+            float y = contentTop + (row + 1) * rowH;
+            float size = Math.min(22f * scale, rowH * 0.56f);
+            String label = HELP_ROWS[i][0];
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(fitSize(label, labelW - 8f * scale, size));
+            text.setColor(0xFFFFE08A);
+            text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+            c.drawText(label, x, y, text);
+            String value = HELP_ROWS[i][1];
+            text.setTextSize(fitSize(value, colW - labelW - 6f * scale, size));
+            text.setColor(0xFFFFFFFF);
+            c.drawText(value, x + labelW, y, text);
+        }
+
+        // power-up legend: icon + glyph letter for each of the five pickups
+        if (showStrip) {
+            float stripTop = contentBottom + 6f * scale;
+            float iconY = stripTop + iconR;
+            float letterBase = stripTop + 2f * iconR + letterSize + 2f * scale;
+            float capBase = letterBase + capSize + 4f * scale;
+            for (int i = 0; i < HELP_POWERS.length; i++) {
+                float cx = sw / 2f + (i - (HELP_POWERS.length - 1) / 2f) * step;
+                c.save();
+                c.translate(cx, iconY);
+                fill.setColor(0xFF1B2A48);
+                c.drawCircle(0f, 0f, iconR, fill);
+                stroke.setColor(0x66FFFFFF);
+                stroke.setStrokeWidth(Math.max(1f, 1.4f * scale));
+                c.drawCircle(0f, 0f, iconR, stroke);
+                drawPowerIcon(c, HELP_POWERS[i], iconR * 1.7f);
+                c.restore();
+                text.setTextAlign(Paint.Align.CENTER);
+                text.setTextSize(letterSize);
+                text.setColor(0xFFFFFFFF);
+                text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+                c.drawText(String.valueOf(PowerUp.glyph(HELP_POWERS[i])), cx, letterBase, text);
+            }
+            text.setColor(0xCCBFD4FF);
+            drawCenteredFit(c, "speed  •  shield  •  magnet  •  double jump  •  extra life",
+                    sw / 2f, capBase, pw - 60f * scale, capSize);
+        }
+
+        if (back != null) {
+            drawOverlayButton(c, back, scale, false);
+        }
+        text.setTextAlign(Paint.Align.CENTER);
+    }
+
     private void drawSettings(Canvas c, Game g, float sw, float sh, float scale) {
         scrim(c, sw, sh, 0.62f);
         float pw = g.settingsPanelW();
@@ -2528,7 +2750,8 @@ public final class Renderer {
             stroke.setColor(0xAAFFFFFF);
             stroke.setStrokeWidth(3f);
             c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), 18f, 18f, stroke);
-            text.setTextSize(Math.max(24f * scale, Math.min(34f * scale, b.h * 0.52f)));
+            text.setTextSize(fitSize(b.label, b.w - 26f * scale,
+                    Math.max(24f * scale, Math.min(34f * scale, b.h * 0.52f))));
             text.setColor(0xFFFFFFFF);
             text.setShadowLayer(4f, 0f, 3f, 0x99000000);
             c.drawText(b.label, b.x + b.w / 2f, b.y + b.h * 0.66f, text);
@@ -2544,7 +2767,9 @@ public final class Renderer {
 
     private void drawSlider(Canvas c, Game g, Game.UiSlider s, String label, String value, float scale) {
         // label above-left of the track, current value above-right
-        text.setTextSize(24f * scale);
+        float valSize = Math.max(6f, 24f * scale);
+        float valW = textWidth(value, valSize);
+        text.setTextSize(fitSize(label, Math.max(30f, s.w - valW - 18f * scale), valSize));
         text.setShadowLayer(4f, 0f, 3f, 0x99000000);
         text.setTextAlign(Paint.Align.LEFT);
         text.setColor(0xFFFFFFFF);

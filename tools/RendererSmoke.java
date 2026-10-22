@@ -304,9 +304,15 @@ public final class RendererSmoke {
     /** Render one labelled frame at 2400x1080 for visual review. */
     static void dumpShot(java.io.File file, int level, float playerX, Game.State state,
                          java.util.function.Consumer<Game> setup, boolean settle) {
+        dumpShot(file, 2400, 1080, level, playerX, state, setup, settle);
+    }
+
+    static void dumpShot(java.io.File file, float w, float h, int level, float playerX,
+                         Game.State state, java.util.function.Consumer<Game> setup,
+                         boolean settle) {
         Renderer r = new Renderer();
         Game g = new Game(new NullSound());
-        g.resize(2400, 1080);
+        g.resize(w, h);
         g.loadLevel(level);
         g.state = Game.State.PLAYING;
         if (playerX >= 0f) {
@@ -321,8 +327,8 @@ public final class RendererSmoke {
         for (int i = 0; i < frames; i++) {
             g.update(1f / 60f);
         }
-        RasterCanvas c = new RasterCanvas(2400, 1080);
-        r.draw(g, c, 2400, 1080);
+        RasterCanvas c = new RasterCanvas((int) w, (int) h);
+        r.draw(g, c, w, h);
         c.save(file.getPath());
         System.out.println("[render] shot " + file.getName() + " (" + c.drawCount + " draws)");
     }
@@ -357,6 +363,49 @@ public final class RendererSmoke {
                     g.magnetTimer = 6.2f;
                     g.doubleJumpTimer = 4.0f;
                     g.profile.coins = 128;
+                }, true);
+        // phone-shaped and small screens: the layouts that used to clip
+        dumpShot(new java.io.File(dir, "menu-1080x480.png"), 1080, 480, 0, -1f,
+                Game.State.MENU, null, false);
+        dumpShot(new java.io.File(dir, "career-1080x480.png"), 1080, 480, 0, -1f,
+                Game.State.CAREER, g -> {
+                    g.profile.coins = 186;
+                    g.newProfile();
+                    g.profiles.get(1).coins = 42;
+                }, true);
+        dumpShot(new java.io.File(dir, "store-1080x480.png"), 1080, 480, 0, -1f,
+                Game.State.STORE, g -> {
+                    g.profile.coins = 214;
+                    g.profile.upgrades[Upgrades.SPEED] = 2;
+                    g.profile.upgrades[Upgrades.JUMP] = 1;
+                }, true);
+        dumpShot(new java.io.File(dir, "menu-480x320.png"), 480, 320, 0, -1f,
+                Game.State.MENU, null, false);
+        dumpShot(new java.io.File(dir, "paused-1080x480.png"), 1080, 480, 1, 30f * 64f,
+                Game.State.PAUSED, g -> g.profile.coins = 31, false);
+        dumpShot(new java.io.File(dir, "cleared-1080x480.png"), 1080, 480, 1, 30f * 64f,
+                Game.State.LEVEL_CLEARED, g -> {
+                    g.coinsTaken = 23;
+                    g.bonusTime = 120;
+                    g.bonusCoins = 12;
+                    g.rewardCoins = 8;
+                    g.profile.coins = 186;
+                }, true);
+        dumpShot(new java.io.File(dir, "win-1080x480.png"), 1080, 480, 7, 30f * 64f,
+                Game.State.WIN, g -> g.profile.coins = 412, true);
+        dumpShot(new java.io.File(dir, "help.png"), 2400, 1080, 0, -1f,
+                Game.State.HELP, Game::openHelp, false);
+        dumpShot(new java.io.File(dir, "help-1080x480.png"), 1080, 480, 0, -1f,
+                Game.State.HELP, Game::openHelp, false);
+        dumpShot(new java.io.File(dir, "help-480x320.png"), 480, 320, 0, -1f,
+                Game.State.HELP, Game::openHelp, false);
+        dumpShot(new java.io.File(dir, "playing-1080x480.png"), 1080, 480, 4, 40f * 64f,
+                Game.State.PLAYING, g -> {
+                    g.speedBoostTimer = 8.4f;
+                    g.magnetTimer = 3.1f;
+                    g.doubleJumpTimer = 11.2f;
+                    g.shieldCharges = 2;
+                    g.profile.coins = 214;
                 }, true);
     }
 
@@ -451,8 +500,16 @@ public final class RendererSmoke {
         check(!hg.storeButtons.isEmpty(), "store screen laid out no rows");
         drawFrame(r, hg, 2400, 1080);
         drawFrame(r, hg, 1080, 480);
+        hg.openHelp();
+        check(!hg.helpButtons.isEmpty(), "tutorial laid out no back button");
+        drawFrame(r, hg, 2400, 1080);
+        drawFrame(r, hg, 1080, 480);
+        drawFrame(r, hg, 480, 320);
+        drawFrame(r, hg, 1, 1);
+        hg.closeHelp();
         System.out.println("[render] career rows " + hg.careerButtons.size()
-                + ", store rows " + hg.storeButtons.size());
+                + ", store rows " + hg.storeButtons.size()
+                + ", tutorial buttons " + hg.helpButtons.size());
 
         // ---- 2. real gameplay, drawing every frame ------------------------
         System.out.println("[render] live gameplay with rendering");

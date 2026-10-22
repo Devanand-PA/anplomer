@@ -11,7 +11,7 @@ import java.util.List;
 public final class Game implements Player.Listener {
 
     public enum State {
-        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE
+        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE, HELP
     }
 
     /**
@@ -85,7 +85,8 @@ public final class Game implements Player.Listener {
     public static final int BTN_SOUND = 6;
     public static final int BTN_RESET = 7;
     public static final int BTN_SETTINGS = 8;
-    public static final int BTN_BACK = 9;   // settings/career/store back button
+    public static final int BTN_BACK = 9;
+    public static final int BTN_HELP = 14;   // settings/career/store back button
     public static final int BTN_CAREER = 10;
     public static final int BTN_STORE = 11;
     public static final int BTN_NEW_PROFILE = 12;
@@ -155,6 +156,8 @@ public final class Game implements Player.Listener {
     public final List<UiButton> menuButtons = new ArrayList<>();
     /** Career screen: one row per profile, then NEW / DELETE / BACK. */
     public final List<UiButton> careerButtons = new ArrayList<>();
+    /** Buttons of the how-to-play overlay (just Back). */
+    public final List<UiButton> helpButtons = new ArrayList<>();
     /** Store screen: one row per upgrade, then BACK. */
     public final List<UiButton> storeButtons = new ArrayList<>();
 
@@ -374,6 +377,7 @@ public final class Game implements Player.Listener {
         layoutSettings();
         layoutCareerButtons();
         layoutStoreButtons();
+        layoutHelp();
     }
 
     private void layoutPauseButtons() {
@@ -406,6 +410,7 @@ public final class Game implements Player.Listener {
         menuButtons.add(new UiButton("CAREER", BTN_CAREER));
         menuButtons.add(new UiButton("STORE", BTN_STORE));
         menuButtons.add(new UiButton("SETTINGS", BTN_SETTINGS));
+        menuButtons.add(new UiButton("HOW TO PLAY", BTN_HELP));
         menuButtons.add(new UiButton("SOUND:  " + (save.sound ? "ON" : "OFF"), BTN_SOUND));
         menuButtons.add(new UiButton(resetArmed ? "TAP AGAIN TO CONFIRM" : "RESET SAVE", BTN_RESET));
         layoutMenuButtons();
@@ -462,8 +467,15 @@ public final class Game implements Player.Listener {
         }
 
         float smallH = Math.max(30f, bh * 0.46f);
-        float smallW = bw * 0.48f;
-        float totalW = smallW * 2f + gap;
+        int smallCount = 0;
+        for (UiButton b : menuButtons) {
+            if (isMenuSmall(b.id)) {
+                smallCount++;
+            }
+        }
+        smallCount = Math.max(1, smallCount);
+        float smallW = (bw - gap * (smallCount - 1)) / smallCount;
+        float totalW = smallW * smallCount + gap * (smallCount - 1);
         float sx = (screenWidth - totalW) / 2f;
         float sy = screenHeight * 0.94f - smallH;
         int smallIndex = 0;
@@ -488,7 +500,7 @@ public final class Game implements Player.Listener {
     }
 
     private static boolean isMenuSmall(int id) {
-        return id == BTN_SOUND || id == BTN_RESET;
+        return id == BTN_SOUND || id == BTN_RESET || id == BTN_HELP;
     }
 
     // ---- career / store layout ----------------------------------------
@@ -690,6 +702,69 @@ public final class Game implements Player.Listener {
         float scale = moveScalePct / 100f;
         controls = Controls.compute(screenWidth, screenHeight, scale);
         input.setScreen(screenWidth, screenHeight, scale);
+    }
+
+    // ---- how-to-play overlay -------------------------------------------
+
+    /** Panel width for the tutorial overlay. */
+    public float helpPanelW() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenWidth * 0.92f, 1040f * scale);
+    }
+
+    /** Panel height for the tutorial overlay. */
+    public float helpPanelH() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenHeight * 0.94f, 720f * scale);
+    }
+
+    /** Opens the in-game tutorial ("HOW TO PLAY" on the home screen). */
+    public void openHelp() {
+        helpButtons.clear();
+        helpButtons.add(new UiButton("BACK", BTN_BACK));
+        layoutHelp();
+        setState(State.HELP);
+        sound.play(SoundSink.SELECT);
+    }
+
+    /** Closes the tutorial and returns to the home screen. */
+    public void closeHelp() {
+        rebuildMenuButtons();
+        setState(State.MENU);
+        sound.play(SoundSink.SELECT);
+    }
+
+    /** Places the tutorial's back button inside its panel. */
+    public void layoutHelp() {
+        if (helpButtons.isEmpty() || screenWidth <= 0f || screenHeight <= 0f) {
+            return;
+        }
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        float pw = helpPanelW();
+        float ph = helpPanelH();
+        float left = (screenWidth - pw) / 2f;
+        float top = (screenHeight - ph) / 2f;
+        UiButton back = helpButtons.get(0);
+        back.w = Math.min(pw * 0.42f, 420f * scale);
+        back.h = Math.max(30f, 46f * scale);
+        back.x = left + (pw - back.w) / 2f;
+        back.y = top + ph - back.h - Math.max(8f, 16f * scale);
+    }
+
+    private void updateHelp() {
+        if (input.consumeBack()) {
+            closeHelp();
+            return;
+        }
+        if (!input.consumeTap(tap)) {
+            return;
+        }
+        for (UiButton b : helpButtons) {
+            if (b.contains(tap[0], tap[1])) {
+                closeHelp();
+                return;
+            }
+        }
     }
 
     // ---- settings overlay ----------------------------------------------
@@ -1067,6 +1142,9 @@ public final class Game implements Player.Listener {
             case STORE:
                 updateStore();
                 break;
+            case HELP:
+                updateHelp();
+                break;
             default:
                 break;
         }
@@ -1107,6 +1185,9 @@ public final class Game implements Player.Listener {
                         break;
                     case BTN_STORE:
                         openStore();
+                        break;
+                    case BTN_HELP:
+                        openHelp();
                         break;
                     case BTN_RESET:
                         resetSaveTap();

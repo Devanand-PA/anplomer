@@ -60,7 +60,75 @@ public class Paint {
     public void setFlags(int f) { flags = f; }
     public int getFlags() { return flags; }
 
-    public float measureText(String s) { return s == null ? 0f : s.length() * textSize * 0.5f; }
+    /**
+     * Advance width in the same units the rasteriser draws with (the JVM's
+     * default sans is Helvetica-metric), so a dump shows exactly the layout the
+     * renderer computed. The old {@code length * size * 0.5f} under-measured
+     * wide strings, which is why a dump could show a label spilling out of a
+     * button that was sized from {@code measureText}.
+     */
+    public float measureText(String s) {
+        if (s == null || s.isEmpty()) {
+            return 0f;
+        }
+        int perMille = 0;
+        for (int i = 0; i < s.length(); i++) {
+            perMille += glyphPerMille(s.charAt(i));
+        }
+        return perMille * textSize / 1000f;
+    }
+
+    /** Helvetica advance widths (units per 1000 em) for the printable range. */
+    private static int glyphPerMille(char c) {
+        if (c >= '0' && c <= '9') {
+            return 556;
+        }
+        if (c >= 'a' && c <= 'z') {
+            switch (c) {
+                case 'i': case 'j': case 'l': return 222;
+                case 'f': case 't': return 278;
+                case 'r': return 333;
+                case 'm': return 833;
+                case 'c': case 'k': case 's': case 'v': case 'x': case 'y': case 'z':
+                    return 500;
+                case 'w': return 722;
+                default: return 556;
+            }
+        }
+        if (c >= 'A' && c <= 'Z') {
+            switch (c) {
+                case 'I': return 278;
+                case 'J': return 500;
+                case 'L': return 556;
+                case 'F': case 'P': case 'S': case 'T': case 'Z': return 611;
+                case 'M': case 'W': return c == 'M' ? 833 : 944;
+                case 'A': case 'B': case 'E': case 'K': case 'V': case 'X': case 'Y':
+                    return 667;
+                case 'C': case 'D': case 'H': case 'N': case 'R': case 'U': return 722;
+                case 'G': case 'O': case 'Q': return 778;
+                default: return 667;
+            }
+        }
+        switch (c) {
+            case ' ': return 278;
+            case '\'': return 191;
+            case '"': return 355;
+            case ',': case '.': case ':': case ';': case '!': case '|': return 278;
+            case '/': case '\\': return 278;
+            case '(': case ')': case '[': case ']': case '-': case '`': return 333;
+            case '{': case '}': return 334;
+            case '+': case '<': case '=': case '>': case '~': return 584;
+            case '#': case '$': case '_': return 556;
+            case '%': return 889;
+            case '&': return 667;
+            case '*': return 389;
+            case '@': return 1015;
+            case '^': return 469;
+            case '\u2022': case '\u00b7': return 350;   // bullet / middot used in hints
+            case '\u2192': case '\u2190': return 1000;   // arrows in the key hints
+            default: return 556;
+        }
+    }
     public float getTextWidth(String s) { return measureText(s); }
     public float getTextHeight() { return textSize; }
     public void getTextBounds(String s, int start, int end, RectF out) {

@@ -89,6 +89,4 @@ public final class Constants {
     public static final float UPGRADE_MAGNET_STEP = 90f;
     public static final float UPGRADE_POWER_STEP = 0.15f;
 
-    // ---- flow ---------------------------------------------------------
-    public static final float LEVEL_FAIL_SECONDS = 150f;
 }

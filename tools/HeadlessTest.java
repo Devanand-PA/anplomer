@@ -74,6 +74,9 @@ public final class HeadlessTest {
             if (!walletFlow()) {
                 failures = true;
             }
+            if (!helpFlow()) {
+                failures = true;
+            }
         }
         System.out.println(failures ? "HEADLESS TEST FAILED" : "HEADLESS TEST PASSED");
         System.exit(failures ? 1 : 0);
@@ -286,6 +289,46 @@ public final class HeadlessTest {
         for (int i = 0; i < frames; i++) {
             g.update(DT);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // the in-game tutorial
+    // ------------------------------------------------------------------
+
+    private static boolean helpFlow() {
+        Game g = new Game(new Silent());
+        g.resize(1280, 720);
+        Game.UiButton help = findButton(g.menuButtons, Game.BTN_HELP);
+        if (help == null) {
+            return fail("help", "the menu has no HOW TO PLAY button");
+        }
+        tapButton(g, help);
+        if (g.state != Game.State.HELP) {
+            return fail("help", "tapping HOW TO PLAY gave " + g.state);
+        }
+        if (g.helpButtons.isEmpty()) {
+            return fail("help", "the tutorial laid out no back button");
+        }
+        if (g.helpButtons.get(0).w <= 0f || g.helpButtons.get(0).h <= 0f) {
+            return fail("help", "the tutorial back button has no rect");
+        }
+        // the back button closes it, and the menu is rebuilt for the way back
+        tapButton(g, g.helpButtons.get(0));
+        if (g.state != Game.State.MENU) {
+            return fail("help", "BACK left the tutorial in " + g.state);
+        }
+        if (findButton(g.menuButtons, Game.BTN_START) == null) {
+            return fail("help", "menu buttons were not rebuilt after the tutorial");
+        }
+        // and so does the system back key
+        tapButton(g, findButton(g.menuButtons, Game.BTN_HELP));
+        g.input.key(InputController.KEY_BACK, true);
+        g.update(DT);
+        if (g.state != Game.State.MENU) {
+            return fail("help", "back key did not close the tutorial (" + g.state + ")");
+        }
+        System.out.println("help OK: HOW TO PLAY opens from the menu; BACK and the back key both return");
+        return true;
     }
 
     // ------------------------------------------------------------------

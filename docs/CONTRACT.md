@@ -119,7 +119,7 @@ existing install keeps its progress.
 ## 4. Game API used by the renderer
 
 ```java
-public enum State { MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE }
+public enum State { MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE, HELP }
 
 // alive state
 public Profile profile;                 // active profile, never null
@@ -144,7 +144,20 @@ public final int careerRowCount();       // rows among careerButtons
 public final List<UiButton> storeButtons;
 public float storeMsgTimer;             // >0 while the feedback line shows
 public String storeMsg;                 // "PURCHASED", "NOT ENOUGH COINS", "MAX LEVEL"
+
+// how-to-play overlay: BTN_HELP (14) opens it, Back closes it.
+public final List<UiButton> helpButtons; // just Back
+public float helpPanelW();               // panel size for the tutorial overlay
+public float helpPanelH();
+public void openHelp();                  // menu -> HELP
+public void layoutHelp();                // places the Back button inside the panel
 ```
+
+Text rule: every label drawn inside a rect is sized with
+`Renderer.fitSize(text, maxWidth, desiredSize)`, i.e. measured with
+`Paint.measureText` and shrunk until it fits the rect's inner width. Boxes come
+from `Game`, which cannot know font metrics, so this is the only thing that
+keeps labels inside their borders across screen sizes and fonts.
 
 Layouts are computed in `Game` so drawing and hit-testing can never disagree
 (the same rule the pause/settings screens follow).

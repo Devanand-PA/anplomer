@@ -55,6 +55,10 @@ The title screen is a real menu, not a "tap to play" poster:
 * **STORE** — spend the active career's coins on six permanent upgrades:
   speed, jump, extra lives, magnet radius, power-up duration and a starting
   shield. Prices rise with each level bought; maxed rows read `MAX`.
+* **HOW TO PLAY** — a one-screen tutorial overlay that names every component
+  (controls, coins, enemies, hazards, checkpoints, the goal, careers, store and
+  the five power-ups, with their icons). Reachable from the menu, closes with
+  **BACK** or the system back key.
 * **SOUND: ON / OFF** and a small **RESET SAVE** with a two-tap confirm.
 
 Progress auto-saves through a `SaveStore` interface (`Game` passes plain data;
@@ -63,6 +67,21 @@ every time a level is entered, so **losing all lives restarts the last saved
 level**, not level 1. Mode and sound choice persist too. `SaveState` encodes a
 versioned, malformed-input-tolerant pipe string, and the headless suite covers
 the whole flow (autosave, continue, retry-at-saved-level, mode gating).
+
+## Tutorial
+
+Two tutorials ship with the build:
+
+* **In game** — the `HOW TO PLAY` button on the home screen opens a single
+  overlay (`Game.State.HELP`) with a two-column component list and the five
+  power-up icons. Every label is measured and shrunk to its panel, so it reads
+  the same on a phone in landscape and on a 2400×1080 display.
+* **On paper** — [`docs/TUTORIAL.md`](docs/TUTORIAL.md) is the full guide:
+  playing the game (controls, HUD anatomy, coins and scoring, hazards, enemies,
+  power-ups, modes, careers, store prices, level table, saving), then how each
+  source component works (`Game`, `Level`, `Player`, `Renderer`, `SaveState`,
+  the level generator, the test harnesses) and recipes for adding levels,
+  power-ups, upgrades and palettes.
 
 ## Gameplay
 
@@ -299,8 +318,14 @@ DUMP_SHOTS=$PWD/shots/new JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./tools/run_hea
 - `menu.png` — home screen with the active-career badge and the three button groups
 - `career.png` — career list with an active row, wallet and level per career
 - `store.png` — store rows with effect, pips, price and the wallet header
+- `help.png` — the "HOW TO PLAY" tutorial overlay with the power-up legend
 - `level4-caverns.png`, `level8-summit.png` — the new palettes plus the power-up
   chips, shield pip and wallet chip in the HUD
+- `menu-1080x480.png`, `career-1080x480.png`, `store-1080x480.png`,
+  `playing-1080x480.png`, `cleared-1080x480.png`, `win-1080x480.png`,
+  `help-1080x480.png`, `menu-480x320.png`, `help-480x320.png` — the same screens
+  at phone-landscape and small sizes, where labels used to spill out of their
+  boxes
 
 These come from the `java.awt` rasteriser in `tools/RendererSmoke.java`, whose
 font metrics differ from Android's, so treat them as *geometry* evidence (layout,
