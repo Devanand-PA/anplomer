@@ -142,6 +142,16 @@ public final int careerRowCount();       // rows among careerButtons
 
 // store screen: one button per upgrade id, plus BACK.
 public final List<UiButton> storeButtons;
+// movement pad (Controls) + the analogue input the simulation reads
+public float padCX, padCY, padR, padKnobR, padHitR;
+public boolean inPad(float x, float y);
+// InputController
+public float moveAxis;                  // -1..1: pad deflection, or a key at full tilt
+public float padX, padY;                // knob deflection for the renderer
+public boolean padActive, jumpCut, jumpHeld;
+public static final float PAD_DEAD = 0.20f, PAD_JUMP_ON = -0.42f,
+        PAD_JUMP_OFF = -0.28f, PAD_CUT = 0.30f;
+
 public float storeMsgTimer;             // >0 while the feedback line shows
 public String storeMsg;                 // "PURCHASED", "NOT ENOUGH COINS", "MAX LEVEL"
 

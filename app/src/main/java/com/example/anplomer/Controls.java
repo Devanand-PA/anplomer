@@ -8,9 +8,9 @@ package com.example.anplomer;
 public final class Controls {
 
     public float w, h;
-    public float btnR;          // base d-pad radius
-    public float leftX, leftY;
-    public float rightX, rightY;
+    public float btnR;          // base control radius
+    /** Movement circle-pad centre, outer ring radius and knob radius. */
+    public float padCX, padCY, padR, padKnobR;
     public float jumpX, jumpY, jumpR;
     public float pauseX, pauseY, pauseR;
     public float muteX, muteY, muteR;
@@ -20,7 +20,7 @@ public final class Controls {
      * drawing the discs, so a tap can never land on an invisible target (or
      * miss a visible one).
      */
-    public float leftHitR, rightHitR, jumpHitR, pauseHitR, muteHitR;
+    public float padHitR, jumpHitR, pauseHitR, muteHitR;
 
     public static Controls compute(float screenWidth, float screenHeight) {
         return compute(screenWidth, screenHeight, 1f);
@@ -40,10 +40,12 @@ public final class Controls {
         c.btnR = rawR * moveScale;
         float m = rawR * 0.55f;
 
-        c.leftY = screenHeight - m - c.btnR;
-        c.leftX = m + c.btnR;
-        c.rightX = c.leftX + c.btnR * 2.55f;
-        c.rightY = c.leftY;
+        // The movement control is one analogue pad: the thumb drags the knob
+        // and the deflection (not a button press) is what the simulation reads.
+        c.padR = c.btnR * 1.62f;
+        c.padKnobR = c.btnR * 0.60f;
+        c.padCX = m + c.padR;
+        c.padCY = screenHeight - m - c.padR;
 
         c.jumpR = c.btnR * 1.3f;
         c.jumpX = screenWidth - m - c.jumpR;
@@ -54,8 +56,10 @@ public final class Controls {
         c.pauseY = m + c.pauseR;
 
         c.muteR = c.btnR * 0.56f;
-        c.leftHitR = c.btnR * 1.15f;
-        c.rightHitR = c.leftHitR;
+        // A finger does not have to land dead centre: the pad accepts a tap
+        // anywhere inside its ring, and keeps the drag afterwards even when it
+        // wanders outside (the vector is clamped, not dropped).
+        c.padHitR = c.padR * 1.14f;
         c.jumpHitR = c.jumpR * 1.10f;
         c.pauseHitR = c.pauseR * 1.30f;
         c.muteHitR = c.muteR * 1.40f;
@@ -72,12 +76,9 @@ public final class Controls {
         return dx * dx + dy * dy <= r * r;
     }
 
-    public boolean inLeft(float px, float py) {
-        return inCircle(leftX, leftY, leftHitR, px, py);
-    }
-
-    public boolean inRight(float px, float py) {
-        return inCircle(rightX, rightY, rightHitR, px, py);
+    /** True when {@code (px,py)} is inside the movement pad's ring. */
+    public boolean inPad(float px, float py) {
+        return inCircle(padCX, padCY, padHitR, px, py);
     }
 
     public boolean inJump(float px, float py) {

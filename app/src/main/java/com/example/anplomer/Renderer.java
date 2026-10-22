@@ -1823,37 +1823,55 @@ public final class Renderer {
         Controls ctl = g.controls;
         boolean paused = g.state == Game.State.PAUSED;
 
-        // Draw with the touch radii, never with a different size.
-        float ar = ctl.leftHitR;
+        // Everything is drawn at the hit radius, so a finger can never land on
+        // an invisible target (or miss a visible one).
+        float pr = ctl.padHitR;
         float jr = ctl.jumpHitR;
+        float padX = g.input.padX;
+        float padY = g.input.padY;
+        boolean padOn = g.input.padActive;
 
+        // ---- movement pad: outer ring, inner well, knob --------------------
         fill.setColor(paused ? 0x22000000 : 0x44000000);
-        c.drawCircle(ctl.leftX, ctl.leftY, ar, fill);
-        c.drawCircle(ctl.rightX, ctl.rightY, ctl.rightHitR, fill);
-        c.drawCircle(ctl.jumpX, ctl.jumpY, jr, fill);
-
+        c.drawCircle(ctl.padCX, ctl.padCY, pr, fill);
         stroke.setColor(paused ? 0x33FFFFFF : 0x88FFFFFF);
         stroke.setStrokeWidth(3f);
-        c.drawCircle(ctl.leftX, ctl.leftY, ar, stroke);
-        c.drawCircle(ctl.rightX, ctl.rightY, ctl.rightHitR, stroke);
-        c.drawCircle(ctl.jumpX, ctl.jumpY, jr, stroke);
+        c.drawCircle(ctl.padCX, ctl.padCY, pr, stroke);
+        fill.setColor(paused ? 0x14000000 : 0x22000000);
+        c.drawCircle(ctl.padCX, ctl.padCY, ctl.padR * 0.74f, fill);
+        stroke.setColor(paused ? 0x22FFFFFF : 0x44FFFFFF);
+        stroke.setStrokeWidth(2f);
+        c.drawCircle(ctl.padCX, ctl.padCY, ctl.padR * 0.74f, stroke);
 
-        int hi = 0xFFFFFFFF;
-        fill.setColor(hi);
-        // arrows
-        path.reset();
-        path.moveTo(ctl.leftX + ar * 0.30f, ctl.leftY - ar * 0.42f);
-        path.lineTo(ctl.leftX - ar * 0.34f, ctl.leftY);
-        path.lineTo(ctl.leftX + ar * 0.30f, ctl.leftY + ar * 0.42f);
-        path.close();
-        c.drawPath(path, fill);
-        path.reset();
-        path.moveTo(ctl.rightX - ctl.rightHitR * 0.30f, ctl.rightY - ctl.rightHitR * 0.42f);
-        path.lineTo(ctl.rightX + ctl.rightHitR * 0.34f, ctl.rightY);
-        path.lineTo(ctl.rightX - ctl.rightHitR * 0.30f, ctl.rightY + ctl.rightHitR * 0.42f);
-        path.close();
-        c.drawPath(path, fill);
-        // jump arrow
+        // Direction hints: up doubles as the jump hint, down as the jump-cut
+        // hint. They brighten as the thumb approaches them, so the pad teaches
+        // its own gestures without a tutorial card.
+        float chev = ctl.padR * 0.20f;
+        drawPadChevron(c, ctl.padCX, ctl.padCY - ctl.padR * 0.60f, chev, 0f,
+                padOn && padY < -0.18f ? 0.95f : 0.34f);
+        drawPadChevron(c, ctl.padCX, ctl.padCY + ctl.padR * 0.60f, chev, 180f,
+                padOn && padY > 0.18f ? 0.95f : 0.28f);
+        drawPadChevron(c, ctl.padCX - ctl.padR * 0.62f, ctl.padCY, chev, 270f,
+                padOn && padX < -0.18f ? 0.95f : 0.34f);
+        drawPadChevron(c, ctl.padCX + ctl.padR * 0.62f, ctl.padCY, chev, 90f,
+                padOn && padX > 0.18f ? 0.95f : 0.34f);
+
+        // the knob follows the thumb, as a fraction of the ring
+        float kx = ctl.padCX + padX * ctl.padR * 0.74f;
+        float ky = ctl.padCY + padY * ctl.padR * 0.74f;
+        fill.setColor(padOn ? 0xBBFFFFFF : 0x55FFFFFF);
+        c.drawCircle(kx, ky, ctl.padKnobR, fill);
+        stroke.setColor(padOn ? 0xFFFFFFFF : 0x99FFFFFF);
+        stroke.setStrokeWidth(2.5f);
+        c.drawCircle(kx, ky, ctl.padKnobR, stroke);
+
+        // ---- jump button (still there for the right thumb) -----------------
+        fill.setColor(paused ? 0x22000000 : 0x44000000);
+        c.drawCircle(ctl.jumpX, ctl.jumpY, jr, fill);
+        stroke.setColor(paused ? 0x33FFFFFF : 0x88FFFFFF);
+        stroke.setStrokeWidth(3f);
+        c.drawCircle(ctl.jumpX, ctl.jumpY, jr, stroke);
+        fill.setColor(0xFFFFFFFF);
         path.reset();
         path.moveTo(ctl.jumpX, ctl.jumpY - jr * 0.46f);
         path.lineTo(ctl.jumpX + jr * 0.40f, ctl.jumpY + jr * 0.04f);
@@ -1864,16 +1882,36 @@ public final class Renderer {
         path.lineTo(ctl.jumpX - jr * 0.40f, ctl.jumpY + jr * 0.04f);
         path.close();
         c.drawPath(path, fill);
-
-        if (g.input.left || g.input.right) {
-            fill.setColor(0x33FFFFFF);
-            c.drawCircle(g.input.left ? ctl.leftX : ctl.rightX,
-                    g.input.left ? ctl.leftY : ctl.rightY, ar * 0.82f, fill);
-        }
-        if (g.input.jumpHeld) {
+        if (g.input.jumpHeld || g.input.jumpCut) {
             fill.setColor(0x33FFFFFF);
             c.drawCircle(ctl.jumpX, ctl.jumpY, jr * 0.82f, fill);
         }
+    }
+
+    /** One triangular direction hint around the pad, {@code deg} clockwise from up. */
+    private void drawPadChevron(Canvas c, float cx, float cy, float size, float deg, float alpha) {
+        int a = (int) (255 * Math.max(0f, Math.min(1f, alpha)));
+        fill.setColor(Color.argb(a, 255, 255, 255));
+        path.reset();
+        // a chevron pointing in +deg (0 = up, 90 = right, 180 = down, 270 = left)
+        float rad = (float) Math.toRadians(deg);
+        float cos = (float) Math.cos(rad);
+        float sin = (float) Math.sin(rad);
+        float[][] pts = {{0f, -1.1f}, {0.95f, 0.15f}, {0.45f, 0.15f}, {0f, -0.35f},
+                {-0.45f, 0.15f}, {-0.95f, 0.15f}};
+        for (int i = 0; i < pts.length; i++) {
+            float px = pts[i][0] * size;
+            float py = pts[i][1] * size;
+            float rx = px * cos - py * sin;
+            float ry = px * sin + py * cos;
+            if (i == 0) {
+                path.moveTo(cx + rx, cy + ry);
+            } else {
+                path.lineTo(cx + rx, cy + ry);
+            }
+        }
+        path.close();
+        c.drawPath(path, fill);
     }
 
     // ------------------------------------------------------------------
@@ -2609,8 +2647,9 @@ public final class Renderer {
 
     /** Rows of the in-game tutorial: label + one-line explanation. */
     private static final String[][] HELP_ROWS = {
-            {"MOVE", "arrows  /  A  D"},
-            {"JUMP", "jump button  /  W  /  space"},
+            {"MOVE", "drag the left pad  /  A  D"},
+            {"JUMP", "drag the pad up  /  jump button"},
+            {"SHORT HOP", "drag the pad down mid-jump"},
             {"PAUSE", "pause button  /  P"},
             {"COINS", "+100 score, +1 career coin"},
             {"ENEMIES", "stomp them from above"},
@@ -2621,6 +2660,7 @@ public final class Renderer {
             {"STORE", "spend career coins on upgrades"},
             {"COLLECTOR", "60% of the coins opens the goal"},
             {"AUTO-SAVE", "progress saves as you reach it"},
+            {"KEYBOARD", "W A S D, space, P, M"},
     };
 
     /** Power-up legend shown at the bottom of the tutorial. */

@@ -143,16 +143,24 @@ play time).
 
 | Widget | Action |
 | --- | --- |
-| bottom-left ◀ ▶ | run left / right |
-| bottom-right ● | jump (hold higher, tap shorter) |
-| top-right ⏸ | pause / resume (also Android *Back*) |
+| bottom-left **circle-pad** | drag to run: the deflection is analogue, so a half tilt walks and a full tilt sprints |
+| drag the pad **up / up-left / up-right** | jump while steering that way (hold up for the full arc) |
+| drag the pad **down** mid-jump | cut the rise for a short hop |
+| bottom-right **●** | jump button (same held/short-hop behaviour, for the right thumb) |
+| top-right **⏸** | pause / resume (also Android *Back*) |
 | top-right 🔊 | mute / unmute |
+
+The pad keeps ownership of the finger that lands inside its ring, so a drag
+that wanders past the edge still steers; the knob springs back to the centre
+when you lift off. The direction chevrons on the ring brighten as your thumb
+approaches them, so the gestures are discoverable without reading anything.
 
 The pause and mute discs are hit-tested at exactly the radius they are drawn
 with, and a tap on them raises the same edge as their keyboard keys.
 
 Keyboard is supported too: arrows/WASD, `Space`/`W`/`Up` to jump, `P`/`Esc` pause,
-`M` mute, `R` restart level.
+`M` mute, `R` restart level. Keyboard and touch feed the same analogue axis, so
+the two never fight: a key counts as full tilt.
 
 ## Performance
 
@@ -326,6 +334,10 @@ DUMP_SHOTS=$PWD/shots/new JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./tools/run_hea
   `help-1080x480.png`, `menu-480x320.png`, `help-480x320.png` — the same screens
   at phone-landscape and small sizes, where labels used to spill out of their
   boxes
+- `device-*.png` — frames captured on a real phone (1604×720) with the game
+  rendering itself: the gameplay HUD with the circle-pad, a jump driven by an
+  up-right pad drag, a short hop from dragging the pad down mid-jump, and the
+  tutorial overlay
 
 These come from the `java.awt` rasteriser in `tools/RendererSmoke.java`, whose
 font metrics differ from Android's, so treat them as *geometry* evidence (layout,

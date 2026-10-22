@@ -28,17 +28,25 @@ table in §1.11); every second you finish under par is worth bonus points.
 
 | Action | Touch | Keyboard |
 | --- | --- | --- |
-| Run left / right | on-screen arrows (bottom of the screen) | `←` / `→` or `A` / `D` |
-| Jump | on-screen jump button | `↑`, `W` or `Space` |
+| Run left / right | drag the circle-pad at the bottom left (analogue: half tilt walks, full tilt sprints) | `←` / `→` or `A` / `D` |
+| Jump | drag the pad up, up-left or up-right — the jump fires as the drag crosses the up threshold and steers in the same gesture | `↑`, `W` or `Space` |
+| Short hop | drag the pad down while rising | release the key early |
+| Jump (button) | the round button at the bottom right also jumps | — |
 | Pause | pause button, top-right | `P` or `Esc` |
 | Restart the level | pause menu | `R` |
 | Mute / unmute | speaker button, top-right | `M` |
 | Confirm / continue | tap the screen | `Enter` or `Space` |
 
-Jump height is variable: release the button early for a shorter hop. The game
-also forgives small timing mistakes — there is a short **coyote time** after you
-step off a ledge and a short **jump buffer** if you press jump just before
-landing.
+Jump height is variable: release early, or pull the pad down, for a shorter hop.
+The game also forgives small timing mistakes — there is a short **coyote time**
+after you step off a ledge and a short **jump buffer** if you press jump just
+before landing.
+
+The pad is a real analogue stick, not four buttons: it owns the finger that
+lands inside its ring (even if the drag leaves the ring), it has a small dead
+zone so a resting thumb does not drift, and the up/down gestures use hysteresis
+so wobbling on a threshold cannot stutter a jump. The chevrons light up as the
+knob approaches them.
 
 The size of the on-screen arrows and jump button is adjustable in
 `SETTINGS → MOVE BUTTON SIZE`.
@@ -325,6 +333,9 @@ The renderer is stateless apart from caches; it reads `Game` and paints.
   never per frame. Trig is a 2048-entry table, hashes a 16384-entry table.
 * **No allocation in the hot path** — one `Paint`/`Path` set reused, no
   `String.format`, no float boxing, no temporaries inside the per-item loops.
+* **The pad** is drawn from the same numbers that hit-test it: ring, inner
+  well, knob at the current deflection and four chevrons that brighten as the
+  thumb gets close.
 * **Text fitting** — every label drawn inside a box (buttons, rows, chips,
   panels, overlays) goes through `fitSize()`, which measures the string with the
   real `Paint.measureText` and shrinks the type until it fits the rect's inner
@@ -357,8 +368,8 @@ accent colours; the career/store screens reuse the same palette under a scrim.
 | `PowerUp` | the pickup in the world: type, position, generous overlap radius |
 | `Coin` | a coin's position and spin phase |
 | `Particles` | sparkles, dust, coin bursts, confetti — fixed 520-slot parallel arrays, zero allocation |
-| `InputController` | turns key and multi-touch events into edge-triggered intents (`consumeJump`, `consumePause`, …); synchronized because UI and render threads both touch it |
-| `Controls` | geometry of the on-screen arrows, jump, pause and mute, recomputed on resize so drawing and hit-testing agree |
+| `InputController` | turns key and multi-touch events into edge-triggered intents (`consumeJump`, `consumePause`, …) plus the analogue `moveAxis` and the pad's `padX/padY/padActive/jumpCut`; the pad pointer is captured on touch-down and released on lift; synchronized because UI and render threads both touch it |
+| `Controls` | geometry of the circle-pad, jump, pause and mute, recomputed on resize so drawing and hit-testing agree (the pad is drawn at exactly its hit radius) |
 | `SoundSink` / `SoundManager` | intent interface (`JUMP`, `COIN`, `POWERUP`, `PURCHASE`, …) plus the Android `SoundPool` implementation; the simulation only knows the interface |
 | `SaveStore` | persistence interface, so the pure-Java game never imports `SharedPreferences`; tests inject memory or file stores |
 | `FrameDumper` | debug-only: writes finished frames to app storage so on-device pixels can be inspected without `adb screencap` (which freezes this app's loop) |

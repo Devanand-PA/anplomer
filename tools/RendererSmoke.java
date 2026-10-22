@@ -401,6 +401,9 @@ public final class RendererSmoke {
                 Game.State.HELP, Game::openHelp, false);
         dumpShot(new java.io.File(dir, "playing-1080x480.png"), 1080, 480, 4, 40f * 64f,
                 Game.State.PLAYING, g -> {
+                    g.input.pointerDown(9, g.controls.padCX, g.controls.padCY);
+                    g.input.pointerMove(9, g.controls.padCX - g.controls.padR * 0.66f,
+                            g.controls.padCY - g.controls.padR * 0.50f);
                     g.speedBoostTimer = 8.4f;
                     g.magnetTimer = 3.1f;
                     g.doubleJumpTimer = 11.2f;
@@ -500,6 +503,22 @@ public final class RendererSmoke {
         check(!hg.storeButtons.isEmpty(), "store screen laid out no rows");
         drawFrame(r, hg, 2400, 1080);
         drawFrame(r, hg, 1080, 480);
+        // movement pad: draw it idle and deflected at three sizes
+        hg.state = Game.State.PLAYING;
+        for (int[] sz : new int[][]{{2400, 1080}, {1080, 480}, {480, 320}, {1, 1}}) {
+            hg.resize(sz[0], sz[1]);
+            Controls pc = hg.controls;
+            hg.input.pointerDown(9, pc.padCX, pc.padCY);
+            hg.input.pointerMove(9, pc.padCX + pc.padR * 0.62f, pc.padCY - pc.padR * 0.55f);
+            check(hg.input.padActive, "pad did not take the pointer at " + sz[0] + "x" + sz[1]);
+            check(Math.abs(hg.input.padX) > 0.3f && hg.input.padY < -0.3f,
+                    "pad deflection not read at " + sz[0] + "x" + sz[1]);
+            drawFrame(r, hg, sz[0], sz[1]);
+            hg.input.pointerUp(9);
+        }
+        hg.input.pointerUp(9);
+        hg.resize(2400, 1080);
+
         hg.openHelp();
         check(!hg.helpButtons.isEmpty(), "tutorial laid out no back button");
         drawFrame(r, hg, 2400, 1080);

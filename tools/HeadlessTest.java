@@ -77,6 +77,9 @@ public final class HeadlessTest {
             if (!helpFlow()) {
                 failures = true;
             }
+            if (!padFlow()) {
+                failures = true;
+            }
         }
         System.out.println(failures ? "HEADLESS TEST FAILED" : "HEADLESS TEST PASSED");
         System.exit(failures ? 1 : 0);
@@ -289,6 +292,147 @@ public final class HeadlessTest {
         for (int i = 0; i < frames; i++) {
             g.update(DT);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // analogue movement pad
+    // ------------------------------------------------------------------
+
+    /** Drags the pad knob by (fx, fy) of its radius from its centre. */
+    private static void dragPad(Game g, int id, float fx, float fy) {
+        Controls c = g.controls;
+        g.input.pointerMove(id, c.padCX + fx * c.padR, c.padCY + fy * c.padR);
+    }
+
+    private static boolean padFlow() {
+        Game g = new Game(new Silent());
+        g.resize(1280, 720);
+        g.state = Game.State.PLAYING;
+        Controls c = g.controls;
+        if (c.padR <= 0f || c.padCX - c.padHitR < 0f || c.padCY + c.padHitR > g.input.screenH()) {
+            return fail("pad", "the pad does not fit on screen");
+        }
+        if (c.inJump(c.padCX, c.padCY)) {
+            return fail("pad", "pad centre overlaps the jump button");
+        }
+        tick(g, 40);
+        float groundY = g.player.y;
+
+        // ---- full tilt runs at full speed ------------------------------
+        float x0 = g.player.x;
+        g.input.pointerDown(1, c.padCX, c.padCY);
+        dragPad(g, 1, 0.95f, 0f);
+        tick(g, 40);
+        float fullVx = Math.abs(g.player.vx);
+        if (g.player.x <= x0 + 30f) {
+            return fail("pad", "dragging right did not move the player");
+        }
+        if (fullVx < Constants.RUN_SPEED * 0.92f) {
+            return fail("pad", "full tilt should reach run speed, got " + fullVx);
+        }
+
+        // ---- half tilt is a walk, not a sprint -------------------------
+        dragPad(g, 1, 0.45f, 0f);
+        tick(g, 50);
+        float halfVx = Math.abs(g.player.vx);
+        if (halfVx >= fullVx * 0.85f) {
+            return fail("pad", "half tilt should walk slower (" + halfVx + " vs " + fullVx + ")");
+        }
+
+        // ---- up-right: jump while moving right -------------------------
+        g.input.pointerUp(1);
+        tick(g, 20);
+        if (!g.player.onGround) {
+            return fail("pad", "player never settled before the jump test");
+        }
+        float beforeX = g.player.x;
+        g.input.pointerDown(2, c.padCX, c.padCY);
+        dragPad(g, 2, 0.55f, -0.85f);
+        tick(g, 10);
+        if (g.player.vy >= 0f && g.player.y >= groundY) {
+            return fail("pad", "dragging up-right did not jump");
+        }
+        if (g.player.x <= beforeX) {
+            return fail("pad", "dragging up-right did not move right");
+        }
+        float upRightRise = groundY - g.player.y;
+        if (upRightRise < 40f) {
+            return fail("pad", "up-right jump barely left the ground (" + upRightRise + ")");
+        }
+
+        // ---- up-left: jump while moving left ---------------------------
+        g.input.pointerUp(2);
+        tick(g, 90);
+        if (!g.player.onGround) {
+            return fail("pad", "player did not land between the jump tests");
+        }
+        float leftStart = g.player.x;
+        g.input.pointerDown(3, c.padCX, c.padCY);
+        dragPad(g, 3, -0.55f, -0.85f);
+        tick(g, 8);
+        if (g.player.y >= groundY) {
+            return fail("pad", "dragging up-left did not jump");
+        }
+        if (g.player.x >= leftStart) {
+            return fail("pad", "dragging up-left did not move left");
+        }
+        if (!g.input.jumpHeld) {
+            return fail("pad", "a held-up drag should keep the jump held");
+        }
+        g.input.pointerUp(3);
+        if (g.input.jumpHeld) {
+            return fail("pad", "releasing the pad should release the jump");
+        }
+        tick(g, 90);
+
+        // ---- dragging down cuts the rise -------------------------------
+        float peakFull = -1f;
+        g.input.pointerDown(4, c.padCX, c.padCY);
+        dragPad(g, 4, 0f, -0.95f);
+        for (int i = 0; i < 70; i++) {
+            g.update(DT);
+            peakFull = Math.max(peakFull, groundY - g.player.y);
+        }
+        g.input.pointerUp(4);
+        tick(g, 60);
+        if (peakFull < 120f) {
+            return fail("pad", "a held-up drag should jump high, peak was " + peakFull);
+        }
+
+        float peakCut = -1f;
+        g.input.pointerDown(5, c.padCX, c.padCY);
+        dragPad(g, 5, 0f, -0.95f);
+        tick(g, 5);
+        dragPad(g, 5, 0f, 0.85f);          // drag down mid-rise: kick the jump short
+        for (int i = 0; i < 70; i++) {
+            g.update(DT);
+            peakCut = Math.max(peakCut, groundY - g.player.y);
+        }
+        g.input.pointerUp(5);
+        if (peakCut > peakFull * 0.6f) {
+            return fail("pad", "dragging down should cut the jump short ("
+                    + peakCut + " vs " + peakFull + ")");
+        }
+
+        // ---- letting go stops the character ----------------------------
+        tick(g, 60);
+        g.input.pointerDown(6, c.padCX, c.padCY);
+        dragPad(g, 6, 0.9f, 0f);
+        tick(g, 40);
+        if (g.player.vx < 100f) {
+            return fail("pad", "pad did not accelerate the player");
+        }
+        g.input.pointerUp(6);
+        if (g.input.padActive || g.input.moveAxis != 0f) {
+            return fail("pad", "pad stayed active after the finger lifted");
+        }
+        tick(g, 40);
+        if (Math.abs(g.player.vx) > 1f) {
+            return fail("pad", "player kept running after the pad was released");
+        }
+        System.out.println("pad OK: analog walk/sprint, up = jump, up-left/up-right steer,"
+                + " down cuts the jump, release stops");
+        return true;
     }
 
     // ------------------------------------------------------------------

@@ -92,20 +92,24 @@ public final class Player {
             return 0f;
         }
 
-        // ---- horizontal input ----
-        float dir = 0f;
-        if (in.left) {
-            dir -= 1f;
-        }
-        if (in.right) {
-            dir += 1f;
+        // ---- horizontal input (analog: pad deflection, or full tilt) ----
+        float dir = in.moveAxis;
+        if (dir > 1f) {
+            dir = 1f;
+        } else if (dir < -1f) {
+            dir = -1f;
         }
         float maxSpeed = Constants.RUN_SPEED * speedMul;
-        if (dir != 0f) {
+        if (Math.abs(dir) > 0.02f) {
             float accel = onGround ? Constants.ACCEL_GROUND : Constants.ACCEL_AIR;
             vx += dir * accel * dt;
-            if (Math.signum(vx) == dir && Math.abs(vx) > maxSpeed) {
-                vx = dir * maxSpeed;
+            // A partial deflection tops out at a partial speed, so the pad
+            // gives a walk at half tilt and a sprint at full tilt.
+            float target = dir * maxSpeed;
+            if (dir > 0f && vx > target) {
+                vx = target;
+            } else if (dir < 0f && vx < target) {
+                vx = target;
             }
             facingRight = dir > 0f;
         } else {
@@ -146,15 +150,17 @@ public final class Player {
             }
         }
 
-        // variable jump height: releasing early cuts the rise
-        if (prevJumpHeld && !in.jumpHeld && vy < 0f) {
+        // variable jump height: releasing early cuts the rise, and dragging the
+        // pad down cuts it even while a jump input is still held
+        boolean jumpHeldNow = in.jumpHeld && !in.jumpCut;
+        if (prevJumpHeld && !jumpHeldNow && vy < 0f) {
             float cut = -jumpVel * Constants.JUMP_CUT;
             if (vy < cut) {
                 vy = cut;
             }
         }
-        prevJumpHeld = in.jumpHeld;
-        if (!in.jumpHeld) {
+        prevJumpHeld = jumpHeldNow;
+        if (!jumpHeldNow) {
             // holding jump buffered? nothing; edge already consumed
             in.clearJumpEdge();
         }
