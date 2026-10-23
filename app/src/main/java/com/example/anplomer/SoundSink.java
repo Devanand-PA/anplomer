@@ -19,6 +19,14 @@ public interface SoundSink {
     String HURT = "hurt";
     String POWERUP = "powerup";
     String PURCHASE = "purchase";
+    /** Sword swing whoosh. */
+    String SWING = "swing";
+    /** Weapon hit on an enemy. */
+    String HIT = "hit";
+    /** Bow shot. */
+    String ARROW = "arrow";
+    /** Boomerang throw. */
+    String THROW = "throw";
 
     void play(String name);
 

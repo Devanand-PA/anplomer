@@ -242,6 +242,8 @@ public final class Renderer {
         if (!(g.state == Game.State.MENU && g.player.dead)) {
             drawPlayer(c, g);
         }
+        drawProjectiles(c, g);
+        drawSwing(c, g);
         drawParticles(c, g);
 
         c.restore();
@@ -933,6 +935,27 @@ public final class Renderer {
         }
     }
 
+    private void drawEnemyHpBar(Canvas c, Game g, Enemy e) {
+        if (e.dead || e.maxHp <= 0 || e.hp >= e.maxHp) {
+            return;
+        }
+        float scale = Math.min(g.screenWidth,g.screenHeight) / 480f;
+        float bw = Math.min(e.w * 1.2f, 72f);
+        float bh = Constants.HP_BAR_H;
+        float bx = e.x + (e.w - bw) / 2f;
+        float by = e.y - Constants.HP_BAR_GAP;
+        float frac = Math.max(0f, Math.min(1f, e.hpFraction()));
+        fill.setColor(0xAA000000);
+        c.drawRoundRect(rect(bx, by, bx + bw, by + bh), 3f, 3f, fill);
+        if (frac > 0f) {
+            fill.setColor(0xFFE4453A);
+            c.drawRoundRect(rect(bx + 1f, by + 1f, bx + 1f + (bw - 2f) * frac, by + bh - 1f), 2f, 2f, fill);
+        }
+        stroke.setColor(0x88FFFFFF);
+        stroke.setStrokeWidth(1.2f);
+        c.drawRoundRect(rect(bx, by, bx + bw, by + bh), 3f, 3f, stroke);
+    }
+
     private void drawEnemies(Canvas c, Game g) {
         for (Enemy e : g.enemies) {
             if (e.dead && e.deadTimer <= 0f) {
@@ -946,12 +969,18 @@ public final class Renderer {
             } else {
                 drawFlyer(c, g, e);
             }
+            drawEnemyHpBar(c, g, e);
         }
     }
 
     private void drawWalker(Canvas c, Game g, Enemy e) {
         float squashY = e.dead ? 0.30f : 1f;
         float sx = e.facing;
+        if (e.hitFlash > 0f && !e.dead) {
+            fill.setColor(0xCCFFFFFF);
+            c.drawRoundRect(rect(e.x, e.y, e.x + e.w, e.y + e.h), 10f, 10f, fill);
+            return;
+        }
         c.save();
         c.translate(e.x + e.w / 2f, e.y + e.h);
         float wide = Math.min(1.7f, 0.7f / Math.max(squashY, 0.3f) + 0.3f);
@@ -1027,6 +1056,11 @@ public final class Renderer {
     }
 
     private void drawFlyer(Canvas c, Game g, Enemy e) {
+        if (e.hitFlash > 0f && !e.dead) {
+            fill.setColor(0xCCFFFFFF);
+            c.drawOval(rect(e.x, e.y, e.x + e.w, e.y + e.h), fill);
+            return;
+        }
         float flap = sinf(g.worldTime * 14f + e.animTime * 2f);
         c.save();
         c.translate(e.x + e.w / 2f, e.y + e.h / 2f);
@@ -1247,6 +1281,189 @@ public final class Renderer {
             fill.setColor(Color.argb((int) (120 * (p.landFlash - 0.5f) * 2f), 255, 255, 255));
             c.drawOval(rect(p.x - 6f, p.y - 6f, p.x + p.w + 6f, p.y + p.h + 6f), fill);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // combat art: swing arcs and projectiles
+    // ------------------------------------------------------------------
+
+    /**
+     * The active sword arc, drawn in world space. The trail sweep follows the
+     * swing's progress so each style reads as one motion, mirrored by facing.
+     */
+    private void drawSwing(Canvas c, Game g) {
+        Player p = g.player;
+        if (p.swingTimer <= 0f || p.dead) {
+            return;
+        }
+        float prog = 1f - p.swingTimer / Constants.SWORD_TIME;   // 0..1
+        float dir = p.facingRight ? 1f : -1f;
+        float cx = p.centerX();
+        float cy = p.centerY();
+
+        // Angles are screen-space (y grows down): 0 = forward, -90 = up,
+        // +90 = down, 180 = behind. Each style sweeps the arc's leading edge
+        // through the space its hitbox covers.
+        float start;
+        float sweep;
+        float arcR;
+        float ax;
+        float ay;
+        switch (p.swingStyle) {
+            case GROUND_RUN:
+                // long, low forward slash through 1:30 -> 3 -> 4:30
+                start = 315f;
+                sweep = 95f;
+                arcR = Constants.SWORD_REACH_RUN;
+                ax = cx + dir * 6f;
+                ay = p.y + p.h * 0.60f;
+                break;
+            case AIR_RISE:
+                // upward arc above the head: behind -> up -> forward
+                start = 180f;
+                sweep = 180f;
+                arcR = Constants.SWORD_REACH * 0.95f;
+                ax = cx;
+                ay = p.y - 6f;
+                break;
+            case AIR_FALL:
+                // plunge below the feet: forward -> down -> behind
+                start = 0f;
+                sweep = 180f;
+                arcR = Constants.SWORD_REACH * 0.95f;
+                ax = cx;
+                ay = p.y + p.h + 6f;
+                break;
+            default:
+                // standing chop: overhead, sweeping down in front
+                start = 270f;
+                sweep = 135f;
+                arcR = Constants.SWORD_REACH * 0.95f;
+                ax = cx + dir * 10f;
+                ay = cy + 2f;
+                break;
+        }
+        // mirror for the left-facing swing (reflects 0 <-> 180, up stays up)
+        if (dir < 0f) {
+            start = 180f - start - sweep;
+        }
+
+        // the blade itself, riding the current sweep position
+        float bladeAng = start + sweep * Math.min(1f, prog * 1.35f);
+        float rad = (float) Math.toRadians(bladeAng);
+        float tipX = ax + (float) Math.cos(rad) * arcR;
+        float tipY = ay + (float) Math.sin(rad) * arcR;
+        float midX = ax + (float) Math.cos(rad) * arcR * 0.55f;
+        float midY = ay + (float) Math.sin(rad) * arcR * 0.55f;
+
+        // translucent trail: a filled wedge from the arc's start to the blade
+        fill.setColor(0x38FFFFFF);
+        float cur = start + sweep * Math.min(1f, prog * 1.35f);
+        float span = Math.abs(cur - start);
+        c.drawArc(rect(ax - arcR, ay - arcR, ax + arcR, ay + arcR),
+                Math.min(start, cur), span, true, fill);
+        fill.setColor(0x55EAF2FF);
+        c.drawArc(rect(ax - arcR * 0.80f, ay - arcR * 0.80f, ax + arcR * 0.80f, ay + arcR * 0.80f),
+                Math.min(start, cur), span * 0.86f, true, fill);
+
+        // blade: a tapered quad from the hand through the arc edge
+        float nx = (tipX - ax);
+        float ny = (tipY - ay);
+        float len = (float) Math.sqrt(nx * nx + ny * ny);
+        if (len > 0.001f) {
+            nx /= len;
+            ny /= len;
+        }
+        float px = -ny * 4.5f;
+        float py = nx * 4.5f;
+        fill.setColor(0xFFF4F7FF);
+        path.reset();
+        path.moveTo(midX - px, midY - py);
+        path.lineTo(tipX, tipY);
+        path.lineTo(midX + px, midY + py);
+        path.close();
+        c.drawPath(path, fill);
+        // faint streak behind the blade
+        stroke.setColor(0x88FFFFFF);
+        stroke.setStrokeWidth(3f);
+        c.drawLine(midX, midY,
+                ax + (tipX - ax) * 0.85f, ay + (tipY - ay) * 0.85f, stroke);
+    }
+
+    /** Arrows and boomerangs, culled with the standard visibility helper. */
+    private void drawProjectiles(Canvas c, Game g) {
+        for (int i = 0; i < g.projectiles.size(); i++) {
+            Projectile pr = g.projectiles.get(i);
+            if (pr.dead) {
+                continue;
+            }
+            if (!visible(g, pr.x - 40f, pr.y - 40f, 80f, 80f)) {
+                continue;
+            }
+            if (pr.kind == Projectile.ARROW) {
+                drawArrow(c, pr);
+            } else {
+                drawBoomerang(c, pr);
+            }
+        }
+    }
+
+    private void drawArrow(Canvas c, Projectile pr) {
+        float vx = pr.vx;
+        float vy = pr.vy;
+        float ang = (float) Math.toDegrees(Math.atan2(vy, vx));
+        c.save();
+        c.translate(pr.x, pr.y);
+        c.rotate(ang);
+        float half = pr.w / 2f;
+        // shaft
+        fill.setColor(0xFFD8C08A);
+        c.drawRoundRect(rect(-half, -2f, half * 0.35f, 2f), 2f, 2f, fill);
+        // head
+        fill.setColor(0xFFEFF4FF);
+        path.reset();
+        path.moveTo(half * 0.3f, -4f);
+        path.lineTo(half, 0f);
+        path.lineTo(half * 0.3f, 4f);
+        path.close();
+        c.drawPath(path, fill);
+        // fletching
+        fill.setColor(0xFFE86A5A);
+        path.reset();
+        path.moveTo(-half, 0f);
+        path.lineTo(-half - 8f, -5f);
+        path.lineTo(-half * 0.62f, 0f);
+        path.lineTo(-half - 8f, 5f);
+        path.close();
+        c.drawPath(path, fill);
+        c.restore();
+    }
+
+    private void drawBoomerang(Canvas c, Projectile pr) {
+        c.save();
+        c.translate(pr.x, pr.y);
+        c.rotate((float) Math.toDegrees(pr.phase));
+        float s = pr.w / 2f;
+        // a soft glow while returning so the homing leg reads
+        if (pr.returning) {
+            fill.setColor(0x33FFFFFF);
+            c.drawCircle(0f, 0f, s * 1.7f, fill);
+        }
+        fill.setColor(pr.returning ? 0xFFDFFFB4 : 0xFFBFE08A);
+        // two thick bent arms (an L rotated 45 degrees)
+        c.save();
+        c.rotate(45f);
+        c.drawRoundRect(rect(-s, -s * 0.32f, s, s * 0.32f), s * 0.3f, s * 0.3f, fill);
+        c.drawRoundRect(rect(s * 0.36f, -s, s, s), s * 0.3f, s * 0.3f, fill);
+        c.restore();
+        stroke.setColor(0x884F6A2E);
+        stroke.setStrokeWidth(2f);
+        c.save();
+        c.rotate(45f);
+        c.drawRoundRect(rect(-s, -s * 0.32f, s, s * 0.32f), s * 0.3f, s * 0.3f, stroke);
+        c.drawRoundRect(rect(s * 0.36f, -s, s, s), s * 0.3f, s * 0.3f, stroke);
+        c.restore();
+        c.restore();
     }
 
     private void drawGoal(Canvas c, Game g) {
@@ -1491,12 +1708,59 @@ public final class Renderer {
                     pad + 26f * scale + hearts * 46f * scale, hy + 30f * scale, text);
         }
 
+        // --- player HP bar under the lives/hearts row --------------------
+        float barY = (g.lives > hearts ? hy + 48f : hy + 38f) * scale + (g.lives > hearts ? 16f : 10f) * scale;
+        if (g.lives <= hearts) {
+            barY = hy + 38f * scale;
+        }
+        // easier: draw just below the hearts row regardless of overflow text
+        barY = hy + 44f * scale;
+        float barW = 118f * scale;
+        float barX = pad + 16f * scale;
+        float frac = 0f;
+        if (g.player != null && g.player.maxHp > 0) {
+            frac = Math.max(0f, Math.min(1f, (float) g.player.hp / g.player.maxHp));
+        }
+        fill.setColor(0xAA000000);
+        c.drawRoundRect(rect(barX, barY, barX + barW, barY + 8f * scale), 5f, 5f, fill);
+        if (frac > 0f) {
+            int hpCol = frac > 0.5f ? 0xFF3DDC84 : (frac > 0.25f ? 0xFFFFC857 : 0xFFE4453A);
+            fill.setColor(hpCol);
+            c.drawRoundRect(rect(barX + 1f, barY + 1f, barX + 1f + (barW - 2f) * frac, barY + 7f * scale), 4f, 4f, fill);
+        }
+        stroke.setColor(0x88FFFFFF);
+        stroke.setStrokeWidth(1.6f * scale);
+        c.drawRoundRect(rect(barX, barY, barX + barW, barY + 8f * scale), 5f, 5f, stroke);
+
         // --- active power-ups: chips under the hearts -------------------
-        float chipY = hy + 52f * scale;
+        float chipY = barY + 18f * scale;
         float chipX = pad + 6f * scale;
         chipX = drawPowerChip(c, g, PowerUp.Type.SPEED, g.speedBoostTimer, chipX, chipY, scale);
         chipX = drawPowerChip(c, g, PowerUp.Type.MAGNET, g.magnetTimer, chipX, chipY, scale);
         chipX = drawPowerChip(c, g, PowerUp.Type.DOUBLE_JUMP, g.doubleJumpTimer, chipX, chipY, scale);
+
+        // --- equipped secondary chip (what the small disc fires) ---------
+        int weapon = g.secondaryWeaponId();
+        if (Weapons.isRanged(weapon)) {
+            float wchipH = 24f * scale;
+            String wname = Weapons.secondaryName(weapon);
+            float wnameW = textWidth(wname, 15f * scale);
+            float wchipW = wchipH + wnameW + 20f * scale;
+            float wcx = chipX;
+            fill.setColor(0x99000000);
+            c.drawRoundRect(rect(wcx, chipY - wchipH + 6f * scale,
+                    wcx + wchipW, chipY + 6f * scale), 10f, 10f, fill);
+            float iconR = wchipH * 0.34f;
+            drawSecondaryGlyph(c, weapon, wcx + 6f * scale + iconR,
+                    chipY - wchipH / 2f + 6f * scale, iconR);
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(15f * scale);
+            text.setColor(0xFFDFFFD4);
+            text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+            c.drawText(wname, wcx + 12f * scale + iconR * 2f,
+                    chipY - wchipH / 2f + 11f * scale, text);
+            text.setTextAlign(Paint.Align.CENTER);
+        }
 
         // --- shield pips -------------------------------------------------
         if (g.shieldCharges > 0) {
@@ -1826,7 +2090,6 @@ public final class Renderer {
         // Everything is drawn at the hit radius, so a finger can never land on
         // an invisible target (or miss a visible one).
         float pr = ctl.padHitR;
-        float jr = ctl.jumpHitR;
         float padX = g.input.padX;
         float padY = g.input.padY;
         boolean padOn = g.input.padActive;
@@ -1865,26 +2128,121 @@ public final class Renderer {
         stroke.setStrokeWidth(2.5f);
         c.drawCircle(kx, ky, ctl.padKnobR, stroke);
 
-        // ---- jump button (still there for the right thumb) -----------------
+        // ---- attack disc (the old jump disc's spot: the sword) -------------
+        float ar = ctl.attackHitR;
+        boolean swinging = g.player.attacking();
         fill.setColor(paused ? 0x22000000 : 0x44000000);
-        c.drawCircle(ctl.jumpX, ctl.jumpY, jr, fill);
-        stroke.setColor(paused ? 0x33FFFFFF : 0x88FFFFFF);
+        c.drawCircle(ctl.attackX, ctl.attackY, ar, fill);
+        stroke.setColor(swinging ? 0xFFFFD34D : paused ? 0x33FFFFFF : 0x88FFFFFF);
         stroke.setStrokeWidth(3f);
-        c.drawCircle(ctl.jumpX, ctl.jumpY, jr, stroke);
-        fill.setColor(0xFFFFFFFF);
-        path.reset();
-        path.moveTo(ctl.jumpX, ctl.jumpY - jr * 0.46f);
-        path.lineTo(ctl.jumpX + jr * 0.40f, ctl.jumpY + jr * 0.04f);
-        path.lineTo(ctl.jumpX + jr * 0.15f, ctl.jumpY + jr * 0.04f);
-        path.lineTo(ctl.jumpX + jr * 0.15f, ctl.jumpY + jr * 0.44f);
-        path.lineTo(ctl.jumpX - jr * 0.15f, ctl.jumpY + jr * 0.44f);
-        path.lineTo(ctl.jumpX - jr * 0.15f, ctl.jumpY + jr * 0.04f);
-        path.lineTo(ctl.jumpX - jr * 0.40f, ctl.jumpY + jr * 0.04f);
-        path.close();
-        c.drawPath(path, fill);
-        if (g.input.jumpHeld || g.input.jumpCut) {
+        c.drawCircle(ctl.attackX, ctl.attackY, ar, stroke);
+        drawSwordGlyph(c, ctl.attackX, ctl.attackY, ar * 0.52f, swinging);
+        if (g.input.attackHeld) {
             fill.setColor(0x33FFFFFF);
-            c.drawCircle(ctl.jumpX, ctl.jumpY, jr * 0.82f, fill);
+            c.drawCircle(ctl.attackX, ctl.attackY, ar * 0.82f, fill);
+        }
+        // thin cooldown ring while the next swing is not ready yet
+        if (g.player.attackCooldown > 0f && !paused) {
+            float frac = Math.min(1f, g.player.attackCooldown / Constants.SWORD_COOLDOWN);
+            stroke.setColor(0x88FFD34D);
+            stroke.setStrokeWidth(3.5f);
+            c.drawArc(rect(ctl.attackX - ar * 0.92f, ctl.attackY - ar * 0.92f,
+                    ctl.attackX + ar * 0.92f, ctl.attackY + ar * 0.92f),
+                    270f, -360f * frac, false, stroke);
+        }
+
+        // ---- secondary weapon disc (bow / boomerang) -----------------------
+        int weapon = g.secondaryWeaponId();
+        float sr = ctl.secHitR;
+        fill.setColor(paused ? 0x22000000
+                : weapon == Weapons.NONE ? 0x22000000 : 0x3D000000);
+        c.drawCircle(ctl.secX, ctl.secY, sr, fill);
+        stroke.setColor(paused ? 0x33FFFFFF
+                : weapon == Weapons.NONE ? 0x44FFFFFF : 0x99FFFFFF);
+        stroke.setStrokeWidth(2.5f);
+        c.drawCircle(ctl.secX, ctl.secY, sr, stroke);
+        drawSecondaryGlyph(c, weapon, ctl.secX, ctl.secY, sr * 0.62f);
+        if (weapon != Weapons.NONE && g.secondaryCooldown <= 0f && g.input.secondaryHeld) {
+            fill.setColor(0x33FFFFFF);
+            c.drawCircle(ctl.secX, ctl.secY, sr * 0.82f, fill);
+        }
+        // cooldown wedge: the disc refills as the next shot becomes ready
+        if (weapon != Weapons.NONE && g.secondaryCooldown > 0f && !paused) {
+            float cd = Weapons.cooldown(weapon);
+            float frac = cd <= 0f ? 0f : Math.min(1f, g.secondaryCooldown / cd);
+            stroke.setColor(0xA0FFFFFF);
+            stroke.setStrokeWidth(3f);
+            c.drawArc(rect(ctl.secX - sr * 0.94f, ctl.secY - sr * 0.94f,
+                    ctl.secX + sr * 0.94f, ctl.secY + sr * 0.94f),
+                    270f, -360f * frac, false, stroke);
+        }
+    }
+
+    /** Sword glyph for the attack disc: blade, crossguard and grip. */
+    private void drawSwordGlyph(Canvas c, float cx, float cy, float size, boolean active) {
+        // grip (lower-left) -> tip (upper-right), angled like a ready swing
+        c.save();
+        c.translate(cx, cy);
+        c.rotate(-38f);
+        fill.setColor(active ? 0xFFFFD34D : 0xCCFFFFFF);
+        c.drawRoundRect(rect(-size * 0.12f, -size * 1.05f, size * 0.12f, size * 0.30f),
+                size * 0.12f, size * 0.12f, fill);
+        // crossguard
+        fill.setColor(active ? 0xFFE0A62E : 0xFFB98A2C);
+        c.drawRoundRect(rect(-size * 0.42f, size * 0.26f, size * 0.42f, size * 0.44f),
+                size * 0.10f, size * 0.10f, fill);
+        // grip + pommel
+        fill.setColor(0xFF7A4A22);
+        c.drawRoundRect(rect(-size * 0.09f, size * 0.44f, size * 0.09f, size * 0.82f),
+                size * 0.08f, size * 0.08f, fill);
+        fill.setColor(0xFFB98A2C);
+        c.drawCircle(0f, size * 0.90f, size * 0.13f, fill);
+        c.restore();
+    }
+
+    /** Glyph for the secondary disc: per equipped weapon, or a disabled dash. */
+    private void drawSecondaryGlyph(Canvas c, int weapon, float cx, float cy, float size) {
+        switch (weapon) {
+            case Weapons.BOW: {
+                // bow arc + string + nocked arrow, opening towards the enemy
+                stroke.setColor(0xFFE0A62E);
+                stroke.setStrokeWidth(size * 0.24f);
+                c.drawArc(rect(cx - size, cy - size, cx + size, cy + size),
+                        128f, 104f, false, stroke);
+                stroke.setColor(0xDDFFFFFF);
+                stroke.setStrokeWidth(size * 0.10f);
+                float bx = (float) Math.cos(Math.toRadians(128f + 52f)) * size;
+                float sx = cx + bx, ex = cx - bx;
+                c.drawLine(sx, cy - size * 0.788f, ex, cy + size * 0.788f, stroke);
+                fill.setColor(0xFFFFFFFF);
+                c.drawCircle(ex + size * 0.02f, cy, size * 0.13f, fill);
+                break;
+            }
+            case Weapons.BOOMERANG: {
+                c.save();
+                c.translate(cx, cy);
+                fill.setColor(0xFFC8E4A0);
+                float arm = size * 0.95f;
+                float th = size * 0.34f;
+                path.reset();
+                path.moveTo(-arm * 0.95f, -arm * 0.15f);
+                path.lineTo(-arm * 0.15f, -arm * 0.95f);
+                path.lineTo(arm * 0.19f, -arm * 0.95f);
+                path.lineTo(arm * 0.19f, arm * 0.19f);
+                path.lineTo(-arm * 0.15f, arm * 0.19f);
+                path.lineTo(-arm * 0.15f, -arm * 0.51f);
+                path.lineTo(-arm * 0.95f, -arm * 0.51f);
+                path.close();
+                c.drawPath(path, fill);
+                c.restore();
+                break;
+            }
+            default:
+                // NO WEAPON: a short dash so the disc still reads as a slot
+                fill.setColor(0x66FFFFFF);
+                c.drawRoundRect(rect(cx - size * 0.6f, cy - size * 0.10f,
+                        cx + size * 0.6f, cy + size * 0.10f), size * 0.1f, size * 0.1f, fill);
+                break;
         }
     }
 
@@ -2061,6 +2419,12 @@ public final class Renderer {
             case HELP:
                 drawHelp(c, g, sw, sh, scale);
                 break;
+            case LEVEL_SELECT:
+                drawLevelSelect(c, g, sw, sh, scale);
+                break;
+            case LOADOUT:
+                drawLoadout(c, g, sw, sh, scale);
+                break;
             case PLAYING:
             default:
                 // feedback flash when the player bumps a locked goal
@@ -2114,8 +2478,7 @@ public final class Renderer {
         // can never disagree.
         for (Game.UiButton b : g.menuButtons) {
             boolean small = b.id == Game.BTN_SOUND || b.id == Game.BTN_RESET;
-            boolean row = b.id == Game.BTN_CAREER || b.id == Game.BTN_STORE
-                    || b.id == Game.BTN_SETTINGS;
+            boolean row = b.id == Game.BTN_CAREER || b.id == Game.BTN_SETTINGS;
             drawMenuButton(c, b.label, b.x, b.y, b.w, b.h, scale, small, row);
         }
 
@@ -2351,7 +2714,8 @@ public final class Renderer {
         text.setTextSize(fitSize(p.name, nameMax, Math.max(5f, nameSize)));
         c.drawText(p.name, tx, b.y + b.h * (b.h > 34f ? 0.44f : 0.62f), text);
         if (b.h > 34f) {
-            String sub = "LEVEL " + (p.levelIndex + 1) + "  •  COINS " + p.coins;
+            String sub = "LEVEL " + (p.levelIndex + 1) + "  •  COINS " + p.coins
+                    + "  •  " + Weapons.secondaryName(p.equippedSecondary);
             text.setTextSize(fitSize(sub, nameMax, Math.max(4f, subSize)));
             text.setColor(0xFFBFD4FF);
             c.drawText(sub, tx, b.y + b.h * 0.78f, text);
@@ -2648,19 +3012,26 @@ public final class Renderer {
     /** Rows of the in-game tutorial: label + one-line explanation. */
     private static final String[][] HELP_ROWS = {
             {"MOVE", "drag the left pad  /  A  D"},
-            {"JUMP", "drag the pad up  /  jump button"},
+            {"JUMP", "drag the pad up"},
             {"SHORT HOP", "drag the pad down mid-jump"},
+            {"ATTACK", "right disc / J swings the sword"},
+            {"SWORD ARCS", "arc changes as you move"},
+            {"  STAND", "tall overhead chop"},
+            {"  RUN", "longer, lower forward slash"},
+            {"  RISE / FALL", "upward arc  /  plunge below"},
+            {"SECONDARY", "left disc / K: bow or boomerang"},
+            {"LOADOUT", "pick a level, then a weapon"},
             {"PAUSE", "pause button  /  P"},
             {"COINS", "+100 score, +1 career coin"},
-            {"ENEMIES", "stomp them from above"},
+            {"ENEMIES", "sword, arrows or a stomp kill"},
             {"HAZARDS", "spikes, lava and pits cost a life"},
             {"CHECKPOINT", "a flag saves your respawn"},
             {"GOAL", "reach the flag to clear the level"},
-            {"CAREERS", "own wallet, unlocks and upgrades"},
-            {"STORE", "spend career coins on upgrades"},
+            {"CAREERS", "own wallet, unlocks and build"},
+            {"STORE", "inside the career menu"},
             {"COLLECTOR", "60% of the coins opens the goal"},
             {"AUTO-SAVE", "progress saves as you reach it"},
-            {"KEYBOARD", "W A S D, space, P, M"},
+            {"KEYBOARD", "W A S D, J K, space, P, M"},
     };
 
     /** Power-up legend shown at the bottom of the tutorial. */
@@ -2760,6 +3131,205 @@ public final class Renderer {
             drawOverlayButton(c, back, scale, false);
         }
         text.setTextAlign(Paint.Align.CENTER);
+    }
+
+    /** "SELECT LEVEL": two-column grid of the career's unlocked levels. */
+    private void drawLevelSelect(Canvas c, Game g, float sw, float sh, float scale) {
+        scrim(c, sw, sh, 0.62f);
+        float pw = g.levelSelectPanelW();
+        float ph = g.levelSelectPanelH();
+        float left = (sw - pw) / 2f;
+        float top = (sh - ph) / 2f;
+        drawPanel(c, sw / 2f, sh / 2f, pw, ph);
+
+        float headerY = top + Math.min(52f * scale, ph * 0.075f);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(Math.max(8f, 38f * scale));
+        text.setColor(0xFFFFD34D);
+        text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
+        c.drawText("SELECT LEVEL", left + pw * 0.06f, headerY, text);
+
+        // career line on the right: who is playing and what they carry
+        String career = g.profile.name + "  •  COINS " + num(g.profile.coins)
+                + "  •  " + Weapons.secondaryName(g.secondaryWeaponId());
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(fitSize(career, pw * 0.46f, Math.max(6f, 19f * scale)));
+        text.setColor(0xFFBFD4FF);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText(career, left + pw * 0.94f, headerY, text);
+        text.setTextAlign(Paint.Align.CENTER);
+
+        // rows: Game laid them out in a two-column grid; enrich each cell
+        for (Game.UiButton b : g.levelButtons) {
+            int idx = b.id - Game.BTN_LEVEL_ROW;
+            if (idx < 0 || idx >= Levels.TEXT.length || b.w <= 0f || b.h <= 0f) {
+                continue;
+            }
+            boolean unlocked = g.levelUnlocked(idx);
+            boolean cleared = g.levelCleared(idx);
+            float r = Math.max(2f, 12f * scale);
+            fill.setColor(unlocked ? 0xD61E3A6E : 0x66101826);
+            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, fill);
+            stroke.setColor(cleared ? 0xFF9BE89B : unlocked ? 0x88FFFFFF : 0x33FFFFFF);
+            stroke.setStrokeWidth(Math.max(1f, (cleared ? 2.5f : 2f) * scale));
+            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
+
+            float pad = 12f * scale;
+            float leftX = b.x + pad;
+            // number chip
+            float chip = Math.min(b.h * 0.52f, 30f * scale);
+            fill.setColor(unlocked ? 0xFF0F2547 : 0xFF181E2C);
+            c.drawCircle(leftX + chip, b.y + b.h / 2f, chip, fill);
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(chip * 1.05f);
+            text.setColor(unlocked ? 0xFFFFD34D : 0x66FFFFFF);
+            c.drawText(String.valueOf(idx + 1), leftX + chip, b.y + b.h * 0.68f, text);
+
+            // name (dimmed when locked)
+            float nameX = leftX + chip * 2.4f;
+            float nameSize = Math.max(6f, Math.min(b.h * 0.40f, 27f * scale));
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setColor(unlocked ? 0xFFFFFFFF : 0x55FFFFFF);
+            text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+            text.setTextSize(fitSize(g.levelName(idx),
+                    Math.max(20f, b.w - (nameX - b.x) - pad - 90f * scale), nameSize));
+            c.drawText(g.levelName(idx), nameX, b.y + b.h * (b.h > 40f ? 0.42f : 0.64f), text);
+
+            // status line under the name, or centred when the row is short
+            String status;
+            if (!unlocked) {
+                status = "LOCKED";
+            } else if (cleared) {
+                status = "CLEARED  •  BEST " + num(g.profile.levelBestScore(idx));
+            } else {
+                status = "NEW";
+            }
+            float subSize = Math.max(4f, Math.min(b.h * 0.26f, 17f * scale));
+            text.setTextSize(fitSize(status,
+                    Math.max(20f, b.w - (nameX - b.x) - pad), subSize));
+            text.setColor(!unlocked ? 0x55FFFFFF
+                    : cleared ? 0xFF9BE89B : 0xFFFFE08A);
+            if (b.h > 40f) {
+                c.drawText(status, nameX, b.y + b.h * 0.76f, text);
+            } else {
+                text.setTextAlign(Paint.Align.RIGHT);
+                c.drawText(status, b.x + b.w - pad, b.y + b.h * 0.64f, text);
+                text.setTextAlign(Paint.Align.LEFT);
+            }
+        }
+
+        for (Game.UiButton b : g.levelButtons) {
+            if (b.id == Game.BTN_BACK) {
+                drawOverlayButton(c, b, scale, false);
+            }
+        }
+
+        // feedback line (locked-row refusals) above the footer
+        float msgY = footerTop(g.levelButtons, top + ph) - 12f * scale;
+        drawMessage(c, g.levelMsg, g.levelMsgTimer, sw / 2f, msgY, scale);
+
+        text.setTextAlign(Paint.Align.CENTER);
+        String foot = "cleared levels stay replayable  •  picking a level opens your loadout";
+        float footY = Math.min(footerBottom(g.levelButtons, top + ph) + 18f * scale,
+                top + ph - 8f * scale);
+        text.setTextSize(fitSize(foot, pw * 0.94f, Math.max(5f, 17f * scale)));
+        text.setColor(0x99FFFFFF);
+        c.drawText(foot, sw / 2f, Math.min(footY, sh - 8f * scale), text);
+    }
+
+    /** Pre-level loadout: pick the secondary weapon, then START. */
+    private void drawLoadout(Canvas c, Game g, float sw, float sh, float scale) {
+        scrim(c, sw, sh, 0.62f);
+        float pw = g.loadoutPanelW();
+        float ph = g.loadoutPanelH();
+        float left = (sw - pw) / 2f;
+        float top = (sh - ph) / 2f;
+        drawPanel(c, sw / 2f, sh / 2f, pw, ph);
+
+        String title = "LEVEL " + (g.pendingLevel + 1) + "  •  " + g.levelName(g.pendingLevel);
+        float headerY = top + Math.min(52f * scale, ph * 0.075f);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(fitSize(title, pw * 0.52f, Math.max(8f, 34f * scale)));
+        text.setColor(0xFFFFD34D);
+        text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
+        c.drawText(title, left + pw * 0.06f, headerY, text);
+
+        String wallet = g.profile.name + "  •  COINS " + num(g.profile.coins);
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(fitSize(wallet, pw * 0.40f, Math.max(6f, 19f * scale)));
+        text.setColor(0xFFBFD4FF);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText(wallet, left + pw * 0.94f, headerY, text);
+        text.setTextAlign(Paint.Align.CENTER);
+
+        String hint = "the sword is always equipped  •  choose the secondary weapon for this run";
+        text.setTextSize(fitSize(hint, pw * 0.88f, Math.max(5f, 18f * scale)));
+        text.setColor(0xCCFFFFFF);
+        c.drawText(hint, sw / 2f, top + ph * 0.135f, text);
+
+        int equipped = g.secondaryWeaponId();
+        for (Game.UiButton b : g.loadoutButtons) {
+            int id = b.id - Game.BTN_WEAPON_ROW;
+            if (id < 0 || id >= Weapons.SECONDARY_COUNT || b.w <= 0f) {
+                continue;
+            }
+            boolean active = id == equipped;
+            boolean ranged = Weapons.isRanged(id);
+            float r = Math.max(2f, 12f * scale);
+            fill.setColor(active ? 0xE62C5AA8 : 0xB4101826);
+            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, fill);
+            stroke.setColor(active ? 0xFFFFD34D : 0x55FFFFFF);
+            stroke.setStrokeWidth(Math.max(1f, (active ? 3f : 2f) * scale));
+            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
+
+            // icon on the left, matching the disc glyphs
+            float icon = b.h * 0.26f;
+            drawSecondaryGlyph(c, id, b.x + icon * 2.4f, b.y + b.h / 2f, icon);
+
+            float nameX = b.x + icon * 4.4f;
+            float nameSize = Math.min(b.h * 0.34f, 26f * scale);
+            float subSize = Math.min(b.h * 0.24f, 17f * scale);
+            float rightW = 0f;
+            if (active) {
+                rightW = textWidth("EQUIPPED", Math.max(4f, subSize)) + 26f * scale;
+            }
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setColor(ranged ? 0xFFFFFFFF : 0xBBFFFFFF);
+            text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
+            text.setTextSize(fitSize(Weapons.secondaryName(id),
+                    Math.max(24f, b.w - (nameX - b.x) - rightW - 14f * scale),
+                    Math.max(5f, nameSize)));
+            c.drawText(Weapons.secondaryName(id), nameX, b.y + b.h * (b.h > 38f ? 0.42f : 0.62f), text);
+            if (b.h > 38f) {
+                text.setTextSize(fitSize(Weapons.secondaryDesc(id),
+                        Math.max(24f, b.w - (nameX - b.x) - rightW - 14f * scale),
+                        Math.max(4f, subSize)));
+                text.setColor(0xFFBFD4FF);
+                c.drawText(Weapons.secondaryDesc(id), nameX, b.y + b.h * 0.76f, text);
+            }
+            if (active) {
+                text.setTextAlign(Paint.Align.RIGHT);
+                text.setTextSize(Math.max(4f, subSize));
+                text.setColor(0xFF9BE89B);
+                c.drawText("EQUIPPED", b.x + b.w - 16f * scale, b.y + b.h * 0.42f, text);
+                text.setTextAlign(Paint.Align.LEFT);
+            }
+        }
+
+        for (Game.UiButton b : g.loadoutButtons) {
+            if (b.id == Game.BTN_START_LEVEL) {
+                drawOverlayButton(c, b, scale, false);
+            } else if (b.id == Game.BTN_BACK) {
+                drawOverlayButton(c, b, scale, false);
+            }
+        }
+
+        text.setTextAlign(Paint.Align.CENTER);
+        String foot = "your pick is saved to this career";
+        float footY = top + ph - 8f * scale;
+        text.setTextSize(fitSize(foot, pw * 0.6f, Math.max(5f, 15f * scale)));
+        text.setColor(0x88FFFFFF);
+        c.drawText(foot, sw / 2f, Math.min(footY, sh - 8f * scale), text);
     }
 
     private void drawSettings(Canvas c, Game g, float sw, float sh, float scale) {

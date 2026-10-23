@@ -214,7 +214,11 @@ public final class RendererSmoke {
         public void drawPath(Path path, Paint p) {
             note("path segs=" + path.segments.size() + " #" + Integer.toHexString(p.getColor()));
             paint(p);
-            Path2D.Float shape = new Path2D.Float();
+            int rule = Path2D.WIND_NON_ZERO;
+            if (path.getFillType() == Path.FillType.EVEN_ODD) {
+                rule = Path2D.WIND_EVEN_ODD;
+            }
+            Path2D.Float shape = new Path2D.Float(rule);
             for (float[] seg : path.segments) {
                 switch ((char) seg[0]) {
                     case 'M': shape.moveTo(seg[1], seg[2]); break;
@@ -399,6 +403,44 @@ public final class RendererSmoke {
                 Game.State.HELP, Game::openHelp, false);
         dumpShot(new java.io.File(dir, "help-480x320.png"), 480, 320, 0, -1f,
                 Game.State.HELP, Game::openHelp, false);
+        dumpShot(new java.io.File(dir, "levelselect.png"), 0, -1f, Game.State.LEVEL_SELECT, g -> {
+            g.profile.markCleared(0, 900);
+            g.profile.markCleared(1, 1200);
+            g.profile.unlocked = 3;
+            g.setSecondaryWeapon(Weapons.BOOMERANG);
+            g.openLevelSelect();
+        }, false);
+        dumpShot(new java.io.File(dir, "levelselect-1080x480.png"), 1080, 480, 0, -1f,
+                Game.State.LEVEL_SELECT, g -> {
+                    g.profile.unlocked = 3;
+                    g.openLevelSelect();
+                }, false);
+        dumpShot(new java.io.File(dir, "loadout.png"), 0, -1f, Game.State.LOADOUT, g -> {
+            g.profile.unlocked = 3;
+            g.setSecondaryWeapon(Weapons.BOW);
+            g.openLoadout(1);
+        }, false);
+        dumpShot(new java.io.File(dir, "loadout-1080x480.png"), 1080, 480, 0, -1f,
+                Game.State.LOADOUT, g -> {
+                    g.profile.unlocked = 3;
+                    g.setSecondaryWeapon(Weapons.BOOMERANG);
+                    g.openLoadout(0);
+                }, false);
+        dumpShot(new java.io.File(dir, "combat.png"), 2400, 1080, 0, -1f,
+                Game.State.PLAYING, g -> {
+                    g.player.swingStyle = SwordStyle.GROUND_RUN;
+                    g.player.swingTimer = Constants.SWORD_TIME * 0.55f;
+                    g.projectiles.add(new Projectile(Projectile.ARROW,
+                            g.player.centerX() + 170f, g.player.centerY() - 10f, 1));
+                    g.projectiles.get(0).vx = Constants.ARROW_SPEED;
+                    g.setSecondaryWeapon(Weapons.BOW);
+                }, false);
+        dumpShot(new java.io.File(dir, "combat-chop.png"), 2400, 1080, 0, -1f,
+                Game.State.PLAYING, g -> {
+                    g.player.swingStyle = SwordStyle.GROUND_IDLE;
+                    g.player.swingTimer = Constants.SWORD_TIME * 0.55f;
+                    g.setSecondaryWeapon(Weapons.BOOMERANG);
+                }, false);
         dumpShot(new java.io.File(dir, "playing-1080x480.png"), 1080, 480, 4, 40f * 64f,
                 Game.State.PLAYING, g -> {
                     g.input.pointerDown(9, g.controls.padCX, g.controls.padCY);
@@ -529,6 +571,59 @@ public final class RendererSmoke {
         System.out.println("[render] career rows " + hg.careerButtons.size()
                 + ", store rows " + hg.storeButtons.size()
                 + ", tutorial buttons " + hg.helpButtons.size());
+
+        // ---- 1c. level select, loadout, swing arcs, projectiles -----------
+        System.out.println("[render] level select / loadout / combat art");
+        Game lg = new Game(sound);
+        lg.resize(2400, 1080);
+        lg.profile.markCleared(0, 900);
+        lg.profile.markCleared(1, 1200);
+        lg.profile.unlocked = 3;
+        lg.setSecondaryWeapon(Weapons.BOOMERANG);
+        lg.openLevelSelect();
+        check(!lg.levelButtons.isEmpty(), "level select laid out no rows");
+        drawFrame(r, lg, 2400, 1080);
+        drawFrame(r, lg, 1080, 480);
+        drawFrame(r, lg, 480, 320);
+        drawFrame(r, lg, 1, 1);
+
+        lg.openLoadout(0);
+        check(!lg.loadoutButtons.isEmpty(), "loadout laid out no rows");
+        for (int w = 0; w < Weapons.SECONDARY_COUNT; w++) {
+            lg.setSecondaryWeapon(w);
+            drawFrame(r, lg, 2400, 1080);
+            drawFrame(r, lg, 480, 320);
+        }
+        lg.setSecondaryWeapon(Weapons.BOW);
+
+        // every swing style in world space
+        lg.loadLevel(0);
+        lg.state = Game.State.PLAYING;
+        lg.update(1f / 60f);
+        SwordStyle[] styles = {SwordStyle.GROUND_IDLE, SwordStyle.GROUND_RUN,
+                SwordStyle.AIR_RISE, SwordStyle.AIR_FALL};
+        for (SwordStyle st : styles) {
+            lg.player.swingStyle = st;
+            lg.player.swingTimer = Constants.SWORD_TIME * 0.5f;
+            drawFrame(r, lg, 2400, 1080);
+            drawFrame(r, lg, 480, 320);
+        }
+        // both projectile kinds, arrow tilted and boomerang returning
+        lg.projectiles.add(new Projectile(Projectile.ARROW,
+                lg.player.centerX() + 120f, lg.player.centerY() - 40f, 1));
+        Projectile arrow = lg.projectiles.get(0);
+        arrow.vx = Constants.ARROW_SPEED;
+        arrow.vy = 120f;
+        lg.projectiles.add(new Projectile(Projectile.BOOMERANG,
+                lg.player.centerX() + 200f, lg.player.centerY() + 30f, 1));
+        lg.projectiles.get(1).returning = true;
+        lg.projectiles.get(1).phase = 2.2f;
+        drawFrame(r, lg, 2400, 1080);
+        drawFrame(r, lg, 1080, 480);
+        drawFrame(r, lg, 480, 320);
+        drawFrame(r, lg, 1, 1);
+        lg.projectiles.clear();
+        lg.resize(2400, 1080);
 
         // ---- 2. real gameplay, drawing every frame ------------------------
         System.out.println("[render] live gameplay with rendering");

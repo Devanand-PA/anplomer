@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="120" height="80" viewBox="0 0 120 80">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#102030"/>
+      <stop offset="1" stop-color="#d0e0f0"/>
+    </linearGradient>
+  </defs>
+  <g id="paths" inkscape:label="layer-paths" transform="translate(4,2)">
+    <path id="all-commands" fill="#3F6BE0"
+          d="M10 10 L20 10 H25 V20 C30 20 30 30 35 30 S45 20 45 10 Q50 0 55 10 T65 10 A6 6 0 0 1 71 16 Z"/>
+    <path id="relative" fill="#E14A4A" d="m80 12 l10 0 v8 l-10 0 z"/>
+  </g>
+  <rect id="rounded" x="10" y="40" width="30" height="20" rx="5" ry="4" fill="#FFCB3D"/>
+  <rect id="plain" x="46" y="40" width="12" height="12" fill="#8BC34A"/>
+  <circle id="disc" cx="70" cy="50" r="9" fill="url(#grad)"/>
+  <ellipse id="oval" cx="92" cy="50" rx="12" ry="6" fill="#9C27B0" stroke="#222222" stroke-width="2"/>
+  <line id="rule" x1="10" y1="66" x2="60" y2="66" stroke="#555555" stroke-width="1.5"/>
+  <polyline id="zig" points="66,66 72,60 78,66 84,60" fill="none" stroke="#00897B" stroke-width="2"/>
+  <polygon id="tri" points="96,66 104,58 112,66" fill="#FF7043"/>
+  <path id="donut" fill-rule="evenodd" fill="#263238"
+        d="M20 78 A6 6 0 1 0 32 78 A6 6 0 1 0 20 78 Z M23 78 A3 3 0 1 1 29 78 A3 3 0 1 1 23 78 Z"/>
+</svg>

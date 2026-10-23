@@ -14,6 +14,8 @@ public final class Enemy {
     }
 
     public final Type type;
+    /** Baked stats for this archetype (art/stats.json -> Stats.java). */
+    public final Stats.Mob mob;
     public float x, y;
     public final float w;
     public final float h;
@@ -22,27 +24,60 @@ public final class Enemy {
     public boolean dead;
     public float deadTimer;
     public float animTime;
+
+    // ---- health --------------------------------------------------------
+    public final int maxHp;
+    public int hp;
+    /** Contact damage this mob deals to the player. */
+    public final int attack;
+    /** Counts down after a non-fatal hit; drives the white flash. */
+    public float hitFlash;
+    /** Serial of the last sword swing that hit this mob (one hit per arc). */
+    public int hitSwingSerial = -1;
+    /** Last projectile that hit this mob (one hit per arrow/boomerang). */
+    public Projectile lastHitBy;
+
     private final float baseX;
     private final float baseY;
     private float walkPhase;
 
     public Enemy(Type type, float x, float y) {
         this.type = type;
+        this.mob = Stats.mob(type == Type.WALKER ? "walker" : "flyer");
         this.x = x;
         this.y = y;
         this.baseX = x;
         this.baseY = y;
-        if (type == Type.WALKER) {
-            this.w = Constants.WALKER_W;
-            this.h = Constants.WALKER_H;
-            this.vx = -Constants.WALKER_SPEED;
-            this.facing = -1f;
-        } else {
-            this.w = Constants.FLYER_W;
-            this.h = Constants.FLYER_H;
-            this.vx = -Constants.FLYER_SPEED;
-            this.facing = -1f;
+        this.w = mob.width;
+        this.h = mob.height;
+        this.maxHp = mob.maxHp;
+        this.hp = maxHp;
+        this.attack = mob.attack;
+        this.vx = -mob.speed;
+        this.facing = -1f;
+    }
+
+    /**
+     * Applies damage and flashes the body.
+     *
+     * @return true when this hit took the last hit point
+     */
+    public boolean damage(int amount) {
+        if (dead) {
+            return false;
         }
+        hp -= Math.max(1, amount);
+        hitFlash = Constants.HIT_FLASH_TIME;
+        if (hp <= 0) {
+            hp = 0;
+            return true;
+        }
+        return false;
+    }
+
+    /** @return 0..1 remaining health, for the health bar */
+    public float hpFraction() {
+        return maxHp <= 0 ? 0f : Math.max(0f, Math.min(1f, (float) hp / maxHp));
     }
 
     public float centerX() {
@@ -55,6 +90,9 @@ public final class Enemy {
 
     public void update(float dt, Level lvl) {
         animTime += dt;
+        if (hitFlash > 0f) {
+            hitFlash = Math.max(0f, hitFlash - dt);
+        }
         if (dead) {
             deadTimer -= dt;
             return;
@@ -79,7 +117,7 @@ public final class Enemy {
     }
 
     private void updateWalker(float dt, Level lvl) {
-        vx = facing * Constants.WALKER_SPEED;
+        vx = facing * mob.speed;
         vy += Constants.GRAVITY * dt;
         if (vy > Constants.MAX_FALL) {
             vy = Constants.MAX_FALL;

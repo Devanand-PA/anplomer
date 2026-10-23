@@ -12,3 +12,7 @@ captures/
 # emulator lab (local scratch: AVD, adb logs, screenshots)
 .emulator-lab/
 shots/
+
+# python bytecode from the PC-side tools
+__pycache__/
+*.pyc

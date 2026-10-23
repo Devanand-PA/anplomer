@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="64" height="88" viewBox="0 0 64 88">
+  <g id="legs" inkscape:label="legs">
+    <rect id="leg-left" x="22" y="62" width="9" height="18" rx="4" fill="#2A3F7A"/>
+    <rect id="leg-right" x="33" y="62" width="9" height="18" rx="4" fill="#2A3F7A"/>
+  </g>
+  <g id="shoes" inkscape:label="shoes">
+    <rect id="shoe-left" x="20" y="80" width="11" height="8" rx="3" fill="#1B243F"/>
+    <rect id="shoe-right" x="33" y="80" width="11" height="8" rx="3" fill="#1B243F"/>
+  </g>
+  <path id="scarf" fill="#E14A4A" d="M24 34 L8 30 L8 38 L24 38 Z"/>
+  <rect id="body" x="16" y="30" width="32" height="34" rx="10" fill="#3F6BE0"/>
+  <rect id="chest" x="20" y="33" width="24" height="12" rx="6" fill="#5A85F5"/>
+  <rect id="belt" x="16" y="52" width="32" height="5" fill="#243458"/>
+  <rect id="buckle" x="29" y="52" width="6" height="5" fill="#FFCB3D"/>
+  <g id="arms" inkscape:label="arms">
+    <rect id="arm-back" x="12" y="34" width="6" height="16" rx="3" fill="#3560D2"/>
+    <rect id="arm-front" x="46" y="34" width="6" height="16" rx="3" fill="#3560D2"/>
+    <circle id="hand-back" cx="15" cy="52" r="3.5" fill="#F0BE92"/>
+    <circle id="hand-front" cx="49" cy="52" r="3.5" fill="#F0BE92"/>
+  </g>
+  <rect id="head" x="20" y="6" width="24" height="24" rx="8" fill="#F3C79A"/>
+  <path id="hair" fill="#4A2E1D" d="M20 16 L20 12 Q32 2 44 12 L44 16 L38 13 L32 16 L26 13 Z"/>
+  <circle id="eye-white" cx="38" cy="18" r="4" fill="#FFFFFF"/>
+  <circle id="pupil" cx="39" cy="18" r="2" fill="#2A2118"/>
+  <path id="brow" fill="#4A2E1D" d="M34 13 L43 12 L43 14 L34 15 Z"/>
+  <path id="mouth" fill="#B3754B" d="M36 24 Q39 26 42 24 L42 25 Q39 27 36 25 Z"/>
+</svg>

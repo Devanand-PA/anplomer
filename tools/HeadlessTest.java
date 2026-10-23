@@ -80,9 +80,508 @@ public final class HeadlessTest {
             if (!padFlow()) {
                 failures = true;
             }
+            if (!combatFlow()) {
+                failures = true;
+            }
+            if (!secondaryFlow()) {
+                failures = true;
+            }
+            if (!levelSelectFlow()) {
+                failures = true;
+            }
+            if (!loadoutFlow()) {
+                failures = true;
+            }
+            if (!saveV4Flow()) {
+                failures = true;
+            }
         }
         System.out.println(failures ? "HEADLESS TEST FAILED" : "HEADLESS TEST PASSED");
         System.exit(failures ? 1 : 0);
+    }
+
+
+    // ------------------------------------------------------------------
+    // combat: four swing styles, cooldown, one-hit kills
+    // ------------------------------------------------------------------
+
+    /** Swings once in a controlled body state, waiting out the cooldown. */
+    private static void swingInState(Game g, float vx, float vy, boolean ground) {
+        tick(g, (int) (Constants.SWORD_COOLDOWN * 60f) + 6);
+        g.player.vx = vx;
+        g.player.vy = vy;
+        if (!ground) {
+            g.player.y -= 140f;   // leave the ground line
+        }
+        g.player.onGround = ground;
+        g.input.key(InputController.KEY_ATTACK, true);
+        g.update(DT);
+        g.input.key(InputController.KEY_ATTACK, false);
+    }
+
+    private static boolean combatFlow() {
+        Game g = new Game(new Silent());
+        g.resize(1920, 1080);
+        g.newGame();
+        tick(g, 30);
+        float groundY = g.player.y;
+
+        // grounded and slow -> the tall standing chop
+        swingInState(g, 0f, 0f, true);
+        if (g.player.swingStyle != SwordStyle.GROUND_IDLE) {
+            return fail("combat", "standing swing picked " + g.player.swingStyle);
+        }
+        float[] box = g.player.attackBox();
+        if (box == null) {
+            return fail("combat", "no hitbox while swinging");
+        }
+        if (g.player.facingRight && box[0] < g.player.x + g.player.w * 0.3f) {
+            return fail("combat", "standing hitbox is not in front");
+        }
+        if (g.player.attackCooldown <= 0f) {
+            return fail("combat", "swing did not arm the cooldown");
+        }
+        if (g.player.y != groundY) {
+            return fail("combat", "a grounded swing moved the player");
+        }
+
+        // mashing is throttled
+        int swings = g.player.swings;
+        g.input.key(InputController.KEY_ATTACK, true);
+        tick(g, 2);
+        g.input.key(InputController.KEY_ATTACK, false);
+        if (g.player.swings > swings && g.player.attackCooldown > Constants.SWORD_COOLDOWN * 0.5f) {
+            return fail("combat", "cooldown did not throttle the next swing");
+        }
+
+        // grounded and fast -> the running slash, with longer reach
+        swingInState(g, Constants.RUN_SPEED, 0f, true);
+        if (g.player.swingStyle != SwordStyle.GROUND_RUN) {
+            return fail("combat", "running swing picked " + g.player.swingStyle);
+        }
+        float[] run = g.player.attackBox();
+        if (run == null || run[2] <= Constants.SWORD_REACH) {
+            return fail("combat", "running slash did not reach further");
+        }
+
+        // rising -> upward arc above the head
+        swingInState(g, 0f, -600f, false);
+        if (g.player.swingStyle != SwordStyle.AIR_RISE) {
+            return fail("combat", "rising swing picked " + g.player.swingStyle);
+        }
+        float[] rise = g.player.attackBox();
+        if (rise == null || rise[1] + rise[3] > g.player.y + g.player.h) {
+            return fail("combat", "rising hitbox is not above the body");
+        }
+
+        // falling -> plunge arc below the feet
+        swingInState(g, 0f, 600f, false);
+        if (g.player.swingStyle != SwordStyle.AIR_FALL) {
+            return fail("combat", "falling swing picked " + g.player.swingStyle);
+        }
+        float[] fall = g.player.attackBox();
+        if (fall == null || fall[1] < g.player.y + g.player.h * 0.3f) {
+            return fail("combat", "falling hitbox is not below the body");
+        }
+        tick(g, 20);
+
+        // one swing kills the walker in front, never the one behind
+        Game h = new Game(new Silent());
+        h.resize(1920, 1080);
+        h.newGame();
+        tick(h, 30);
+        h.enemies.clear();
+        Enemy front = new Enemy(Enemy.Type.WALKER,
+                h.player.x + h.player.w + 12f, h.player.y);
+        Enemy behind = new Enemy(Enemy.Type.WALKER,
+                h.player.x - 90f, h.player.y);
+        h.enemies.add(front);
+        h.enemies.add(behind);
+        int score0 = h.score;
+        h.input.key(InputController.KEY_ATTACK, true);
+        tick(h, 3);
+        h.input.key(InputController.KEY_ATTACK, false);
+        if (!front.dead) {
+            return fail("combat", "the sword did not kill the walker in front");
+        }
+        if (behind.dead) {
+            return fail("combat", "the sword killed a walker behind the player");
+        }
+        if (h.score != score0 + Constants.SCORE_ATTACK) {
+            return fail("combat", "attack kill scored " + (h.score - score0));
+        }
+
+        // a falling hit bounces the player back up: hoist the player into the
+        // air above a walker that stands on the ground and plunge onto it
+        Game d = new Game(new Silent());
+        d.resize(1920, 1080);
+        d.newGame();
+        tick(d, 30);
+        d.enemies.clear();
+        float feet = d.player.y + d.player.h;
+        d.player.y -= 46f;
+        d.player.onGround = false;
+        d.player.vy = 200f;
+        Enemy below = new Enemy(Enemy.Type.WALKER,
+                d.player.x + 10f, feet - Constants.WALKER_H);
+        d.enemies.add(below);
+        d.input.key(InputController.KEY_ATTACK, true);
+        boolean bounced = false;
+        for (int i = 0; i < 24; i++) {
+            d.update(DT);
+            if (d.player.vy < -300f) {
+                bounced = true;
+                break;
+            }
+        }
+        d.input.key(InputController.KEY_ATTACK, false);
+        if (!bounced) {
+            return fail("combat", "the falling swing did not bounce the player");
+        }
+
+        System.out.println("combat OK: four arcs, cooldown, one-hit kills, plunge bounce");
+        return true;
+    }
+
+    // ------------------------------------------------------------------
+    // secondary weapons: bow, boomerang, none, per-career persistence
+    // ------------------------------------------------------------------
+
+    private static boolean secondaryFlow() {
+        // ---- bow ------------------------------------------------------
+        Game b = new Game(new Silent());
+        b.resize(1920, 1080);
+        b.newGame();
+        tick(b, 20);
+        b.setSecondaryWeapon(Weapons.BOW);
+        if (b.secondaryWeaponId() != Weapons.BOW) {
+            return fail("secondary", "BOW did not equip");
+        }
+        b.enemies.clear();
+        Enemy target = new Enemy(Enemy.Type.WALKER, b.player.x + 260f, b.player.y);
+        b.enemies.add(target);
+        b.input.key(InputController.KEY_SECONDARY, true);
+        tick(b, 1);
+        b.input.key(InputController.KEY_SECONDARY, false);
+        if (b.projectiles.size() != 1 || b.projectiles.get(0).kind != Projectile.ARROW) {
+            return fail("secondary", "the bow did not fire one arrow");
+        }
+        if (b.secondaryCooldown <= 0f) {
+            return fail("secondary", "arrow did not arm the cooldown");
+        }
+        Projectile arrow = b.projectiles.get(0);
+        float arrowX = arrow.x;
+        tick(b, 4);
+        if (b.projectiles.isEmpty() || b.projectiles.get(0).x <= arrowX) {
+            return fail("secondary", "the arrow did not fly forwards");
+        }
+        for (int i = 0; i < 60 && !target.dead; i++) {
+            tick(b, 1);
+        }
+        if (!target.dead) {
+            return fail("secondary", "the arrow did not kill the walker");
+        }
+        if (!b.projectiles.isEmpty()) {
+            return fail("secondary", "the arrow did not die after a hit");
+        }
+        // cooldown gates a second shot
+        b.input.key(InputController.KEY_SECONDARY, true);
+        tick(b, 1);
+        b.input.key(InputController.KEY_SECONDARY, false);
+        if (!b.projectiles.isEmpty()) {
+            return fail("secondary", "the bow fired while cooling down");
+        }
+        tick(b, 90);
+        if (!b.projectiles.isEmpty()) {
+            return fail("secondary", "a stray arrow survived");
+        }
+
+        // ---- boomerang ------------------------------------------------
+        Game r = new Game(new Silent());
+        r.resize(1920, 1080);
+        r.newGame();
+        tick(r, 20);
+        r.setSecondaryWeapon(Weapons.BOOMERANG);
+        r.enemies.clear();
+        r.input.key(InputController.KEY_SECONDARY, true);
+        tick(r, 1);
+        r.input.key(InputController.KEY_SECONDARY, false);
+        if (r.projectiles.size() != 1 || r.projectiles.get(0).kind != Projectile.BOOMERANG) {
+            return fail("secondary", "the boomerang did not throw");
+        }
+        float x0 = r.projectiles.get(0).x;
+        tick(r, 12);
+        if (r.projectiles.isEmpty() || r.projectiles.get(0).x < x0 + 40f) {
+            return fail("secondary", "the boomerang did not fly out");
+        }
+        boolean sawReturn = false;
+        for (int i = 0; i < 300 && !r.projectiles.isEmpty(); i++) {
+            tick(r, 1);
+            if (!r.projectiles.isEmpty() && r.projectiles.get(0).returning) {
+                sawReturn = true;
+            }
+        }
+        if (!sawReturn) {
+            return fail("secondary", "the boomerang never turned for home");
+        }
+        if (!r.projectiles.isEmpty()) {
+            return fail("secondary", "the boomerang was never caught");
+        }
+        // the boomerang kills on the outbound leg
+        Game k = new Game(new Silent());
+        k.resize(1920, 1080);
+        k.newGame();
+        tick(k, 20);
+        k.setSecondaryWeapon(Weapons.BOOMERANG);
+        k.enemies.clear();
+        Enemy close = new Enemy(Enemy.Type.WALKER, k.player.x + 120f, k.player.y);
+        k.enemies.add(close);
+        k.input.key(InputController.KEY_SECONDARY, true);
+        tick(k, 1);
+        k.input.key(InputController.KEY_SECONDARY, false);
+        for (int i = 0; i < 90 && !close.dead; i++) {
+            tick(k, 1);
+        }
+        if (!close.dead) {
+            return fail("secondary", "the boomerang did not kill on the way out");
+        }
+
+        // ---- no weapon, and persistence ------------------------------
+        MemStore store = new MemStore();
+        Game n = new Game(new Silent(), store);
+        n.resize(1920, 1080);
+        n.setSecondaryWeapon(Weapons.NONE);
+        n.newGame();
+        tick(n, 10);
+        n.input.key(InputController.KEY_SECONDARY, true);
+        tick(n, 2);
+        n.input.key(InputController.KEY_SECONDARY, false);
+        if (!n.projectiles.isEmpty()) {
+            return fail("secondary", "NO WEAPON fired a shot");
+        }
+        // the pick survives a save round trip
+        Game reloaded = new Game(new Silent(), store);
+        if (reloaded.secondaryWeaponId() != Weapons.NONE) {
+            return fail("secondary", "the equipped weapon did not survive save/load");
+        }
+        // fresh careers default to a valid weapon id (BOW)
+        Game fresh = new Game(new Silent());
+        int wid = fresh.secondaryWeaponId();
+        if (wid < 0 || wid >= Weapons.SECONDARY_COUNT) {
+            return fail("secondary", "fresh career has an out-of-range weapon id");
+        }
+
+        System.out.println("secondary OK: bow kills and expires, boomerang returns, cooldown, persistence");
+        return true;
+    }
+
+    // ------------------------------------------------------------------
+    // level select: unlocks, cleared markers, locked rows refused
+    // ------------------------------------------------------------------
+
+    private static boolean levelSelectFlow() {
+        MemStore store = new MemStore();
+        Game g = new Game(new Silent(), store);
+        g.resize(1920, 1080);
+        if (!g.levelUnlocked(0) || g.levelUnlocked(1)) {
+            return fail("levelselect", "a fresh career starts with only level 1 unlocked");
+        }
+        if (findButton(g.menuButtons, Game.BTN_STORE) != null) {
+            return fail("levelselect", "the home screen still offers STORE");
+        }
+
+        // PLAY opens the level select, not the game
+        tapButton(g, findButton(g.menuButtons, Game.BTN_START));
+        if (g.state != Game.State.LEVEL_SELECT) {
+            return fail("levelselect", "PLAY did not open level select");
+        }
+        if (g.levelRowCount() != Levels.TEXT.length) {
+            return fail("levelselect", "level rows != level count");
+        }
+        // locked rows refuse
+        tapButton(g, findButton(g.levelButtons, Game.BTN_LEVEL_ROW + 3));
+        if (g.state != Game.State.LEVEL_SELECT) {
+            return fail("levelselect", "a locked row started a level");
+        }
+        // level 1 opens the loadout, START plays it
+        tapButton(g, findButton(g.levelButtons, Game.BTN_LEVEL_ROW));
+        if (g.state != Game.State.LOADOUT) {
+            return fail("levelselect", "level 1 row did not open the loadout");
+        }
+        tapButton(g, findButton(g.loadoutButtons, Game.BTN_START_LEVEL));
+        if (g.state != Game.State.PLAYING || g.levelIndex != 0) {
+            return fail("levelselect", "START did not play level 1");
+        }
+        tick(g, 5);
+
+        // clear level 1, reload: it is marked cleared and level 2 unlocks
+        g.profile.markCleared(0, 1234);
+        g.persist();
+        Game g2 = new Game(new Silent(), store);
+        if (!g2.levelCleared(0) || g2.profile.levelBestScore(0) != 1234) {
+            return fail("levelselect", "cleared bit / best score did not persist");
+        }
+        if (!g2.levelUnlocked(1)) {
+            return fail("levelselect", "clearing level 1 did not unlock level 2");
+        }
+        g2.openLevelSelect();
+        tapButton(g2, findButton(g2.levelButtons, Game.BTN_LEVEL_ROW + 1));
+        if (g2.state != Game.State.LOADOUT || g2.pendingLevel != 1) {
+            return fail("levelselect", "level 2 row did not open the loadout");
+        }
+        tapButton(g2, findButton(g2.loadoutButtons, Game.BTN_START_LEVEL));
+        if (g2.state != Game.State.PLAYING || g2.levelIndex != 1) {
+            return fail("levelselect", "START did not play level 2");
+        }
+        // CONTINUE still resumes the saved level
+        Game g3 = new Game(new Silent(), store);
+        tapButton(g3, findButton(g3.menuButtons, Game.BTN_CONTINUE));
+        if (g3.state != Game.State.PLAYING || g3.levelIndex != g3.profile.levelIndex) {
+            return fail("levelselect", "CONTINUE did not resume the saved level");
+        }
+
+        System.out.println("levelselect OK: locks, cleared markers, loadout entry, continue");
+        return true;
+    }
+
+    // ------------------------------------------------------------------
+    // loadout: the equipped weapon is per career and persists
+    // ------------------------------------------------------------------
+
+    private static boolean loadoutFlow() {
+        MemStore store = new MemStore();
+        Game g = new Game(new Silent(), store);
+        g.resize(1920, 1080);
+        g.openLevelSelect();
+        tapButton(g, findButton(g.levelButtons, Game.BTN_LEVEL_ROW));
+        if (g.state != Game.State.LOADOUT) {
+            return fail("loadout", "could not reach the loadout");
+        }
+        if (g.loadoutButtons.size() != Weapons.SECONDARY_COUNT + 2) {
+            return fail("loadout", "loadout rows != weapons + START + BACK");
+        }
+        tapButton(g, findButton(g.loadoutButtons, Game.BTN_WEAPON_ROW + Weapons.BOW));
+        if (g.secondaryWeaponId() != Weapons.BOW) {
+            return fail("loadout", "tapping BOW did not equip it");
+        }
+        tapButton(g, findButton(g.loadoutButtons, Game.BTN_WEAPON_ROW + Weapons.BOOMERANG));
+        if (g.secondaryWeaponId() != Weapons.BOOMERANG) {
+            return fail("loadout", "tapping BOOMERANG did not equip it");
+        }
+        // BACK returns to the level select
+        tapButton(g, findButton(g.loadoutButtons, Game.BTN_BACK));
+        if (g.state != Game.State.LEVEL_SELECT) {
+            return fail("loadout", "BACK did not return to level select");
+        }
+        // the pick survives a save round trip
+        Game g2 = new Game(new Silent(), store);
+        if (g2.secondaryWeaponId() != Weapons.BOOMERANG) {
+            return fail("loadout", "the pick did not survive save/load");
+        }
+        // the pick is per career: drive the real screens to switch careers
+        tapButton(g2, findButton(g2.menuButtons, Game.BTN_CAREER));
+        if (g2.state != Game.State.CAREER) {
+            return fail("loadout", "CAREER did not open");
+        }
+        tapButton(g2, findButton(g2.careerButtons, Game.BTN_NEW_PROFILE));
+        if (g2.profiles.size() != 2) {
+            return fail("loadout", "NEW CAREER failed");
+        }
+        tapButton(g2, findButton(g2.careerButtons, Game.BTN_BACK));
+        tapButton(g2, findButton(g2.menuButtons, Game.BTN_START));
+        tapButton(g2, findButton(g2.levelButtons, Game.BTN_LEVEL_ROW));
+        tapButton(g2, findButton(g2.loadoutButtons, Game.BTN_WEAPON_ROW + Weapons.BOW));
+        if (g2.secondaryWeaponId() != Weapons.BOW) {
+            return fail("loadout", "the new career did not equip BOW");
+        }
+        tapButton(g2, findButton(g2.loadoutButtons, Game.BTN_BACK));
+        tapButton(g2, findButton(g2.levelButtons, Game.BTN_BACK));
+        tapButton(g2, findButton(g2.menuButtons, Game.BTN_CAREER));
+        tapButton(g2, findButton(g2.careerButtons, Game.BTN_PROFILE_ROW));
+        if (g2.secondaryWeaponId() != Weapons.BOOMERANG) {
+            return fail("loadout", "the first career lost its BOOMERANG");
+        }
+
+        System.out.println("loadout OK: equip, back, save round trip, per-career build");
+        return true;
+    }
+
+    // ------------------------------------------------------------------
+    // save v4: new fields round trip; the buggy v3 layout still migrates
+    // ------------------------------------------------------------------
+
+    private static boolean saveV4Flow() {
+        MemStore store = new MemStore();
+        Game g = new Game(new Silent(), store);
+        g.resize(1920, 1080);
+        g.profile.markCleared(0, 800);
+        g.profile.markCleared(1, 950);
+        g.setSecondaryWeapon(Weapons.BOOMERANG);
+        g.profile.coins = 210;
+        g.persist();
+        SaveState mid = SaveState.decode(store.blob);
+        if (SaveState.VERSION != 4) {
+            return fail("savev4", "SaveState.VERSION is " + SaveState.VERSION);
+        }
+        if (!mid.profile().isCleared(0) || !mid.profile().isCleared(1)) {
+            return fail("savev4", "cleared bits did not survive");
+        }
+        if (mid.profile().levelBestScore(1) != 950) {
+            return fail("savev4", "per-level best did not survive");
+        }
+        if (mid.profile().equippedSecondary != Weapons.BOOMERANG) {
+            return fail("savev4", "equipped weapon did not survive");
+        }
+        // the v3 blob was written with the sound flag twice:
+        // 3|sound|sound|music|buttons|mode|active|records
+        Profile v3p = new Profile("VET", 2);
+        v3p.coins = 77;
+        v3p.levelIndex = 4;
+        v3p.unlocked = 5;
+        v3p.upgrades[Upgrades.SPEED] = 3;
+        String v3blob = "3|1|1|42|115|1|0|" + v3Record(v3p);
+        SaveState v3 = SaveState.decode(v3blob);
+        Profile vp = v3.profile();
+        if (!vp.name.equals("VET") || vp.coins != 77 || vp.levelIndex != 4 || vp.unlocked != 5) {
+            return fail("savev4", "v3 progress lost: " + vp.name + "/" + vp.coins);
+        }
+        if (v3.music != 42 || v3.buttons != 115 || v3.mode != 1 || !v3.sound) {
+            return fail("savev4", "v3 settings misread (duplicate sound flag not skipped)");
+        }
+        if (vp.upgradeLevel(Upgrades.SPEED) != 3) {
+            return fail("savev4", "v3 upgrades lost");
+        }
+        if (vp.equippedSecondary < 0 || vp.equippedSecondary >= Weapons.SECONDARY_COUNT) {
+            return fail("savev4", "v3 weapon id out of range");
+        }
+        // garbage never throws
+        String[] bad = {null, "", "x", "4|1", "99|1|2|3|4|5|0", "4|1|70|100|0|0|short,record"};
+        for (String b : bad) {
+            SaveState.decode(b);
+        }
+
+        System.out.println("savev4 OK: new fields round trip, buggy v3 migrates, garbage tolerated");
+        return true;
+    }
+
+    /** Encodes a profile in the old v3 17-field record layout. */
+    private static String v3Record(Profile p) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(p.name).append(',')
+                .append(p.colorIndex).append(',')
+                .append(p.coins).append(',')
+                .append(p.levelIndex).append(',')
+                .append(p.unlocked).append(',')
+                .append(p.levelsCleared).append(',')
+                .append(p.coinsCollected).append(',')
+                .append(p.bestScore).append(',')
+                .append(p.stomps).append(',')
+                .append(p.deaths).append(',')
+                .append(0L);
+        for (int id = 0; id < Upgrades.COUNT; id++) {
+            sb.append(',').append(p.upgrades[id]);
+        }
+        return sb.toString();
     }
 
     // ------------------------------------------------------------------
@@ -263,6 +762,24 @@ public final class HeadlessTest {
     }
 
     /** Tap the centre of a menu button on the given game. */
+    /**
+     * Drives PLAY -> LEVEL_SELECT -> level row -> LOADOUT -> START, which is
+     * how the menus now begin a level. Falls back to nothing when a step is
+     * missing so callers can assert the outcome.
+     */
+    private static void startLevelThroughMenus(Game game, int levelIndex) {
+        game.input.consumeConfirm();
+        tapButton(game, findButton(game.menuButtons, Game.BTN_START));
+        if (game.state != Game.State.LEVEL_SELECT) {
+            return;
+        }
+        tapButton(game, findButton(game.levelButtons, Game.BTN_LEVEL_ROW + levelIndex));
+        if (game.state != Game.State.LOADOUT) {
+            return;
+        }
+        tapButton(game, findButton(game.loadoutButtons, Game.BTN_START_LEVEL));
+    }
+
     private static void tapButton(Game game, Game.UiButton b) {
         game.input.pointerDown(1, b.x + b.w / 2f, b.y + b.h / 2f);
         game.update(DT);
@@ -312,8 +829,13 @@ public final class HeadlessTest {
         if (c.padR <= 0f || c.padCX - c.padHitR < 0f || c.padCY + c.padHitR > g.input.screenH()) {
             return fail("pad", "the pad does not fit on screen");
         }
-        if (c.inJump(c.padCX, c.padCY)) {
-            return fail("pad", "pad centre overlaps the jump button");
+        if (c.inAttack(c.padCX, c.padCY) || c.inSecondary(c.padCX, c.padCY)) {
+            return fail("pad", "pad centre overlaps a weapon disc");
+        }
+        // the attack disc replaced the old jump disc in the right-hand corner
+        if (c.attackHitR <= 0f || c.attackX + c.attackHitR > g.input.screenW()
+                || c.secHitR <= 0f || c.secX < 0f) {
+            return fail("pad", "the weapon discs do not fit on screen");
         }
         tick(g, 40);
         float groundY = g.player.y;
@@ -492,8 +1014,16 @@ public final class HeadlessTest {
         game.update(DT);
         game.input.pointerUp(1);
         game.update(DT);
+        if (game.state != Game.State.LEVEL_SELECT) {
+            return fail("smoke", "tapping PLAY did not open level select (" + game.state + ")");
+        }
+        tapButton(game, findButton(game.levelButtons, Game.BTN_LEVEL_ROW));
+        if (game.state != Game.State.LOADOUT) {
+            return fail("smoke", "level row did not open the loadout (" + game.state + ")");
+        }
+        tapButton(game, findButton(game.loadoutButtons, Game.BTN_START_LEVEL));
         if (game.state != Game.State.PLAYING) {
-            return fail("smoke", "tapping START did not begin play (" + game.state + ")");
+            return fail("smoke", "LOADOUT START did not begin play (" + game.state + ")");
         }
         game.input.key(InputController.KEY_RIGHT, true);
         for (int i = 0; i < 300; i++) {
@@ -676,7 +1206,7 @@ public final class HeadlessTest {
         if (mid.mode != Game.Mode.COIN_COLLECTOR.ordinal()) {
             return fail("coinrush", "mode not persisted: " + store.blob);
         }
-        tapButton(game, findButton(game.menuButtons, Game.BTN_START));
+        startLevelThroughMenus(game, 0);
         if (game.state != Game.State.PLAYING || game.mode != Game.Mode.COIN_COLLECTOR) {
             return fail("coinrush", "start did not enter coin collector");
         }

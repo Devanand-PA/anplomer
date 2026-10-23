@@ -24,6 +24,16 @@ level it had reached, so `CONTINUE` picks up there.
 There is no clock that kills you. Each level has a **par time** (see the level
 table in §1.11); every second you finish under par is worth bonus points.
 
+### 1.1b From the menu into a level
+
+`PLAY` opens the **level select**: a grid of all eight levels, showing each
+level's name; levels you have cleared carry a green border with
+`CLEARED • BEST <score>`, locked ones are dimmed and refuse a tap. Picking an
+unlocked level opens the **loadout** — the level name, your wallet, one row per
+secondary weapon with an `EQUIPPED` marker, then **START**. So a pre-run
+ritual looks like: `PLAY → pick a level → pick a weapon → START`. `CONTINUE`
+skips all of that and resumes the career's saved level.
+
 ### 1.2 Controls
 
 | Action | Touch | Keyboard |
@@ -31,7 +41,8 @@ table in §1.11); every second you finish under par is worth bonus points.
 | Run left / right | drag the circle-pad at the bottom left (analogue: half tilt walks, full tilt sprints) | `←` / `→` or `A` / `D` |
 | Jump | drag the pad up, up-left or up-right — the jump fires as the drag crosses the up threshold and steers in the same gesture | `↑`, `W` or `Space` |
 | Short hop | drag the pad down while rising | release the key early |
-| Jump (button) | the round button at the bottom right also jumps | — |
+| Attack (sword) | the large **ATTACK** disc at the bottom right | `J` or `X` |
+| Secondary weapon | the smaller disc left of ATTACK (bow / boomerang) | `K` or `C` |
 | Pause | pause button, top-right | `P` or `Esc` |
 | Restart the level | pause menu | `R` |
 | Mute / unmute | speaker button, top-right | `M` |
@@ -48,8 +59,35 @@ zone so a resting thumb does not drift, and the up/down gestures use hysteresis
 so wobbling on a threshold cannot stutter a jump. The chevrons light up as the
 knob approaches them.
 
-The size of the on-screen arrows and jump button is adjustable in
+The size of the on-screen pad and weapon discs is adjustable in
 `SETTINGS → MOVE BUTTON SIZE`.
+
+### 1.2b Combat: the sword follows your movement
+
+Press ATTACK and the hero swings — but **which arc you get depends on how the
+body is moving at that instant**:
+
+| You are… | The sword does… |
+| --- | --- |
+| standing / walking | a tall overhead chop right in front |
+| running | a longer, lower forward slash that reaches further |
+| rising in the air | an upward arc above the head |
+| falling in the air | a plunge arc below the feet that bounces you back up on a hit |
+
+The blade is dangerous for 0.2 s and swings again every 0.3 s while held; one
+hit defeats an enemy, like a stomp. The plunge bounce makes falling attacks a
+real move: dive onto something from above and you pop back up instead of
+landing in it.
+
+### 1.2c Secondary weapons
+
+The smaller disc left of ATTACK fires the weapon equipped for this career
+(choose it on the **loadout** screen, below). The **BOW** shoots a fast arrow
+that drops slightly, breaks on walls and stops on the first enemy it hits. The
+**BOOMERANG** flies out, turns, then homes back to your hand — it kills on
+either leg and banks off walls instead of breaking. Each has its own cooldown
+(0.42 s / 0.70 s), shown as a wedge on the disc; `NO WEAPON` leaves you with
+just the sword. A fresh career starts with the bow equipped.
 
 ### 1.3 The heads-up display
 
@@ -159,13 +197,18 @@ wallet, level progress and lifetime stats. Up to **6** careers can exist.
 | tap a row | make that career active (highlighted gold, marked `ACTIVE`) |
 | `NEW CAREER` | creates and activates a fresh career at level 1 with an empty wallet |
 | `DELETE` | two-tap delete (the second tap confirms); the last career can never be deleted |
+| `STORE` | open the store for the active career |
+| `BACK` | return to the menu |
 
-Each career keeps its **own** coins, unlocks, upgrades and best score, so two
-players on the same phone never overwrite each other's progress.
+Each career keeps its **own** coins, unlocks, upgrades, equipped secondary
+weapon, per-level cleared flags / best scores and lifetime stats, so two
+players on the same phone never overwrite each other's progress. A career's
+upgrade levels plus its equipped weapon together are its **build**.
 
 ### 1.10 The store
 
-Open with `STORE`. Spending happens on the **active career's** wallet only, and
+Open with `STORE` inside the **career hub** (the store is that screen's child:
+its BACK returns to careers, it is not on the home screen). Spending happens on the **active career's** wallet only, and
 upgrades are permanent for that career (they are not consumables).
 
 | Upgrade | Effect per level | Max | Prices |
@@ -293,6 +336,14 @@ chaining: `COYOTE_TIME 0.10 s`, `JUMP_BUFFER 0.13 s`, `JUMP_CUT 0.45` on early
 release. The career upgrades feed in as multipliers (`speedMul`, `jumpMul`) and
 the double-jump power-up adds `airJumps`.
 
+Combat lives here too: `startSwing` picks a `SwordStyle` from the body state
+(`onGround` + `|vx| >= SWORD_RUN_SPEED` + the sign of `vy`), runs
+`swingTimer`/`attackCooldown`, and reports the live hitbox through
+`attackBox()` (`null` while idle; the returned array is reused, so read it
+before the next call). `Game` applies the box to enemies in step 3b of
+`updatePlaying`; an `AIR_FALL` kill also sets `vy` up to `min(vy, -380)`, the
+plunge bounce.
+
 ### 2.4 `Enemy` and `MovingPlatform`
 
 `Enemy` is a walker (patrols, turns at walls and ledges) or a flyer (bobs in a
@@ -349,13 +400,18 @@ accent colours; the career/store screens reuse the same palette under a scrim.
 ### 2.8 `SaveState`, `Profile`, `Upgrades`
 
 * `SaveState` (with `SaveStore` for I/O) reads/writes a single string blob at
-  version 3:
-  `3|sound|music|buttons|mode|active|<profile>;<profile>;…` where a profile is
-  `name,color,coins,level,unlocked,cleared,coinsCollected,bestScore,stomps,deaths,playMillis,u0…u5`.
-  It clamps everything on load, migrates v1/v2, and falls back to defaults on
-  garbage.
-* `Profile` is one career: wallet, unlock pointer, stats and the six upgrade
-  levels, with derived getters (`speedMul`, `jumpMul`, `startLives`,
+  version 4:
+  `4|sound|music|buttons|mode|active|<profile>;<profile>;…` where a profile is
+  `name,color,coins,level,unlocked,cleared,coinsCollected,bestScore,stomps,deaths,playMillis,u0…u5,equipped,clearedBits,b0…b7`
+  (equipped = `Weapons` id, `clearedBits` = one bit per level, `b0…b7` =
+  per-level best scores). It clamps everything on load, migrates v1/v2/v3, and
+  falls back to defaults on garbage. Note for v3: the old encoder wrote the
+  sound flag twice (`3|sound|sound|music|…`), and the v3 reader parses exactly
+  that layout so existing installs keep their settings.
+* `Profile` is one career: wallet, unlock pointer, stats, the six upgrade
+  levels, the equipped secondary weapon (`equippedSecondary`), the cleared
+  bitmap and per-level bests (`markCleared(i, score)` raises bit, best and the
+  unlock pointer), with derived getters (`speedMul`, `jumpMul`, `startLives`,
   `powerTimeMul`, `magnetRadius`, `startShield`) that the simulation reads.
 * `Upgrades` is pure data: ids, names, descriptions, `MAX`, base price and price
   step. `Profile.upgradeLevel(id)`, `canAfford(id)` and `nextPrice(id)` drive both
@@ -414,6 +470,25 @@ The renderer runs on the JVM because `tools/stub` provides small
    branch in `Level.power(char)`.
 2. Handle the effect in `Game.collectPowerUp` and the HUD in `Renderer.drawHud`.
 3. Add a glyph to the Python `POWER` map so levels can place it.
+
+### Add a secondary weapon
+
+1. Append an id in `Weapons` (`SECONDARY_NAME`, `SECONDARY_DESC`,
+   `SECONDARY_COUNT`) and its cooldown in `Weapons.cooldown` + `Constants`.
+2. Teach `Projectile` the flight (a new `kind`, its constants in `Constants`,
+   physics in `Projectile.update`) and fire it in `Game.fireSecondary`.
+3. Draw the disc glyph in `Renderer.drawSecondaryGlyph`, the projectile in
+   `Renderer.drawProjectiles`, and the loadout row comes free. The save slot is
+   `Profile.equippedSecondary` (already clamped to `Weapons.SECONDARY_COUNT`).
+
+### Add a sword arc / style
+
+1. Add the enum value in `SwordStyle`.
+2. Choose it in `Player.startSwing` (the body-state test) and give it a
+   hitbox in `Player.attackBox`.
+3. Give it angles in `Renderer.drawSwing` (screen-space degrees: 0 = forward,
+   −90 = up, +90 = down) and mention it in the tutorial rows (`HELP_ROWS`).
+4. Cover it in `HeadlessTest.combatFlow`.
 
 ### Add or retune an upgrade
 

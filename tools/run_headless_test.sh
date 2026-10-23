@@ -11,8 +11,12 @@ mkdir -p "$OUT"
 
 PURE_SOURCES=(
   "$SRC/Constants.java"
+  "$SRC/Stats.java"
   "$SRC/Level.java"
   "$SRC/Levels.java"
+  "$SRC/Weapons.java"
+  "$SRC/SwordStyle.java"
+  "$SRC/Projectile.java"
   "$SRC/Controls.java"
   "$SRC/InputController.java"
   "$SRC/Player.java"

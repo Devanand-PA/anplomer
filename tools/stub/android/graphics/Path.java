@@ -9,8 +9,12 @@ import java.util.List;
  */
 public class Path {
 
+    /** Mirrors android.graphics.Path.FillType; used by generated SVG art. */
+    public enum FillType { WINDING, EVEN_ODD, INVERSE_WINDING, INVERSE_EVEN_ODD }
+
     /** Each entry is {"M"|"L"|"Q"|"C", x, y, ...}. */
     public final List<float[]> segments = new ArrayList<>();
+    private FillType fillType = FillType.WINDING;
     private float lastX, lastY;
     private boolean closed;
 
@@ -27,11 +31,21 @@ public class Path {
         lastX = x3; lastY = y3;
     }
     public void close() { closed = true; segments.add(new float[]{'Z'}); }
-    public void reset() { segments.clear(); closed = false; }
+    public void reset() { segments.clear(); closed = false; fillType = FillType.WINDING; }
     public void rewind() { segments.clear(); closed = false; }
-    public void set(Path p) { segments.clear(); segments.addAll(p.segments); closed = p.closed; }
+    public void set(Path p) {
+        segments.clear();
+        segments.addAll(p.segments);
+        closed = p.closed;
+        fillType = p.fillType;
+    }
     public boolean isEmpty() { return segments.isEmpty(); }
     public boolean isClosed() { return closed; }
+    public void setFillType(FillType ft) {
+        if (ft == null) { throw new IllegalArgumentException("null FillType"); }
+        fillType = ft;
+    }
+    public FillType getFillType() { return fillType; }
 
     private void chk(float... v) {
         for (float f : v) {

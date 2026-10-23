@@ -22,6 +22,15 @@ public final class Profile {
     public int levelIndex;
     public int unlocked = 1;
 
+    /** Secondary weapon this career carries (Weapons.NONE/BOW/BOOMERANG). */
+    public int equippedSecondary = Weapons.BOW;
+
+    /** One bit per level: bit i set means level i has been cleared. */
+    public int clearedBits;
+
+    /** Best score per level, indexed like {@link Levels#TEXT}; 0 when unplayed. */
+    public final int[] levelBest;
+
     // career stats
     public int levelsCleared;
     public int coinsCollected;
@@ -36,6 +45,7 @@ public final class Profile {
     public Profile(String name, int colorIndex) {
         this.name = sanitizeName(name);
         this.colorIndex = Math.floorMod(colorIndex, COLORS);
+        this.levelBest = new int[Levels.TEXT.length];
     }
 
     /** Copy of another profile (used by the reset flow and tests). */
@@ -44,6 +54,10 @@ public final class Profile {
         p.coins = other.coins;
         p.levelIndex = other.levelIndex;
         p.unlocked = other.unlocked;
+        p.equippedSecondary = other.equippedSecondary;
+        p.clearedBits = other.clearedBits;
+        System.arraycopy(other.levelBest, 0, p.levelBest, 0,
+                Math.min(other.levelBest.length, p.levelBest.length));
         p.levelsCleared = other.levelsCleared;
         p.coinsCollected = other.coinsCollected;
         p.bestScore = other.bestScore;
@@ -93,6 +107,35 @@ public final class Profile {
         coins -= price;
         upgrades[id] = upgradeLevel(id) + 1;
         return true;
+    }
+
+    // ---- levels --------------------------------------------------------
+
+    /** True when level {@code levelIndex} was cleared; false when out of range. */
+    public boolean isCleared(int levelIndex) {
+        return levelIndex >= 0 && levelIndex < Levels.TEXT.length
+                && (clearedBits & (1 << levelIndex)) != 0;
+    }
+
+    /** Best score ever achieved on {@code levelIndex}; 0 when unplayed or out of range. */
+    public int levelBestScore(int levelIndex) {
+        if (levelIndex < 0 || levelIndex >= levelBest.length) {
+            return 0;
+        }
+        return Math.max(0, levelBest[levelIndex]);
+    }
+
+    /**
+     * Records that a level was cleared: sets its bit, raises its best score and
+     * unlocks the next level. {@link #unlocked} is only ever raised, never lowered.
+     */
+    public void markCleared(int levelIndex, int score) {
+        if (levelIndex < 0 || levelIndex >= Levels.TEXT.length) {
+            return;
+        }
+        clearedBits |= 1 << levelIndex;
+        levelBest[levelIndex] = Math.max(levelBest[levelIndex], Math.max(0, score));
+        unlocked = Math.max(unlocked, Math.min(levelIndex + 2, Levels.TEXT.length));
     }
 
     // ---- derived effects ----------------------------------------------

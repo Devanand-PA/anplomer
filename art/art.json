@@ -1,0 +1,16 @@
+{
+  "$comment": [
+    "Source artwork manifest for tools/artgen/svg2java.py.",
+    "Each entry is baked into a Java class of generated Path data at build time;",
+    "the game never parses SVG. Run: tools/artgen/regen.sh",
+    "",
+    "Keys per asset: src (required, repo-relative), class, package, fit, anchor,",
+    "precision, out. See tools/artgen/README.md for the full contract.",
+    "",
+    "assets is intentionally empty: no baked art ships yet, so nothing unused",
+    "ends up in the APK. Add entries as SVGs land in art/."
+  ],
+  "package": "com.example.anplomer",
+  "outDir": "app/src/main/java/com/example/anplomer",
+  "assets": []
+}

@@ -11,7 +11,11 @@ import java.util.List;
 public final class Game implements Player.Listener {
 
     public enum State {
-        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE, HELP
+        MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE, HELP,
+        /** Pick a level from the career's unlocked ones. */
+        LEVEL_SELECT,
+        /** Pre-level screen: choose the secondary weapon, then start. */
+        LOADOUT
     }
 
     /**
@@ -91,11 +95,17 @@ public final class Game implements Player.Listener {
     public static final int BTN_STORE = 11;
     public static final int BTN_NEW_PROFILE = 12;
     public static final int BTN_DELETE_PROFILE = 13;
+    /** Loadout screen's START button. */
+    public static final int BTN_START_LEVEL = 15;
 
     /** Career rows are {@code BTN_PROFILE_ROW + profileIndex}. */
     public static final int BTN_PROFILE_ROW = 100;
     /** Store rows are {@code BTN_UPGRADE_ROW + Upgrades id}. */
     public static final int BTN_UPGRADE_ROW = 200;
+    /** Level-select rows are {@code BTN_LEVEL_ROW + levelIndex}. */
+    public static final int BTN_LEVEL_ROW = 300;
+    /** Loadout weapon rows are {@code BTN_WEAPON_ROW + Weapons id}. */
+    public static final int BTN_WEAPON_ROW = 400;
 
     // settings slider ids
     public static final int SLIDER_MUSIC = 0;
@@ -110,6 +120,8 @@ public final class Game implements Player.Listener {
     public final List<MovingPlatform> platforms = new ArrayList<>();
     public final List<Coin> coins = new ArrayList<>();
     public final List<PowerUp> powerUps = new ArrayList<>();
+    /** Live arrows and boomerangs; cleared on load, respawn and death. */
+    public final List<Projectile> projectiles = new ArrayList<>();
 
     public SoundSink sound;
     public State state = State.MENU;
@@ -154,12 +166,16 @@ public final class Game implements Player.Listener {
 
     /** Home-screen buttons; CONTINUE is only present when a save exists. */
     public final List<UiButton> menuButtons = new ArrayList<>();
-    /** Career screen: one row per profile, then NEW / DELETE / BACK. */
+    /** Career screen: one row per profile, then NEW / DELETE / STORE / BACK. */
     public final List<UiButton> careerButtons = new ArrayList<>();
     /** Buttons of the how-to-play overlay (just Back). */
     public final List<UiButton> helpButtons = new ArrayList<>();
     /** Store screen: one row per upgrade, then BACK. */
     public final List<UiButton> storeButtons = new ArrayList<>();
+    /** Level-select screen: one row per level, then BACK. */
+    public final List<UiButton> levelButtons = new ArrayList<>();
+    /** Loadout screen: one row per secondary weapon, then START and BACK. */
+    public final List<UiButton> loadoutButtons = new ArrayList<>();
 
     /** Selected game mode. */
     public Mode mode = Mode.CLASSIC;
@@ -181,6 +197,16 @@ public final class Game implements Player.Listener {
     /** Shield charges; each absorbs one hit. */
     public int shieldCharges;
 
+    // ---- combat --------------------------------------------------------
+    /** Seconds until the secondary weapon may fire again. */
+    public float secondaryCooldown;
+    /** Bumped on every sword swing; the renderer animates from it. */
+    public int swingSerial;
+    /** Level picked on LEVEL_SELECT, started by the LOADOUT screen. */
+    public int pendingLevel;
+    /** Where the store returns to (the career menu, or the home screen). */
+    private State storeReturn = State.CAREER;
+
     // ---- persistence ---------------------------------------------------
     private final SaveStore store;
     /** Loaded at construction; written back whenever something changes. */
@@ -200,6 +226,9 @@ public final class Game implements Player.Listener {
     /** Career feedback line ("CAREER FULL", "KEEP ONE CAREER", ...). */
     public String careerMsg = "";
     public float careerMsgTimer;
+    /** Level-select feedback line ("CLEAR EARLIER LEVELS FIRST"). */
+    public String levelMsg = "";
+    public float levelMsgTimer;
 
     /** State to return to when the settings overlay closes. */
     private State settingsReturn = State.MENU;
@@ -247,9 +276,12 @@ public final class Game implements Player.Listener {
         rebuildMenuButtons();
         rebuildCareerButtons();
         rebuildStoreButtons();
+        rebuildLevelButtons();
+        rebuildLoadoutButtons();
         layoutPauseButtons();
         layoutSettings();
         lives = profile.startLives();
+        pendingLevel = profile.levelIndex;
         loadLevel(profile.levelIndex);
     }
 
@@ -377,6 +409,8 @@ public final class Game implements Player.Listener {
         layoutSettings();
         layoutCareerButtons();
         layoutStoreButtons();
+        layoutLevelButtons();
+        layoutLoadoutButtons();
         layoutHelp();
     }
 
@@ -401,14 +435,13 @@ public final class Game implements Player.Listener {
     /** Rebuilds the home-screen button set for the current save state. */
     private void rebuildMenuButtons() {
         menuButtons.clear();
-        menuButtons.add(new UiButton("START GAME", BTN_START));
+        menuButtons.add(new UiButton("PLAY", BTN_START));
         if (profile.levelIndex > 0) {
             menuButtons.add(new UiButton("CONTINUE  •  LEVEL " + (profile.levelIndex + 1),
                     BTN_CONTINUE));
         }
         menuButtons.add(new UiButton("MODE:  " + mode.label, BTN_MODE));
         menuButtons.add(new UiButton("CAREER", BTN_CAREER));
-        menuButtons.add(new UiButton("STORE", BTN_STORE));
         menuButtons.add(new UiButton("SETTINGS", BTN_SETTINGS));
         menuButtons.add(new UiButton("HOW TO PLAY", BTN_HELP));
         menuButtons.add(new UiButton("SOUND:  " + (save.sound ? "ON" : "OFF"), BTN_SOUND));
@@ -496,7 +529,7 @@ public final class Game implements Player.Listener {
     }
 
     private static boolean isMenuRow(int id) {
-        return id == BTN_CAREER || id == BTN_STORE || id == BTN_SETTINGS;
+        return id == BTN_CAREER || id == BTN_SETTINGS;
     }
 
     private static boolean isMenuSmall(int id) {
@@ -530,6 +563,7 @@ public final class Game implements Player.Listener {
         }
         careerButtons.add(new UiButton("NEW CAREER", BTN_NEW_PROFILE));
         careerButtons.add(new UiButton(deleteArmed ? "CONFIRM" : "DELETE", BTN_DELETE_PROFILE));
+        careerButtons.add(new UiButton("STORE", BTN_STORE));
         careerButtons.add(new UiButton("BACK", BTN_BACK));
         layoutCareerButtons();
     }
@@ -564,9 +598,10 @@ public final class Game implements Player.Listener {
         float bh = Math.max(34f, Math.min(ph * 0.11f, 58f * scale));
         float by = top + ph - bh - ph * 0.07f;
         float gap = rowGap;
-        float bw = (pw * 0.88f - 2f * gap) / 3f;
+        float bw = (pw * 0.88f - 3f * gap) / 4f;
         UiButton newB = findCareerButton(BTN_NEW_PROFILE);
         UiButton delB = findCareerButton(BTN_DELETE_PROFILE);
+        UiButton storeB = findCareerButton(BTN_STORE);
         UiButton backB = findCareerButton(BTN_BACK);
         if (newB != null) {
             newB.x = rx;
@@ -580,8 +615,14 @@ public final class Game implements Player.Listener {
             delB.w = bw;
             delB.h = bh;
         }
+        if (storeB != null) {
+            storeB.x = rx + 2f * (bw + gap);
+            storeB.y = by;
+            storeB.w = bw;
+            storeB.h = bh;
+        }
         if (backB != null) {
-            backB.x = rx + 2f * (bw + gap);
+            backB.x = rx + 3f * (bw + gap);
             backB.y = by;
             backB.w = bw;
             backB.h = bh;
@@ -686,7 +727,7 @@ public final class Game implements Player.Listener {
     }
 
     /** Serialises and stores the current save state (no-op without a store). */
-    private void persist() {
+    void persist() {
         save.mode = mode.ordinal();
         save.sound = sound != null && sound.isEnabled();
         save.music = musicVolume;
@@ -891,8 +932,13 @@ public final class Game implements Player.Listener {
         doubleJumpTimer = 0f;
         invulnTimer = 0f;
         shieldCharges = profile.startingShields();
+        projectiles.clear();
+        secondaryCooldown = 0f;
+        pendingLevel = Math.max(0, Math.min(index, Levels.TEXT.length - 1));
         input.consumePause();   // swallow edges armed on other screens
         input.consumeMute();
+        input.consumeAttack();
+        input.consumeSecondary();
         loadLevel(index);
         setState(State.PLAYING);
         sound.play(SoundSink.SELECT);
@@ -970,6 +1016,9 @@ public final class Game implements Player.Listener {
         doubleJumpTimer = 0f;
         invulnTimer = 0f;
         shieldCharges = profile.startingShields();
+        projectiles.clear();
+        secondaryCooldown = 0f;
+        pendingLevel = levelIndex;
         spawnEntities();
         player.respawn(level.startX, level.startY);
         camera.resize(Math.max(screenWidth, 1f), Math.max(screenHeight, 1f));
@@ -982,6 +1031,7 @@ public final class Game implements Player.Listener {
         save.active = activeProfile;
         persist();
         rebuildMenuButtons();
+        rebuildLevelButtons();
     }
 
     /** Rebuild enemies/platforms/coins/power-ups; collected items stay collected. */
@@ -1063,6 +1113,8 @@ public final class Game implements Player.Listener {
         doubleJumpTimer = 0f;
         invulnTimer = 0f;
         shieldCharges = profile.startingShields();
+        projectiles.clear();
+        secondaryCooldown = 0f;
         spawnEntities();
         player.respawn(level.startX, level.startY);
         camera.snapTo(player.centerX(), player.centerY(), level);
@@ -1100,6 +1152,12 @@ public final class Game implements Player.Listener {
             careerMsgTimer -= dt;
             if (careerMsgTimer <= 0f) {
                 careerMsg = "";
+            }
+        }
+        if (levelMsgTimer > 0f) {
+            levelMsgTimer -= dt;
+            if (levelMsgTimer <= 0f) {
+                levelMsg = "";
             }
         }
         if (goalLockedTimer > 0f) {
@@ -1145,6 +1203,12 @@ public final class Game implements Player.Listener {
             case HELP:
                 updateHelp();
                 break;
+            case LEVEL_SELECT:
+                updateLevelSelect();
+                break;
+            case LOADOUT:
+                updateLoadout();
+                break;
             default:
                 break;
         }
@@ -1154,9 +1218,9 @@ public final class Game implements Player.Listener {
     }
 
     private void updateMenu() {
-        // Keyboard confirm starts a fresh run; touch uses the buttons.
+        // Keyboard confirm opens level select, exactly like the PLAY button.
         if (input.consumeConfirm()) {
-            newGame();
+            openLevelSelect();
             return;
         }
         if (input.consumeTap(tap)) {
@@ -1166,7 +1230,7 @@ public final class Game implements Player.Listener {
                 }
                 switch (b.id) {
                     case BTN_START:
-                        newGame();
+                        openLevelSelect();
                         break;
                     case BTN_CONTINUE:
                         continueGame();
@@ -1182,9 +1246,6 @@ public final class Game implements Player.Listener {
                         break;
                     case BTN_CAREER:
                         openCareer();
-                        break;
-                    case BTN_STORE:
-                        openStore();
                         break;
                     case BTN_HELP:
                         openHelp();
@@ -1234,6 +1295,8 @@ public final class Game implements Player.Listener {
                 newProfile();
             } else if (b.id == BTN_DELETE_PROFILE) {
                 deleteProfileTap();
+            } else if (b.id == BTN_STORE) {
+                openStore(State.CAREER);
             } else if (b.id == BTN_BACK) {
                 closeCareer();
             }
@@ -1241,7 +1304,9 @@ public final class Game implements Player.Listener {
         }
     }
 
-    private void openStore() {
+    /** Opens the store, remembering which screen its BACK button returns to. */
+    private void openStore(State returnTo) {
+        storeReturn = returnTo;
         storeMsg = "";
         storeMsgTimer = 0f;
         rebuildStoreButtons();
@@ -1251,8 +1316,13 @@ public final class Game implements Player.Listener {
 
     private void closeStore() {
         persist();
-        rebuildMenuButtons();
-        setState(State.MENU);
+        if (storeReturn == State.CAREER) {
+            rebuildCareerButtons();
+            setState(State.CAREER);
+        } else {
+            rebuildMenuButtons();
+            setState(State.MENU);
+        }
         sound.play(SoundSink.SELECT);
     }
 
@@ -1277,7 +1347,291 @@ public final class Game implements Player.Listener {
         }
     }
 
+    // ---- level select / loadout ---------------------------------------
+
+    /** Display names, parallel to {@link Levels#TEXT}. */
+    public static final String[] LEVEL_NAMES = {
+            "EMERALD MEADOW",
+            "SUNSET RUINS",
+            "MOONLIT PEAK",
+            "CRYSTAL CAVERNS",
+            "EMBER FORGE",
+            "WINDY BLUFFS",
+            "FROZEN SPIRE",
+            "STARFALL SUMMIT",
+    };
+
+    /** Name of a level, e.g. "EMERALD MEADOW"; never null. */
+    public String levelName(int index) {
+        int i = Math.max(0, Math.min(index, Levels.TEXT.length - 1));
+        return i < LEVEL_NAMES.length ? LEVEL_NAMES[i] : ("LEVEL " + (i + 1));
+    }
+
+    /** True when the active career may play this level. */
+    public boolean levelUnlocked(int index) {
+        return index >= 0 && index < Levels.TEXT.length && index < profile.unlocked;
+    }
+
+    /** True when the active career has already cleared this level. */
+    public boolean levelCleared(int index) {
+        return index >= 0 && index < Levels.TEXT.length && profile.isCleared(index);
+    }
+
+    public float levelSelectPanelW() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenWidth * 0.9f, 980f * scale);
+    }
+
+    public float levelSelectPanelH() {
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        return Math.min(screenHeight * 0.92f, 640f * scale);
+    }
+
+    public float loadoutPanelW() {
+        return careerPanelW();
+    }
+
+    public float loadoutPanelH() {
+        return careerPanelH();
+    }
+
+    /** Number of level rows among {@link #levelButtons}. */
+    public int levelRowCount() {
+        int n = 0;
+        for (UiButton b : levelButtons) {
+            if (b.id >= BTN_LEVEL_ROW) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private void rebuildLevelButtons() {
+        levelButtons.clear();
+        for (int i = 0; i < Levels.TEXT.length; i++) {
+            String label = (i + 1) + "  " + levelName(i);
+            if (!levelUnlocked(i)) {
+                label = "LOCKED  •  " + label;
+            }
+            levelButtons.add(new UiButton(label, BTN_LEVEL_ROW + i));
+        }
+        levelButtons.add(new UiButton("BACK", BTN_BACK));
+        layoutLevelButtons();
+    }
+
+    private void layoutLevelButtons() {
+        if (levelButtons.isEmpty() || screenWidth <= 0f || screenHeight <= 0f) {
+            return;
+        }
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        float pw = levelSelectPanelW();
+        float ph = levelSelectPanelH();
+        float left = (screenWidth - pw) / 2f;
+        float top = (screenHeight - ph) / 2f;
+        float bh = Math.max(34f, Math.min(ph * 0.11f, 58f * scale));
+        float by = top + ph - bh - ph * 0.07f;
+        UiButton back = findButton(levelButtons, BTN_BACK);
+        if (back != null) {
+            back.w = pw * 0.42f;
+            back.h = bh;
+            back.x = (screenWidth - back.w) / 2f;
+            back.y = by;
+        }
+        int levels = Levels.TEXT.length;
+        int cols = 2;
+        int rows = (levels + cols - 1) / cols;
+        float rx = left + pw * 0.06f;
+        float rw = pw * 0.88f;
+        float colGap = pw * 0.03f;
+        float bw = (rw - colGap * (cols - 1)) / cols;
+        float gridTop = top + ph * 0.17f;
+        float rowGap = Math.max(4f, 10f * scale);
+        float avail = by - gridTop - rowGap * (rows - 1) - 6f * scale;
+        float rowH = Math.max(22f, Math.min(54f * scale, avail / Math.max(rows, 1)));
+        int i = 0;
+        for (UiButton b : levelButtons) {
+            if (b.id < BTN_LEVEL_ROW) {
+                continue;
+            }
+            int row = i / cols;
+            int col = i % cols;
+            b.x = rx + col * (bw + colGap);
+            b.y = gridTop + row * (rowH + rowGap);
+            b.w = bw;
+            b.h = rowH;
+            i++;
+        }
+    }
+
+    private void rebuildLoadoutButtons() {
+        loadoutButtons.clear();
+        for (int id = 0; id < Weapons.SECONDARY_COUNT; id++) {
+            loadoutButtons.add(new UiButton(Weapons.secondaryName(id), BTN_WEAPON_ROW + id));
+        }
+        loadoutButtons.add(new UiButton("START", BTN_START_LEVEL));
+        loadoutButtons.add(new UiButton("BACK", BTN_BACK));
+        layoutLoadoutButtons();
+    }
+
+    private void layoutLoadoutButtons() {
+        if (loadoutButtons.isEmpty() || screenWidth <= 0f || screenHeight <= 0f) {
+            return;
+        }
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        float pw = loadoutPanelW();
+        float ph = loadoutPanelH();
+        float left = (screenWidth - pw) / 2f;
+        float top = (screenHeight - ph) / 2f;
+        float rx = left + pw * 0.06f;
+        float rw = pw * 0.88f;
+        int weaponRows = Weapons.SECONDARY_COUNT;
+        float rowH = Math.max(30f, Math.min(56f * scale, ph * 0.12f));
+        float rowGap = rowH * 0.20f;
+        float rowsTop = top + ph * 0.22f;
+        int i = 0;
+        for (UiButton b : loadoutButtons) {
+            if (b.id < BTN_WEAPON_ROW || b.id >= BTN_WEAPON_ROW + Weapons.SECONDARY_COUNT) {
+                continue;
+            }
+            b.x = rx;
+            b.y = rowsTop + i * (rowH + rowGap);
+            b.w = rw;
+            b.h = rowH;
+            i++;
+        }
+        float bh = Math.max(34f, Math.min(ph * 0.11f, 58f * scale));
+        float by = top + ph - bh - ph * 0.07f;
+        float gap = rowGap;
+        float bw = (rw - gap) / 2f;
+        UiButton start = findButton(loadoutButtons, BTN_START_LEVEL);
+        UiButton back = findButton(loadoutButtons, BTN_BACK);
+        if (start != null) {
+            start.x = rx;
+            start.y = by;
+            start.w = bw;
+            start.h = bh;
+        }
+        if (back != null) {
+            back.x = rx + bw + gap;
+            back.y = by;
+            back.w = bw;
+            back.h = bh;
+        }
+    }
+
+    /** Opens the level picker from the home screen. */
+    public void openLevelSelect() {
+        pendingLevel = Math.max(0, Math.min(profile.levelIndex, Levels.TEXT.length - 1));
+        levelMsg = "";
+        levelMsgTimer = 0f;
+        rebuildLevelButtons();
+        setState(State.LEVEL_SELECT);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void closeLevelSelect() {
+        persist();
+        rebuildMenuButtons();
+        setState(State.MENU);
+        sound.play(SoundSink.SELECT);
+    }
+
+    /** Opens the pre-level loadout screen for an unlocked level. */
+    public void openLoadout(int levelIndex) {
+        if (!levelUnlocked(levelIndex)) {
+            levelMsg = "CLEAR EARLIER LEVELS FIRST";
+            levelMsgTimer = 2f;
+            sound.play(SoundSink.SELECT);
+            return;
+        }
+        pendingLevel = Math.max(0, Math.min(levelIndex, Levels.TEXT.length - 1));
+        rebuildLoadoutButtons();
+        setState(State.LOADOUT);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void closeLoadout() {
+        rebuildLevelButtons();
+        setState(State.LEVEL_SELECT);
+        sound.play(SoundSink.SELECT);
+    }
+
+    private void updateLevelSelect() {
+        if (input.consumeBack()) {
+            closeLevelSelect();
+            return;
+        }
+        if (!input.consumeTap(tap)) {
+            return;
+        }
+        for (UiButton b : levelButtons) {
+            if (!b.contains(tap[0], tap[1])) {
+                continue;
+            }
+            if (b.id >= BTN_LEVEL_ROW) {
+                openLoadout(b.id - BTN_LEVEL_ROW);
+            } else if (b.id == BTN_BACK) {
+                closeLevelSelect();
+            }
+            return;
+        }
+    }
+
+    private void updateLoadout() {
+        if (input.consumeBack()) {
+            closeLoadout();
+            return;
+        }
+        if (!input.consumeTap(tap)) {
+            return;
+        }
+        for (UiButton b : loadoutButtons) {
+            if (!b.contains(tap[0], tap[1])) {
+                continue;
+            }
+            if (b.id >= BTN_WEAPON_ROW && b.id < BTN_WEAPON_ROW + Weapons.SECONDARY_COUNT) {
+                setSecondaryWeapon(b.id - BTN_WEAPON_ROW);
+            } else if (b.id == BTN_START_LEVEL) {
+                startRun(pendingLevel);
+            } else if (b.id == BTN_BACK) {
+                closeLoadout();
+            }
+            return;
+        }
+    }
+
+    /** The active career's equipped secondary weapon (always in range). */
+    public int secondaryWeaponId() {
+        return Weapons.clampSecondary(profile.equippedSecondary);
+    }
+
+    /** Equips a secondary weapon for the active career and saves it. */
+    public void setSecondaryWeapon(int id) {
+        int w = Weapons.clampSecondary(id);
+        if (profile.equippedSecondary == w) {
+            return;
+        }
+        profile.equippedSecondary = w;
+        persist();
+        rebuildLoadoutButtons();
+        rebuildCareerButtons();
+        sound.play(SoundSink.SELECT);
+    }
+
+    private static UiButton findButton(List<UiButton> list, int id) {
+        for (UiButton b : list) {
+            if (b.id == id) {
+                return b;
+            }
+        }
+        return null;
+    }
+
     private void updatePaused() {
+        // The weapon discs are not on screen while paused: drop any queued
+        // press so the game does not swing the moment it resumes.
+        input.consumeAttack();
+        input.consumeSecondary();
         if (input.consumeConfirm() || input.consumeBack()) {
             setState(State.PLAYING);
             sound.play(SoundSink.SELECT);
@@ -1403,6 +1757,70 @@ public final class Game implements Player.Listener {
         // 3. player physics
         player.update(dt, input, level, platforms, this);
 
+        // 3b. primary weapon: the sword arc currently out in front / above /
+        // below the body kills every enemy it covers (one hit, like a stomp).
+        if (!player.dead && player.attacking()) {
+            float[] box = player.attackBox();
+            if (box != null) {
+                for (int i = 0; i < enemies.size(); i++) {
+                    Enemy e = enemies.get(i);
+                    if (e.dead) {
+                        continue;
+                    }
+                    if (Level.rectsOverlap(box[0], box[1], box[2], box[3],
+                            e.x, e.y, e.w, e.h)) {
+                        // One hit per enemy per swing: a mob that survives the
+                        // blow must not be damaged again on every frame the arc
+                        // stays out.
+                        if (e.hitSwingSerial != swingSerial) {
+                            e.hitSwingSerial = swingSerial;
+                            hitEnemy(e, Stats.Hero.ATTACK, player.swingStyle);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3c. secondary weapon: fired on a press, auto-repeating while held
+        if (!player.dead) {
+            if (secondaryCooldown > 0f) {
+                secondaryCooldown = Math.max(0f, secondaryCooldown - dt);
+            }
+            boolean pressed = input.consumeSecondary();
+            if (secondaryCooldown <= 0f && (pressed || input.secondaryHeld)) {
+                fireSecondary();
+            }
+        } else {
+            input.consumeSecondary();
+        }
+
+        // 3d. projectiles fly, kill enemies and expire
+        if (!projectiles.isEmpty()) {
+            for (int i = projectiles.size() - 1; i >= 0; i--) {
+                Projectile p = projectiles.get(i);
+                p.update(dt, player, level);
+                if (!p.dead && !player.dead) {
+                    for (int k = 0; k < enemies.size(); k++) {
+                        Enemy e = enemies.get(k);
+                        if (e.dead) {
+                            continue;
+                        }
+                        if (p.overlaps(e.x, e.y, e.w, e.h) && e.lastHitBy != p) {
+                            e.lastHitBy = p;
+                            hitEnemy(e, Stats.Hero.ATTACK, null);
+                            if (p.kind == Projectile.ARROW) {
+                                p.dead = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (p.dead) {
+                    projectiles.remove(i);
+                }
+            }
+        }
+
         // 4. player vs enemies
         if (!player.dead) {
             for (int i = 0; i < enemies.size(); i++) {
@@ -1415,18 +1833,19 @@ public final class Game implements Player.Listener {
                 }
                 boolean stomping = player.vy > 0f && player.prevBottom <= e.y + e.h * 0.5f;
                 if (stomping) {
-                    e.dead = true;
-                    e.deadTimer = Constants.SQUASH_TIME;
                     player.vy = -Constants.STOMP_BOUNCE;
                     player.squash = 1.32f;
-                    score += Constants.SCORE_STOMP;
-                    profile.stomps++;
                     camera.shake(7f, 0.18f);
                     sound.play(SoundSink.STOMP);
-                    particles.poof(e.centerX(), e.y + 8f, 10, 0xFF8BD0FF);
                     particles.dust(e.centerX(), e.y + e.h, 5, e.facing);
+                    if (e.damage(Constants.STOMP_DAMAGE)) {
+                        defeatEnemy(e, null, true);
+                    } else {
+                        // Survived the stomp: bounce away, keep fighting.
+                        particles.poof(e.centerX(), e.y + 8f, 10, 0xFF8BD0FF);
+                    }
                 } else if (invulnTimer <= 0f) {
-                    hurtPlayer();
+                    hurtPlayer(e.attack);
                     break;
                 }
             }
@@ -1438,9 +1857,32 @@ public final class Game implements Player.Listener {
                     player.w - 14f, player.h - 14f);
             boolean fell = player.y > (level.h + 1) * Constants.TILE;
             if (fell) {
-                killPlayer();          // a pit is fatal even through a shield
+                // Pits drain HP; a life is spent only when HP reaches zero.
+                if (!player.dead) {
+                    if (shieldCharges > 0) {
+                        shieldCharges--;
+                        invulnTimer = Constants.INVULN_TIME;
+                        sound.play(SoundSink.HURT);
+                        camera.shake(9f, 0.28f);
+                        particles.poof(player.centerX(), player.centerY(), 12, 0xFF7FD8FF);
+                        particles.sparkle(player.centerX(), player.centerY(), 8);
+                    } else {
+                        int amount = Math.max(1, Constants.PIT_DAMAGE);
+                        player.hp = Math.max(0, player.hp - amount);
+                        invulnTimer = Math.max(invulnTimer, Stats.Hero.HURT_INVULN);
+                        sound.play(SoundSink.HURT);
+                        camera.shake(7f, 0.22f);
+                        particles.poof(player.centerX(), player.centerY(), 9, 0xFFE4453A);
+                        if (player.hp <= 0) {
+                            killPlayer();
+                        }
+                    }
+                }
+                if (!player.dead) {
+                    recoverFromPit();
+                }
             } else if (hit) {
-                hurtPlayer();
+                hurtPlayer(Constants.HAZARD_DAMAGE);
             }
         }
 
@@ -1576,6 +2018,76 @@ public final class Game implements Player.Listener {
         particles.poof(pu.x, pu.y, 8, 0xFFB6F0FF);
     }
 
+    // ---- combat --------------------------------------------------------
+
+    /** Fires the active career's secondary weapon out of the player's hands. */
+    private void fireSecondary() {
+        int id = secondaryWeaponId();
+        if (!Weapons.isRanged(id)) {
+            return;
+        }
+        int kind = id == Weapons.BOW ? Projectile.ARROW : Projectile.BOOMERANG;
+        float cx = player.centerX() + (player.facingRight ? 24f : -24f);
+        float cy = player.centerY() - 6f;
+        projectiles.add(new Projectile(kind, cx, cy, player.facingRight ? 1 : -1));
+        secondaryCooldown = Weapons.cooldown(id);
+        sound.play(kind == Projectile.ARROW ? SoundSink.ARROW : SoundSink.THROW);
+        particles.dust(cx, cy, 2, player.facingRight ? 1f : -1f);
+    }
+
+    /**
+     * Damage an enemy with the hero's attack. A non-fatal hit gives it a white
+     * flash; a fatal hit follows the usual squash/death flow.
+     */
+    private void hitEnemy(Enemy e, int damage, SwordStyle style) {
+        if (e.dead) {
+            return;
+        }
+        boolean fatal = e.damage(damage);
+        if (fatal) {
+            defeatEnemy(e, style, false);
+            return;
+        }
+        sound.play(SoundSink.HIT);
+        particles.sparkle(e.centerX(), e.centerY(), 4);
+        if (style == SwordStyle.AIR_FALL) {
+            player.vy = Math.min(player.vy, -380f);
+            player.squash = 1.2f;
+        }
+    }
+
+    /**
+     * One weapon hit kills an enemy, exactly like a stomp. A plunge arc
+     * ({@link SwordStyle#AIR_FALL}) also kicks the player back up, which makes
+     * the falling swing a usable dive attack.
+     */
+    private void defeatEnemy(Enemy e, SwordStyle style) {
+        defeatEnemy(e, style, false);
+    }
+
+    private void defeatEnemy(Enemy e, SwordStyle style, boolean stomp) {
+        if (e.dead) {
+            return;
+        }
+        e.dead = true;
+        e.deadTimer = Constants.SQUASH_TIME;
+        if (stomp) {
+            score += Constants.SCORE_STOMP;
+            profile.stomps++;
+            particles.poof(e.centerX(), e.y + 8f, 10, 0xFF8BD0FF);
+        } else {
+            score += Constants.SCORE_ATTACK;
+            particles.poof(e.centerX(), e.y + e.h * 0.5f, 9, 0xFFB6F0FF);
+            particles.sparkle(e.centerX(), e.centerY(), 6);
+        }
+        camera.shake(stomp ? 7f : 4f, stomp ? 0.18f : 0.12f);
+        sound.play(SoundSink.HIT);
+        if (style == SwordStyle.AIR_FALL) {
+            player.vy = Math.min(player.vy, -380f);
+            player.squash = 1.2f;
+        }
+    }
+
     private void levelCleared() {
         int left = Math.max(0, level.parTime - (int) levelTime);
         bonusTime = left * Constants.SCORE_TIME_UNIT;
@@ -1588,8 +2100,10 @@ public final class Game implements Player.Listener {
         profile.coins += rewardCoins;
         runCoins += rewardCoins;
         profile.levelsCleared++;
+        profile.markCleared(levelIndex, score);
         profile.recordScore(score);
         persist();
+        rebuildLevelButtons();
         setState(State.LEVEL_CLEARED);
         sound.play(SoundSink.CLEAR);
         camera.shake(6f, 0.25f);
@@ -1600,6 +2114,12 @@ public final class Game implements Player.Listener {
         if (player.dead) {
             return;
         }
+        // A life is spent only when HP runs out (or when we explicitly kill).
+        // If we got here with health left, treat it as a spent life by
+        // draining it rather than doubling-decrementing below.
+        if (player.hp > 0) {
+            player.hp = 0;
+        }
         player.dead = true;
         player.deadTimer = Constants.RESPAWN_DELAY;
         player.vy = -Constants.DEATH_POP;
@@ -1609,6 +2129,8 @@ public final class Game implements Player.Listener {
         magnetTimer = 0f;
         doubleJumpTimer = 0f;
         invulnTimer = 0f;
+        projectiles.clear();
+        secondaryCooldown = 0f;
         profile.deaths++;
         sound.play(SoundSink.DIE);
         camera.shake(12f, 0.35f);
@@ -1617,10 +2139,24 @@ public final class Game implements Player.Listener {
     }
 
     /**
-     * One hit from an enemy or a hazard: a shield charge soaks it (plus a short
-     * invulnerability so the same hazard cannot chain), otherwise it kills.
+     * Damage from an enemy or a hazard. A shield charge soaks the whole hit
+     * (plus a short invulnerability so the same hazard cannot chain). Otherwise
+     * the damage lands on the hero's HP bar; a life is only spent once that bar
+     * is empty.
      */
     public void hurtPlayer() {
+        hurtPlayer(Stats.Hero.MAX_HP);
+    }
+
+    /**
+     * Damage from an enemy or a hazard. A shield charge soaks the whole hit
+     * (plus a short invulnerability so the same hazard cannot chain). Otherwise
+     * the damage lands on the hero's HP bar; a life is only spent once that bar
+     * is empty.
+     *
+     * @param damage how much HP to remove; at least one point always lands
+     */
+    public void hurtPlayer(int damage) {
         if (player.dead || invulnTimer > 0f) {
             return;
         }
@@ -1633,21 +2169,46 @@ public final class Game implements Player.Listener {
             particles.sparkle(player.centerX(), player.centerY(), 8);
             return;
         }
-        killPlayer();
+        int amount = Math.max(1, damage);
+        player.hp = Math.max(0, player.hp - amount);
+        invulnTimer = Math.max(invulnTimer, Stats.Hero.HURT_INVULN);
+        sound.play(SoundSink.HURT);
+        camera.shake(7f, 0.22f);
+        particles.poof(player.centerX(), player.centerY(), 9, 0xFFE4453A);
+        if (player.hp <= 0) {
+            killPlayer();
+        }
     }
 
     private void respawnPlayer() {
         float rx = checkpointActive ? checkpointX : level.startX;
         float ry = checkpointActive ? checkpointY : level.startY;
         spawnEntities();
-        player.respawn(rx, ry);
+        player.respawn(rx, ry);     // a spent life: HP comes back full
         speedBoostTimer = 0f;
         magnetTimer = 0f;
         doubleJumpTimer = 0f;
         invulnTimer = 0f;
         shieldCharges = 0;
+        projectiles.clear();
+        secondaryCooldown = 0f;
         camera.snapTo(player.centerX(), player.centerY(), level);
         particles.respawnBurst(player.centerX(), player.centerY(), 14);
+    }
+
+    /**
+     * Puts the hero back on solid ground after a pit fall. No life is spent and
+     * the level keeps its state, but the fall itself already cost HP.
+     */
+    private void recoverFromPit() {
+        float rx = checkpointActive ? checkpointX : level.startX;
+        float ry = checkpointActive ? checkpointY : level.startY;
+        player.reposition(rx, ry);
+        projectiles.clear();
+        secondaryCooldown = 0f;
+        invulnTimer = Constants.INVULN_TIME;   // grace period on arrival
+        camera.snapTo(player.centerX(), player.centerY(), level);
+        particles.respawnBurst(player.centerX(), player.centerY(), 10);
     }
 
     // ---- Player.Listener ---------------------------------------------
@@ -1672,6 +2233,19 @@ public final class Game implements Player.Listener {
     public void onStep() {
         particles.dust(player.x + player.w / 2f - (player.facingRight ? 12f : -12f),
                 player.y + player.h, 1, player.facingRight ? 1f : -1f);
+    }
+
+    @Override
+    public void onSwing(SwordStyle style) {
+        swingSerial++;
+        sound.play(SoundSink.SWING);
+        // a little dust where the blade starts, so every arc reads at a glance
+        float x = player.centerX() + (player.facingRight ? 26f : -26f);
+        float y = style == SwordStyle.AIR_FALL ? player.y + player.h + 8f
+                : style == SwordStyle.AIR_RISE ? player.y - 12f
+                : style == SwordStyle.GROUND_RUN ? player.y + player.h * 0.55f
+                : player.centerY();
+        particles.dust(x, y, 2, player.facingRight ? 1f : -1f);
     }
 
     // ---- helpers used by the renderer --------------------------------

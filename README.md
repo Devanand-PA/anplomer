@@ -1,9 +1,10 @@
 # Anplomer
 
 A complete, self-contained 2D platformer for Android. Eight hand-designed levels,
-five power-ups, per-player career profiles with a coin store of permanent
-upgrades, on-screen touch controls, parallax scenery, particles and procedural
-sound. No third-party or AndroidX dependencies — plain Java 17 +
+a sword whose swing changes with how you move, swappable secondary weapons
+(bow, boomerang), five power-ups, per-player career profiles with their own
+build (upgrades plus equipped weapon), a level-select flow, on-screen touch
+controls, parallax scenery, particles and procedural sound. No third-party or AndroidX dependencies — plain Java 17 +
 `SurfaceView`/`Canvas`.
 
 ```
@@ -12,15 +13,18 @@ app/src/main/java/com/example/anplomer/
 ├── Level.java            tile grid, solid/hazard queries, movers/enemies/coins
 ├── Levels.java           GENERATED level data (see tools/make_levels.py)
 ├── Controls.java         on-screen control + HUD geometry
-├── InputController.java  key/pointer state, edge-triggered jump
-├── Player.java           movement, coyote time, jump buffer, collision
+├── InputController.java  key/pointer state, edge-triggered jump/attack
+├── Player.java           movement, coyote time, jump buffer, collision, sword arcs
+├── Weapons.java          primary/secondary weapon catalogue (sword, bow, boomerang)
+├── SwordStyle.java       the four sword arcs (idle / run / rise / fall)
+├── Projectile.java       arrows and boomerangs (flight, return, wall death)
 ├── Enemy.java            walkers (turn at walls/ledges) and sine flyers
 ├── MovingPlatform.java   horizontal / vertical movers that carry riders
 ├── Coin.java  Camera.java  Particles.java  SoundSink.java
 ├── PowerUp.java          pickup glyphs (speed, shield, magnet, double jump, life)
-├── Profile.java          one career: name, colour, wallet, unlock, stats, upgrades
+├── Profile.java          one career: name, colour, wallet, unlocks, build, stats
 ├── Upgrades.java         store catalogue: names, descriptions, prices, effects
-├── SaveState.java        persisted prefs + every career profile (v3 pipe format)
+├── SaveState.java        persisted prefs + every career profile (v4 pipe format)
 ├── SaveStore.java        persistence interface (SharedPreferences impl lives in GameView)
 ├── Game.java             state machine + simulation (no android.* imports)
 ├── Renderer.java         all drawing (vector art, no bitmaps)
@@ -43,30 +47,42 @@ rasterises into a `BufferedImage`.
 
 The title screen is a real menu, not a "tap to play" poster:
 
-* **START GAME** — fresh run at level 1.
+* **PLAY** — opens the **level select**: one row per level (name, number),
+  only the levels this career has unlocked are tappable, cleared levels show
+  `CLEARED • BEST <score>`. Picking a level opens the **loadout** (below).
 * **CONTINUE • LEVEL n** — appears when a save exists; resumes on the saved
   level with fresh score and lives.
 * **MODE: CLASSIC / COIN COLLECTOR** — in *Coin Collector* the goal flag is
   padlocked until ~60 % of the level's coins are collected; the HUD shows a
   `GOAL LOCKED` chip and bumping the flag flashes how many coins are missing.
-* **CAREER** — the career screen: one row per profile (name, colour, wallet,
-  unlocked levels), plus **NEW CAREER** and a two-tap **DELETE**. Up to six
-  careers; the active one is saved and resumed.
-* **STORE** — spend the active career's coins on six permanent upgrades:
-  speed, jump, extra lives, magnet radius, power-up duration and a starting
-  shield. Prices rise with each level bought; maxed rows read `MAX`.
+* **CAREER** — the career hub: one row per profile (name, colour, wallet,
+  unlocked levels and its equipped secondary weapon), plus **NEW CAREER**, a
+  two-tap **DELETE**, **STORE** and **BACK**. Up to six careers; the active
+  one is saved and resumed. The **STORE is a child screen of CAREER** — its
+  BACK returns to the career hub, it is not on the home screen.
 * **HOW TO PLAY** — a one-screen tutorial overlay that names every component
-  (controls, coins, enemies, hazards, checkpoints, the goal, careers, store and
-  the five power-ups, with their icons). Reachable from the menu, closes with
+  (controls, the sword arcs, secondary weapons, coins, enemies, hazards,
+  checkpoints, the goal, careers, store and the five power-ups). Closes with
   **BACK** or the system back key.
 * **SOUND: ON / OFF** and a small **RESET SAVE** with a two-tap confirm.
+
+**Loadout (pre-level screen).** After picking a level the loadout shows the
+level name, the career wallet, one row per secondary weapon with its one-line
+description (`NO WEAPON`, `BOW`, `BOOMERANG`) and an `EQUIPPED` marker, then
+**START** / **BACK**. The pick is saved to that career immediately — every
+career keeps its own build: its upgrade levels *and* its equipped secondary
+weapon.
 
 Progress auto-saves through a `SaveStore` interface (`Game` passes plain data;
 `GameView` plugs in a `SharedPreferences` blob). The level you are on is written
 every time a level is entered, so **losing all lives restarts the last saved
-level**, not level 1. Mode and sound choice persist too. `SaveState` encodes a
-versioned, malformed-input-tolerant pipe string, and the headless suite covers
-the whole flow (autosave, continue, retry-at-saved-level, mode gating).
+level**, not level 1. Mode, sound choice, each career's equipped secondary
+weapon and per-level cleared flags / best scores persist too. `SaveState`
+encodes a versioned, malformed-input-tolerant pipe string (v4 today); blobs
+from v1, v2 and v3 (the previous encoder duplicated the sound flag — the v3
+reader parses it exactly as it was written) all migrate, and the headless suite
+covers the whole flow (autosave, continue, retry-at-saved-level, mode gating,
+per-career build round trip).
 
 ## Tutorial
 
@@ -136,8 +152,43 @@ coin). The store turns that wallet into permanent, per-career upgrades:
 Each tier costs more than the last, purchases persist in the save file, and
 the store refuses a purchase you cannot afford (with a message, not a crash).
 Careers are independent: separate wallet, separate unlocked level, separate
-upgrade levels and lifetime stats (coins, level, best score, stomps, deaths,
-play time).
+upgrade levels, separate equipped secondary weapon and lifetime stats (coins,
+level, best score, stomps, deaths, play time). Clearing a level also records
+per-level results — the cleared flag and the best score — which the level
+select screen shows.
+
+### Combat: the sword
+
+The primary weapon is always the sword. Press the **ATTACK disc** (right thumb)
+or `J`/`X` and the hero swings — and **which arc you get depends on how you are
+moving** at that instant:
+
+| Body state | Arc | Hitbox |
+| --- | --- | --- |
+| grounded, standing / walking (`|vx|` < 90) | tall overhead chop | 58 px in front, chest height |
+| grounded, running (`|vx|` ≥ 90) | longer, lower forward slash | 80 px in front, waist height |
+| airborne, rising (`vy` < 0) | upward arc above the head | over the head |
+| airborne, falling (`vy` ≥ 0) | plunge arc below the feet | under the feet, kicks you back up on a hit |
+
+The blade is live for 0.20 s and the next swing is ready 0.30 s after the last;
+holding the disc auto-repeats at that rhythm. One weapon hit defeats an enemy,
+exactly like a stomp (250 score). The renderer draws a different trail for each
+arc, and the falling swing doubles as a dive attack — hit something below you
+and you bounce back up.
+
+### Secondary weapons
+
+Every career also equips one **secondary** weapon on the loadout screen; a
+smaller disc to the left of ATTACK fires it:
+
+| Weapon | Behaviour | Cooldown |
+| --- | --- | --- |
+| `NO WEAPON` | sword only | — |
+| `BOW` | straight arrow, 860 px/s with a little drop, dies on walls / one enemy | 0.42 s |
+| `BOOMERANG` | flies out ~0.42 s, then homes back and is caught; kills on any leg; turns around at walls instead of breaking | 0.70 s |
+
+The HUD shows the equipped weapon as a chip under the hearts, the disc shows a
+cooldown wedge while recharging, and a fresh career starts with the bow.
 
 ### Controls (touch)
 
@@ -146,7 +197,9 @@ play time).
 | bottom-left **circle-pad** | drag to run: the deflection is analogue, so a half tilt walks and a full tilt sprints |
 | drag the pad **up / up-left / up-right** | jump while steering that way (hold up for the full arc) |
 | drag the pad **down** mid-jump | cut the rise for a short hop |
-| bottom-right **●** | jump button (same held/short-hop behaviour, for the right thumb) |
+| bottom-right **ATTACK disc** | sword swing — the arc follows your movement (see *Combat*) |
+| **SECONDARY disc** (left of ATTACK) | fire the equipped bow / boomerang |
+| drag the pad **up** | jump (hold for the full arc) |
 | top-right **⏸** | pause / resume (also Android *Back*) |
 | top-right 🔊 | mute / unmute |
 
@@ -158,9 +211,10 @@ approaches them, so the gestures are discoverable without reading anything.
 The pause and mute discs are hit-tested at exactly the radius they are drawn
 with, and a tap on them raises the same edge as their keyboard keys.
 
-Keyboard is supported too: arrows/WASD, `Space`/`W`/`Up` to jump, `P`/`Esc` pause,
-`M` mute, `R` restart level. Keyboard and touch feed the same analogue axis, so
-the two never fight: a key counts as full tilt.
+Keyboard is supported too: arrows/WASD to steer, `Space`/`W`/`Up` to jump,
+`J`/`X` attack, `K`/`C` secondary weapon, `P`/`Esc` pause, `M` mute, `R`
+restart level. Keyboard and touch feed the same analogue axis, so the two never
+fight: a key counts as full tilt.
 
 ## Performance
 
@@ -241,6 +295,27 @@ zones, no flyer inside a required jump arc, no rise taller than the jump can
 clear, every platform reachable, every power-up within a jump of walkable
 ground) and refuses to overwrite a glyph silently.
 
+## Art editing
+
+`Renderer` draws everything with `Canvas` primitives — no bitmaps, and the app
+never parses SVG. Sprite artwork is authored in Inkscape and baked into plain
+Java `Path` code on the PC, where it costs nothing at runtime:
+
+```bash
+python3 tools/artgen/svg2java.py art/player.svg --class ArtPlayer --fit 26x36
+tools/artgen/regen.sh              # regenerate everything listed in art/art.json
+tools/artgen/regen.sh --check      # verify without writing
+```
+
+Only the generated `Art*.java` class is compiled into the APK; `art/` never
+ships. Transforms are baked, so a draw is a handful of `Canvas.drawPath` calls
+with the same cost profile as the hand-written vector drawing it replaces, and
+it keeps working in the headless renderer test.
+
+Authoring rules are in [art/README.md](art/README.md); the CLI contract (exit
+codes, `--json`, manifest schema) that the level/entity designer is meant to
+call is in [tools/artgen/README.md](tools/artgen/README.md).
+
 ## Tests
 
 `tools/run_headless_test.sh` runs both headless suites — no Android SDK or
@@ -307,6 +382,13 @@ powerups OK: all five pickups, timer expiry, one-hit shield, magnet, persistence
 career OK: create/select/two-tap delete, per-career wallets and levels, active career persisted
 store OK: prices, deduction, refusal, max clamp, and every upgrade effect reaches the simulation
 wallet OK: clear pays 8 coins once, into the active career
+help OK: HOW TO PLAY opens from the menu; BACK and the back key both return
+pad OK: analog walk/sprint, up = jump, up-left/up-right steer, down cuts the jump, release stops
+combat OK: four arcs, cooldown, one-hit kills, plunge bounce
+secondary OK: bow kills and expires, boomerang returns, cooldown, persistence
+levelselect OK: locks, cleared markers, loadout entry, continue
+loadout OK: equip, back, save round trip, per-career build
+savev4 OK: new fields round trip, buggy v3 migrates, garbage tolerated
 ```
 
 The suite also covers the career/store round trip: two careers with different

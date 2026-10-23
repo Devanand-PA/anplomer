@@ -1,227 +1,230 @@
-# Anplomer feature round — API contract
+# Anplomer combat / build / level-select round — API contract
 
-This file is the coordination contract for the performance / power-up /
-career-profile round. It is the source of truth for names that cross file
-ownership. If a signature here has to change, message the Lead instead of
-inventing a parallel name.
+Coordination contract for the sword-combat / secondary-weapon / level-select
+round. It is the source of truth for names that cross file ownership: if a
+signature here has to change, message the Lead instead of inventing a parallel
+name.
 
 ## File ownership (do not edit outside your scope)
 
 | Owner | Files |
 | --- | --- |
-| Lead | `Constants.java`, `Level.java`, `PowerUp.java`, `Profile.java`, `Upgrades.java`, `SaveState.java`, `Game.java`, `Player.java`, `GameView.java`, `SoundSink.java`, `SoundManager.java`, `MainActivity.java`, `tools/run_headless_test.sh`, `README.md`, `docs/CONTRACT.md` |
+| Lead | `Constants.java`, `Weapons.java`, `SwordStyle.java`, `Projectile.java`, `Player.java`, `Controls.java`, `InputController.java`, `Game.java`, `GameView.java`, `MainActivity.java`, `SoundSink.java`, `SoundManager.java`, `tools/run_headless_test.sh`, `docs/CONTRACT.md` |
+| save-smith | `Profile.java`, `SaveState.java` |
 | render-smith | `Renderer.java`, `tools/Bench.java`, `tools/run_bench.sh` |
-| levels-smith | `tools/make_levels.py`, `Levels.java` (generated) |
 | test-warden | `tools/HeadlessTest.java`, `tools/RendererSmoke.java` |
+| docs-smith | `README.md`, `docs/TUTORIAL.md` |
 
 `Levels.java` is generated from `tools/make_levels.py`; never hand-edit it.
+`Level.java` is unchanged this round.
 
-## 1. Levels: new glyphs
+## 1. What changes for the player
 
-`Level.java` recognises these additional characters, all spawning a `PowerUp`
-at the tile centre. They sit in **air** (the generator enforces that), exactly
-like coins.
+* The right-hand **jump disc becomes an attack disc**: the sword swing. Jumping
+  stays on the movement pad (drag up), so nothing is lost.
+* A smaller **secondary disc** sits to the left of the attack disc and fires the
+  career's equipped secondary weapon (`BOW` or `BOOMERANG`; `NO WEAPON` when
+  none is equipped).
+* The **swing pattern depends on how the body is moving**:
+  | body state | style |
+  | --- | --- |
+  | grounded, |vx| < 90 | `GROUND_IDLE` — tall overhead chop in front |
+  | grounded, |vx| >= 90 | `GROUND_RUN` — longer, lower forward slash |
+  | airborne, rising (vy < 0) | `AIR_RISE` — upward arc above the head |
+  | airborne, falling | `AIR_FALL` — plunge arc below the feet |
+* One weapon hit always kills an enemy (like a stomp). Enemies stay in place
+  until their squash animation ends, exactly as stomped ones do.
+* The home screen's `START GAME` becomes `PLAY` and opens **level select**; only
+  levels the active career has unlocked are selectable, cleared levels are
+  marked. Picking a level opens the **loadout** screen (choose secondary weapon,
+  then `START`).
+* **Store lives inside the career menu** (career → `STORE` → back to career), and
+  each career keeps its own equipped secondary weapon next to its upgrades.
 
-| glyph | `PowerUp.Type` | meaning |
-| --- | --- | --- |
-| `S` | `SPEED` | speed boots, temporary run-speed multiplier |
-| `H` | `SHIELD` | shield charge, absorbs one hit |
-| `A` | `MAGNET` | coin magnet, pulls pickups in a radius |
-| `J` | `DOUBLE_JUMP` | allows one extra mid-air jump |
-| `L` | `EXTRA_LIFE` | +1 life immediately |
-
-Existing glyphs are unchanged: `# = ^ ~ o E B M V P C G .`
-
-`Level` API added by the Lead:
+## 2. Weapons catalogue (`Weapons.java`, Lead)
 
 ```java
-public final List<float[]> powerUpSpawns;   // {x, y, typeOrdinal}
-public int powerUpCount();
-public boolean powerUpTaken(int index);     // like coinTaken, survives respawn
-public void takePowerUp(int index);
+public final class Weapons {
+    public static final int NONE = 0, BOW = 1, BOOMERANG = 2;
+    public static final int SECONDARY_COUNT = 3;
+    public static final String[] SECONDARY_NAME = {"NO WEAPON", "BOW", "BOOMERANG"};
+    public static final String[] SECONDARY_DESC = { ... }; // one short line each
+    public static String secondaryName(int id);
+    public static String secondaryDesc(int id);
+    public static int clampSecondary(int id);   // out-of-range -> NONE
+}
 ```
 
-`PowerUp.Type.values()` order is fixed and is what `typeOrdinal` means:
-`SPEED, SHIELD, MAGNET, DOUBLE_JUMP, EXTRA_LIFE`.
-
-## 2. Power-up entity
+## 3. Sword styles (`SwordStyle.java`, Lead)
 
 ```java
-public final class PowerUp {
-    public enum Type { SPEED, SHIELD, MAGNET, DOUBLE_JUMP, EXTRA_LIFE }
-    public final Type type;
-    public float x, y;          // world centre
-    public final int index;     // index into Level.powerUpSpawns
-    public float phase;         // renderer animation phase
-    public PowerUp(Type type, float x, float y, int index, float phase);
+public enum SwordStyle { GROUND_IDLE, GROUND_RUN, AIR_RISE, AIR_FALL }
+```
+
+## 4. Player combat API (Lead)
+
+```java
+public SwordStyle swingStyle;    // style of the current/last swing
+public float swingTimer;         // seconds left in the active swing window (>0 => swinging)
+public float attackCooldown;     // seconds until another swing may start
+public int swings;               // swings made this life (tests/renderer)
+
+public boolean attacking();      // swingTimer > 0
+public float[] attackBox();      // {x, y, w, h} world-space hitbox, or null when idle
+```
+
+`Player.Listener` gains `void onSwing(SwordStyle style);` (Game plays the sound
+and dust). Attack input is consumed inside `Player.update`, and the style is
+chosen there from `onGround`, `vx` and `vy` at the moment the swing starts.
+
+## 5. Projectiles (`Projectile.java`, Lead)
+
+```java
+public final class Projectile {
+    public static final int ARROW = 0, BOOMERANG = 1;
+    public final int kind;
+    public float x, y;          // centre
+    public float vx, vy;
+    public final float w, h;
+    public float life, phase;   // phase drives renderer spin
+    public boolean returning, dead;
+
+    public Projectile(int kind, float cx, float cy, int facing); // facing -1 / +1
     public boolean overlaps(float px, float py, float pw, float ph);
+    public void update(float dt, Player owner, Level lvl);
 }
 ```
 
-`Game.powerUps` is the live list (collected ones are removed from it; the
-`Level` flag is the persistent record), mirroring how `Game.coins` works.
+Arrow: straight fast shot with slight gravity, dies on solid tiles, its
+lifetime or the first enemy. Boomerang: flies out, then homes back to the owner
+and dies when it reaches them (or on lifetime). `Game.projectiles` is the live
+list; it is cleared on level load, respawn and death.
 
-## 3. Career profiles
+## 6. Input and controls (Lead)
+
+`Controls` (screen pixels):
 
 ```java
-public final class Profile {
-    public String name;          // <= 12 chars, sanitised
-    public int colorIndex;       // 0..(Profile.COLORS-1), avatar tint
-    public int coins;            // wallet balance, spendable in the store
-    public int levelIndex;       // continue level (0-based)
-    public int unlocked;         // 1-based count of unlocked levels
+public float attackX, attackY, attackR, attackHitR;  // replaces the jump disc
+public float secX, secY, secR, secHitR;              // secondary disc, left of attack
+public boolean inAttack(float px, float py);
+public boolean inSecondary(float px, float py);
+```
 
-    // career stats
-    public int levelsCleared, coinsCollected, bestScore, stomps, deaths;
-    public float playSeconds;
+`InputController`:
 
-    // upgrade levels, indexed by Upgrades.SPEED..Upgrades.SHIELD
-    public final int[] upgrades; // values clammped to Upgrades.MAX[id]
+```java
+public static final int KEY_ATTACK = 8, KEY_SECONDARY = 9;
+public boolean attackHeld, secondaryHeld;            // held state (auto-repeat)
+public boolean consumeAttack();                      // edge: attack pressed
+public boolean consumeSecondary();                   // edge: secondary pressed
+```
 
-    public Profile(String name, int colorIndex);
-    public int upgradeLevel(int id);
-    public int nextPrice(int id);       // -1 at max
-    public boolean canAfford(int id);   // nextPrice >= 0 && coins >= price
+The pad still owns jumping (`PAD_JUMP_ON/OFF`); there is no jump disc any more,
+so `jumpHeld = keyJump || padJumpLatch`. Keyboard: `J`/`X` = attack,
+`K`/`C` = secondary (`GameView`).
 
-    // derived effects used by Game/Player
-    public float runSpeedMul();         // 1 + 0.04 * speed level
-    public float jumpMul();             // 1 + 0.03 * jump level
-    public int extraLives();            // lives level
-    public float powerTimeMul();        // 1 + 0.15 * power level
-    public float magnetRadius();        // 0 when no upgrade/magnet active
-    public int startingShields();       // shield upgrade level
+## 7. Game API used by the renderer / tests (Lead)
+
+```java
+public enum State {
+    MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE, HELP,
+    LEVEL_SELECT, LOADOUT
 }
+
+public final List<Projectile> projectiles;
+public float secondaryCooldown;        // > 0 => the secondary is on cooldown
+public int swingSerial;                // bumped on every new swing
+public int pendingLevel;               // level picked in LEVEL_SELECT, started by LOADOUT
+
+// secondary weapon of the active career
+public int secondaryWeaponId();        // Weapons id, clamped
+public void setSecondaryWeapon(int id);// persists and relabels the loadout rows
+
+// level select / loadout
+public final List<UiButton> levelButtons;    // one row per level + BACK
+public final List<UiButton> loadoutButtons;  // one row per weapon + START + BACK
+public static final int BTN_LEVEL_ROW = 300;      // + level index
+public static final int BTN_WEAPON_ROW = 400;     // + Weapons id
+public static final int BTN_START_LEVEL = 15;
+public void openLevelSelect();
+public void openLoadout(int levelIndex);
+public boolean levelUnlocked(int index);
+public boolean levelCleared(int index);
+public String levelName(int index);               // e.g. "EMERALD MEADOW"
+public float levelSelectPanelW();                 // panel geometry, like career/story
+public float levelSelectPanelH();
+public float loadoutPanelW();
+public float loadoutPanelH();
+public int levelRowCount();                       // rows among levelButtons
 ```
+
+Career screen: `careerButtons` now holds the profile rows (`BTN_PROFILE_ROW + i`)
+and the footer buttons `NEW CAREER` (`BTN_NEW_PROFILE`), `DELETE`
+(`BTN_DELETE_PROFILE`), `STORE` (`BTN_STORE`) and `BACK` (`BTN_BACK`). The store
+is a child screen: its `BACK` returns to `CAREER`, not `MENU`. `menuButtons` no
+longer contains `BTN_STORE`.
+
+## 8. Career / save additions (save-smith)
+
+`Profile` gains, with these exact names:
 
 ```java
-public final class Upgrades {
-    public static final int SPEED = 0, JUMP = 1, LIVES = 2, MAGNET = 3, POWER = 4, SHIELD = 5;
-    public static final int COUNT = 6;
-    public static final String[] NAME;      // "SPEED BOOTS", ... (for the store UI)
-    public static final String[] DESC;      // one short line each
-    public static final int[] MAX;          // max level per upgrade
-    public static String effect(int id, int level); // e.g. "+8% RUN"
-    public static int price(int id, int level);     // price to buy `level+1`
-}
+public int equippedSecondary;                 // Weapons.NONE/BOW/BOOMERANG
+public int clearedBits;                       // bit i set => level i cleared
+public final int[] levelBest;                 // best score per level, Levels.TEXT.length
+public boolean isCleared(int levelIndex);
+public int levelBestScore(int levelIndex);
+public void markCleared(int levelIndex, int score);  // set bit, raise best,
+                                                     // unlocked = max(unlocked, index+2) clamped
 ```
 
-`SaveState.VERSION` becomes 3. The blob stays a single pipe-separated string:
+`Profile.copyOf` copies all of them. `SaveState.VERSION` becomes **4** with the
+blob
 
 ```
-3|sound|music|buttons|mode|activeProfile|profile;profile;...
-profile = name,color,coins,level,unlocked,cleared,coinsCollected,bestScore,stomps,deaths,playMillis,u0,u1,u2,u3,u4,u5
+4|sound|music|buttons|mode|active|profile;profile;...
+profile = name,color,coins,level,unlocked,cleared,coinsCollected,bestScore,
+          stomps,deaths,playMillis,u0..u5,equipped,clearedBits,b0..b7
 ```
 
-Names are sanitised (no `|`, `;`, `,`; <= 12 chars). v1/v2 blobs load as a
-single profile ("PLAYER 1") carrying the old level/mode/sound settings, so an
-existing install keeps its progress.
+v3 blobs (written by the previous encoder, which emitted the sound flag twice:
+`3|sound|sound|music|buttons|mode|active|...`) must migrate without losing
+progress; v1/v2 migrations keep working. Malformed input still falls back to
+defaults. A wrong-length profile record is dropped, never fatal.
 
-## 4. Game API used by the renderer
+## 9. Rendering expectations (render-smith)
 
-```java
-public enum State { MENU, PLAYING, PAUSED, LEVEL_CLEARED, GAME_OVER, WIN, SETTINGS, CAREER, STORE, HELP }
+* `PLAYING`: attack disc with a sword glyph (replacing the jump arrow), a
+  smaller secondary disc to its left with a per-weapon glyph and a cooldown
+  wedge while `secondaryCooldown > 0`; the swing arc/spark drawn per
+  `player.swingStyle`; arrows and boomerangs from `g.projectiles`; a small
+  equipped-secondary chip near the hearts is welcome.
+* `MENU`: `PLAY` / `CONTINUE` / `MODE`, row `CAREER` / `SETTINGS`, small
+  `HOW TO PLAY` / `SOUND` / `RESET SAVE` (no `STORE` home button).
+* `LEVEL_SELECT`: panel, one row per level (`1  EMERALD MEADOW`) showing
+  `CLEARED` + best score, `LOCKED` rows dimmed and untappable, `BACK`.
+* `LOADOUT`: panel, level title, career wallet, one row per secondary weapon
+  (name + description + equipped marker), `START` and `BACK`.
+* `CAREER`: rows show `LEVEL n • COINS x • <weapon>`; footer `NEW CAREER`,
+  `DELETE`, `STORE`, `BACK`.
+* Every label stays inside its rect via `Renderer.fitSize`.
 
-// alive state
-public Profile profile;                 // active profile, never null
-public final List<Profile> profiles;    // save.profiles, live
-public int activeProfile;               // index into profiles
-public final List<PowerUp> powerUps;
-public float speedBoostTimer, magnetTimer, doubleJumpTimer, invulnTimer;
-public int shieldCharges;
-public int runCoins;                    // coins earned in this run/session
+## 10. Tests (test-warden)
 
-// home screen ids
-public static final int BTN_CAREER = 10, BTN_STORE = 11;
-public static final int BTN_NEW_PROFILE = 12, BTN_DELETE_PROFILE = 13;
-// BTN_BACK (9) is reused for both new screens' back buttons.
+`tools/run_headless_test.sh` (Lead) compiles the pure-Java half plus both
+suites; new suites must cover:
 
-// career screen: one button per profile row (index == profile index),
-// plus NEW / DELETE / BACK. Rows are laid out by Game.
-public final List<UiButton> careerButtons;
-public final int careerRowCount();       // rows among careerButtons
-
-// store screen: one button per upgrade id, plus BACK.
-public final List<UiButton> storeButtons;
-// movement pad (Controls) + the analogue input the simulation reads
-public float padCX, padCY, padR, padKnobR, padHitR;
-public boolean inPad(float x, float y);
-// InputController
-public float moveAxis;                  // -1..1: pad deflection, or a key at full tilt
-public float padX, padY;                // knob deflection for the renderer
-public boolean padActive, jumpCut, jumpHeld;
-public static final float PAD_DEAD = 0.20f, PAD_JUMP_ON = -0.42f,
-        PAD_JUMP_OFF = -0.28f, PAD_CUT = 0.30f;
-
-public float storeMsgTimer;             // >0 while the feedback line shows
-public String storeMsg;                 // "PURCHASED", "NOT ENOUGH COINS", "MAX LEVEL"
-
-// how-to-play overlay: BTN_HELP (14) opens it, Back closes it.
-public final List<UiButton> helpButtons; // just Back
-public float helpPanelW();               // panel size for the tutorial overlay
-public float helpPanelH();
-public void openHelp();                  // menu -> HELP
-public void layoutHelp();                // places the Back button inside the panel
-```
-
-Text rule: every label drawn inside a rect is sized with
-`Renderer.fitSize(text, maxWidth, desiredSize)`, i.e. measured with
-`Paint.measureText` and shrunk until it fits the rect's inner width. Boxes come
-from `Game`, which cannot know font metrics, so this is the only thing that
-keeps labels inside their borders across screen sizes and fonts.
-
-Layouts are computed in `Game` so drawing and hit-testing can never disagree
-(the same rule the pause/settings screens follow).
-
-`Renderer.draw(Game, Canvas, w, h)` keeps its signature. Rendering
-expectations for the new states:
-
-* `MENU` — show the active profile's name and coin balance above the button
-  stack (the button column stays `START GAME`, `CONTINUE`, `MODE`; then a row
-  of `CAREER`, `STORE`, `SETTINGS`; then small `SOUND` and `RESET SAVE`
-  buttons at the bottom).
-* `CAREER` — panel with one row per profile (avatar dot, name, `LEVEL n`,
-  coin balance, best score), the active row highlighted; `NEW PROFILE`,
-  `DELETE` (two-tap label) and `BACK`.
-* `STORE` — panel with one row per upgrade (`Upgrades.NAME[id]`, effect text,
-  level pips, next price or `MAX`), unaffordable rows dimmed; wallet in the
-  header; `BACK`; the `storeMsg` line when `storeMsgTimer > 0`.
-* `PLAYING` HUD — coin **wallet** chip next to the level/time panel, active
-  power-up chips (icon + seconds left) under the hearts, shield pips.
-* `LEVEL_CLEARED` — the coins earned line.
-
-## 5. Performance targets (render-smith)
-
-Baseline measured on this machine with `tools/run_bench.sh 800` before any
-change (recorded here for comparison):
-
-```
-update only                      0.000 ms/frame      0.0 draws/frame       81 B/frame
-2400x1080 L1 meadow              0.059 ms/frame    679.0 draws/frame    26041 B/frame
-1920x1080 L1 meadow              0.038 ms/frame    589.0 draws/frame    22553 B/frame
-1280x720 L1 meadow               0.038 ms/frame    555.0 draws/frame    21582 B/frame
-2400x1080 L2 sunset              0.075 ms/frame    690.0 draws/frame    30924 B/frame
-2400x1080 L3 night               0.088 ms/frame    775.0 draws/frame    25242 B/frame
-2400x1080 menu overlay           0.064 ms/frame    693.0 draws/frame    22401 B/frame
-```
-
-Goals: fewer draw calls, no per-frame allocation in steady state, and the
-same picture (the smoke test's sky-opacity and geometry guards must stay
-green). `Bench` numbers are JVM/stub numbers — use them for relative change,
-not as device FPS.
-
-## 6. Tests
-
-`tools/run_headless_test.sh` compiles the pure-Java half plus both suites.
-Keep the list of sources there in sync when files are added (Lead does this).
-
-The suite must cover, in addition to what it covers today:
-
-* every level completable by the bot (now 8),
-* power-ups: each type activates, timers expire, shield absorbs exactly one hit,
-  magnet collects coins without touching them, extra life raises lives,
-* career: create/select/delete profile, per-profile coins and progress are
-  independent, active profile survives save/load,
-* store: purchase deducts coins and raises the level, max-level clamp, not
-  enough coins is refused, effect actually reaches the player,
-* `RendererSmoke` draws every state × every level palette × every size and the
-  new CAREER/STORE screens at all sizes.
+* swing styles: idle / run / rise / fall pick the four `SwordStyle`s and their
+  hitboxes sit in front, above and below as described; cooldown blocks mashers;
+  one swing kills an enemy in front once and never one behind;
+* secondary weapons: bow arrow spawns, travels, kills a walker and dies on a
+  wall; boomerang goes out, returns, kills on both legs and is caught; cooldown
+  gating; `NO WEAPON` fires nothing; the equipped weapon comes from the career;
+* level select: cleared bits drive the `CLEARED` marker, locked rows cannot be
+  started, a cleared level starts in that level, `CONTINUE` still resumes the
+  saved level;
+* loadout: picking a weapon persists per career and survives save/load;
+* save v4 round trip plus v3 (buggy encoder layout) and v1/v2 migration;
+* `RendererSmoke` draws `LEVEL_SELECT` and `LOADOUT` at every size, plus swings
+  (all four styles) and both projectile kinds.

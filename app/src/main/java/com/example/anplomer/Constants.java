@@ -32,7 +32,26 @@ public final class Constants {
     public static final float DEATH_POP = 880f;
     public static final float RESPAWN_DELAY = 1.05f;
 
+    // ---- health -------------------------------------------------------
+    // Player and mob hit points, attack and size are authored in
+    // art/stats.json and baked into Stats.java (see tools/designer). These are
+    // the fixed damage numbers the simulation itself applies.
+    /** Damage from standing in lava or on spikes. */
+    public static final int HAZARD_DAMAGE = 25;
+    /** Falling out of the level: costs HP and returns you to the checkpoint. */
+    public static final int PIT_DAMAGE = 35;
+    /** Damage a stomp deals; large enough to one-shot the default mobs. */
+    public static final int STOMP_DAMAGE = 25;
+    /** Seconds an enemy flashes after a hit that did not kill it. */
+    public static final float HIT_FLASH_TIME = 0.16f;
+    /** Height of a mob's health bar, in world units. */
+    public static final float HP_BAR_H = 7f;
+    /** Gap between a mob's head and its health bar. */
+    public static final float HP_BAR_GAP = 10f;
+
     // ---- enemies ------------------------------------------------------
+    // Fallbacks for the level grid: live values come from Stats.java (baked
+    // from art/stats.json), and these numbers match that file's defaults.
     public static final float WALKER_W = 48f;
     public static final float WALKER_H = 42f;
     public static final float WALKER_SPEED = 95f;
@@ -74,6 +93,42 @@ public final class Constants {
     public static final float INVULN_TIME = 1.2f;
     public static final int MAX_LIVES = 9;
     public static final int START_LIVES = 3;
+
+    // ---- combat -------------------------------------------------------
+    /** Seconds the sword hitbox stays active (and the swing animates). */
+    public static final float SWORD_TIME = 0.20f;
+    /** Seconds between two swings; the disc may be held to swing repeatedly. */
+    public static final float SWORD_COOLDOWN = 0.30f;
+    /** Reach of the standing chop and the air arcs. */
+    public static final float SWORD_REACH = 58f;
+    /** Reach of the running slash; it lances further ahead. */
+    public static final float SWORD_REACH_RUN = 80f;
+    /** Height of the standing chop arc. */
+    public static final float SWORD_HEIGHT = 74f;
+    /** Speed above which a grounded swing becomes the running slash. */
+    public static final float SWORD_RUN_SPEED = 90f;
+    /** Score for an enemy defeated by the sword or a secondary weapon. */
+    public static final int SCORE_ATTACK = 250;
+
+    public static final float BOW_COOLDOWN = 0.42f;
+    public static final float ARROW_SPEED = 860f;
+    public static final float ARROW_GRAVITY = 360f;
+    public static final float ARROW_LIFE = 1.05f;
+    public static final float ARROW_W = 30f;
+    public static final float ARROW_H = 10f;
+
+    public static final float BOOMERANG_COOLDOWN = 0.70f;
+    public static final float BOOMERANG_SPEED = 560f;
+    public static final float BOOMERANG_RETURN_SPEED = 760f;
+    public static final float BOOMERANG_LIFT = 90f;
+    public static final float BOOMERANG_GRAVITY = 260f;
+    /** Seconds before a boomerang turns for home. */
+    public static final float BOOMERANG_OUT_TIME = 0.42f;
+    public static final float BOOMERANG_LIFE = 2.4f;
+    /** Distance at which the returning boomerang is caught. */
+    public static final float BOOMERANG_CATCH_R = 26f;
+    public static final float BOOMERANG_W = 26f;
+    public static final float BOOMERANG_H = 26f;
 
     // ---- career / store ----------------------------------------------
     /** Coins banked per coin picked up. */

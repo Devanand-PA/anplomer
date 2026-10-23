@@ -93,6 +93,37 @@ public final class SoundManager implements SoundSink {
                     double f = 1046.5 + 523.25 * Math.min(1, t / 0.05);
                     return Math.sin(6.283185 * f * t) * 0.85;
                 }, 0.20)));
+        // Sword swing: a filtered noise sweep that falls in pitch as it passes.
+        define(SoundSink.SWING, synth(0.13, (t, n) -> {
+            double env = Math.pow(1 - t / n, 1.7);
+            double noise = (Math.random() * 2 - 1) * 0.55;
+            double tone = Math.sin(6.283185 * (900 - 620 * (t / n)) * t) * 0.25;
+            return (noise + tone) * env;
+        }, 0.26));
+        // Weapon hit: a short woody thump plus a noise crack.
+        define(SoundSink.HIT, synth(0.11, (t, n) -> {
+            double env = Math.exp(-9 * t / n);
+            double body = Math.sin(6.283185 * (240 - 120 * (t / n)) * t) * 0.8;
+            double crack = (Math.random() * 2 - 1) * 0.35 * env;
+            return body * env + crack;
+        }, 0.30));
+        // Arrow: a fast high zip falling away.
+        define(SoundSink.ARROW, synth(0.1, (t, n) -> {
+            double env = Math.pow(1 - t / n, 2);
+            double f = 2200 * Math.pow(0.45, t / n);
+            return Math.sin(6.283185 * f * t) * 0.6 * env;
+        }, 0.24));
+        // Boomerang: a two-note "whip" that lifts, like a thrown rotor.
+        define(SoundSink.THROW, concat(
+                synth(0.09, (t, n) -> {
+                    double f = 330 + 320 * (t / n);
+                    return Math.sin(6.283185 * f * t) * 0.55;
+                }, 0.24),
+                synth(0.18, (t, n) -> {
+                    double f = 650 * Math.pow(0.6, t / n);
+                    double wobble = 1 + 0.12 * Math.sin(6.283185 * 28 * t);
+                    return Math.sin(6.283185 * f * wobble * t) * 0.5;
+                }, 0.22)));
 
         // looping background music, synthesised the same way as the effects
         defineMusic(musicLoop());

@@ -313,6 +313,14 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
             case KeyEvent.KEYCODE_M:
                 game.input.key(InputController.KEY_MUTE, true);
                 return true;
+            case KeyEvent.KEYCODE_J:
+            case KeyEvent.KEYCODE_X:
+                game.input.key(InputController.KEY_ATTACK, true);
+                return true;
+            case KeyEvent.KEYCODE_K:
+            case KeyEvent.KEYCODE_C:
+                game.input.key(InputController.KEY_SECONDARY, true);
+                return true;
             case KeyEvent.KEYCODE_ESCAPE:
             case KeyEvent.KEYCODE_BACK:
                 game.input.key(InputController.KEY_BACK, true);
@@ -341,6 +349,14 @@ public final class GameView extends SurfaceView implements SurfaceHolder.Callbac
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
                 game.input.key(InputController.KEY_CONFIRM, false);
+                return true;
+            case KeyEvent.KEYCODE_J:
+            case KeyEvent.KEYCODE_X:
+                game.input.key(InputController.KEY_ATTACK, false);
+                return true;
+            case KeyEvent.KEYCODE_K:
+            case KeyEvent.KEYCODE_C:
+                game.input.key(InputController.KEY_SECONDARY, false);
                 return true;
             default:
                 return false;

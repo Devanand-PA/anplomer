@@ -24,11 +24,16 @@ public final class InputController {
     public static final int KEY_RESTART = 5;
     public static final int KEY_BACK = 6;
     public static final int KEY_MUTE = 7;
+    /** Primary weapon (sword swing); the keyboard uses J / X. */
+    public static final int KEY_ATTACK = 8;
+    /** Secondary weapon (bow / boomerang); the keyboard uses K / C. */
+    public static final int KEY_SECONDARY = 9;
 
     /** pointerId -> {x, y} in screen pixels. */
     private final Map<Integer, float[]> pointers = new HashMap<>();
 
     private boolean keyLeft, keyRight, keyJump, keyConfirm, keyPause, keyRestart, keyBack, keyMute;
+    private boolean keyAttack, keySecondary;
 
     private Controls controls;
     private float screenW, screenH;
@@ -60,8 +65,17 @@ public final class InputController {
     /** Analog run direction, -1..1. Pad deflection, or a key/disc as full tilt. */
     public float moveAxis;
 
+    /** True while the attack disc (or J/X) is held: the sword auto-repeats. */
+    public boolean attackHeld;
+    /** True while the secondary disc (or K/C) is held. */
+    public boolean secondaryHeld;
+
     private boolean jumpEdge;
     private boolean prevJumpHeld;
+    private boolean attackEdge;
+    private boolean prevAttackHeld;
+    private boolean secondaryEdge;
+    private boolean prevSecondaryHeld;
     private boolean confirmEdge;
     private boolean pauseEdge;
     private boolean restartEdge;
@@ -133,6 +147,12 @@ public final class InputController {
                     muteEdge = true;
                 }
                 break;
+            case KEY_ATTACK:
+                keyAttack = down;
+                break;
+            case KEY_SECONDARY:
+                keySecondary = down;
+                break;
             default:
                 break;
         }
@@ -185,7 +205,8 @@ public final class InputController {
         float px = 0f;
         float py = 0f;
         boolean onPad = false;
-        boolean tJump = false;
+        boolean tAttack = false;
+        boolean tSecondary = false;
         if (controls != null) {
             // A pointer that lands inside the ring owns the pad until it lifts;
             // it keeps steering even when it is dragged past the ring.
@@ -215,8 +236,11 @@ public final class InputController {
                 }
             }
             for (float[] p : pointers.values()) {
-                if (controls.inJump(p[0], p[1])) {
-                    tJump = true;
+                if (controls.inAttack(p[0], p[1])) {
+                    tAttack = true;
+                }
+                if (controls.inSecondary(p[0], p[1])) {
+                    tSecondary = true;
                 }
             }
         }
@@ -231,15 +255,27 @@ public final class InputController {
         // Down = cut the rise, even while some other input still holds jump.
         jumpCut = onPad && py >= PAD_CUT;
 
-        jumpHeld = keyJump || tJump || padJumpLatch;
-        // Keyboard and the jump disc keep their old "held = continuous presses"
-        // feel (the buffered jump re-arms while held). The pad raises exactly
-        // one press per upward crossing, so a thumb resting on the edge cannot
-        // machine-gun hops.
-        if (keyJump || tJump || (jumpHeld && !prevJumpHeld)) {
+        jumpHeld = keyJump || padJumpLatch;
+        // Keyboard keeps its old "held = continuous presses" feel (the buffered
+        // jump re-arms while held). The pad raises exactly one press per upward
+        // crossing, so a thumb resting on the edge cannot machine-gun hops.
+        if (keyJump || (jumpHeld && !prevJumpHeld)) {
             jumpEdge = true;
         }
         prevJumpHeld = jumpHeld;
+
+        // Weapon discs behave like held buttons: the edge starts a swing / shot
+        // and the held flag lets the simulation auto-repeat at its cooldown.
+        attackHeld = keyAttack || tAttack;
+        if (attackHeld && !prevAttackHeld) {
+            attackEdge = true;
+        }
+        prevAttackHeld = attackHeld;
+        secondaryHeld = keySecondary || tSecondary;
+        if (secondaryHeld && !prevSecondaryHeld) {
+            secondaryEdge = true;
+        }
+        prevSecondaryHeld = secondaryHeld;
 
         float axis;
         if (keyLeft == keyRight) {
@@ -266,6 +302,28 @@ public final class InputController {
 
     public boolean peekJump() {
         return jumpEdge;
+    }
+
+    /** A fresh press of the primary weapon (edge-triggered). */
+    public synchronized boolean consumeAttack() {
+        boolean v = attackEdge;
+        attackEdge = false;
+        return v;
+    }
+
+    /** A fresh press of the secondary weapon (edge-triggered). */
+    public synchronized boolean consumeSecondary() {
+        boolean v = secondaryEdge;
+        secondaryEdge = false;
+        return v;
+    }
+
+    public boolean peekAttack() {
+        return attackEdge;
+    }
+
+    public boolean peekSecondary() {
+        return secondaryEdge;
     }
 
     public synchronized boolean consumeConfirm() {
@@ -357,8 +415,12 @@ public final class InputController {
         jumpCut = false;
         moveAxis = 0f;
         prevJumpHeld = false;
+        attackHeld = secondaryHeld = false;
+        prevAttackHeld = prevSecondaryHeld = false;
         keyLeft = keyRight = keyJump = keyConfirm = keyPause = keyRestart = keyBack = keyMute = false;
+        keyAttack = keySecondary = false;
         jumpEdge = confirmEdge = pauseEdge = restartEdge = backEdge = muteEdge = false;
+        attackEdge = secondaryEdge = false;
         tapPending = false;
         recompute();
     }

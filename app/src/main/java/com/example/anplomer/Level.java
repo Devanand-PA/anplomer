@@ -96,12 +96,14 @@ public final class Level {
                         coinSpawns.add(new float[]{wx + Constants.TILE / 2f, wy + Constants.TILE / 2f});
                         break;
                     case WALKER:
-                        walkerSpawns.add(new float[]{wx + (Constants.TILE - Constants.WALKER_W) / 2f,
-                                wy + Constants.TILE - Constants.WALKER_H});
+                        walkerSpawns.add(new float[]{
+                                wx + (Constants.TILE - Stats.mob("walker").width) / 2f,
+                                wy + Constants.TILE - Stats.mob("walker").height});
                         break;
                     case FLYER:
-                        flyerSpawns.add(new float[]{wx + (Constants.TILE - Constants.FLYER_W) / 2f,
-                                wy + (Constants.TILE - Constants.FLYER_H) / 2f});
+                        flyerSpawns.add(new float[]{
+                                wx + (Constants.TILE - Stats.mob("flyer").width) / 2f,
+                                wy + (Constants.TILE - Stats.mob("flyer").height) / 2f});
                         break;
                     case MOVER_H:
                     case MOVER_V:
