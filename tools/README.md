@@ -27,6 +27,8 @@ callable from a future designer GUI.
 | [`HeadlessTest.java`](HeadlessTest.java) | Drives the real simulation: levels, save formats, careers, store, combat, controls. |
 | [`Bench.java`](Bench.java), [`run_bench.sh`](run_bench.sh) | Frame-time benchmark using the stub `Canvas` counters. |
 | [`make_levels.py`](make_levels.py) | Level source → `Levels.java`, with fairness validation. |
+| [`statgen/`](statgen/) | `art/stats.json` → `Stats.java` (hero + mob HP/attack/speed/size). |
+| [`designer/`](designer/README.md) | Local web GUI: edit stats, bind SVGs to entities, run the generators. |
 | [`artgen/`](artgen/README.md) | SVG → Java `Path` art pipeline (`svg2java.py`, `svgpath.py`, `selftest.py`). |
 | [`dump_frames.sh`](dump_frames.sh) | Records consecutive frames on a device (ghost/trail debugging). |
 | [`stub/android/graphics/`](stub/android/graphics) | Minimal `Canvas`/`Paint`/`Path`/… stand-ins so the renderer runs on a plain JVM. |

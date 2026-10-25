@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anplomer Designer</title>
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Anplomer <span>designer</span></h1>
+  <div id="rootLabel" class="root-label" title="project root"></div>
+</header>
+
+<main class="layout">
+  <nav id="entityList" class="panel entities" aria-label="Entities">
+    <h2>Entities</h2>
+    <div id="entityRows" class="rows"></div>
+  </nav>
+
+  <section class="panel inspector" aria-label="Inspector">
+    <h2 id="inspectorTitle">&mdash;</h2>
+    <div class="scroll">
+      <form id="statsForm" autocomplete="off" onsubmit="return false"></form>
+
+      <div class="art-block">
+        <h3>Artwork (SVG &rarr; Java)</h3>
+        <p id="artCurrent" class="art-current">no SVG bound</p>
+        <div class="art-grid">
+          <label>file
+            <select id="svgSelect"><option value="">— pick a file —</option></select>
+          </label>
+          <label>or type a repo-relative path
+            <input id="svgPath" type="text" placeholder="art/player.svg" spellcheck="false">
+          </label>
+          <label>fit (WxH)
+            <input id="fitInput" type="text" placeholder="26x36" spellcheck="false">
+          </label>
+          <label>anchor
+            <select id="anchorSelect">
+              <option>bottom-center</option>
+              <option>bottom-left</option>
+              <option>bottom-right</option>
+              <option>center</option>
+              <option>top-left</option>
+            </select>
+          </label>
+          <label>precision (0..6)
+            <input id="precisionInput" type="number" min="0" max="6" step="1" value="2">
+          </label>
+          <label>Java class
+            <input id="classInput" type="text" placeholder="ArtPlayer" spellcheck="false">
+          </label>
+        </div>
+        <div id="artErrors" class="field-errors"></div>
+        <div class="art-actions">
+          <button id="bindBtn" type="button">Bind SVG</button>
+          <button id="removeBtn" type="button" class="secondary">Remove</button>
+        </div>
+        <p class="hint">Binding upserts an entry in art/art.json; the build bakes it
+          into Java. Generated art is <em>not yet wired into Renderer</em> &mdash; that
+          is the next milestone.</p>
+      </div>
+    </div>
+    <div class="inspector-actions">
+      <button id="saveStatsBtn" type="button">Save stats</button>
+      <span id="saveHint" class="hint">writes art/stats.json (a .bak of the previous file is kept)</span>
+    </div>
+  </section>
+
+  <section class="panel build" aria-label="Build">
+    <div class="build-head">
+      <button id="buildBtn" type="button">Convert to Java</button>
+      <div class="progress-wrap">
+        <div class="progress-bar"><div id="progressFill"></div></div>
+        <span id="progressPct" class="progress-pct">0%</span>
+      </div>
+      <div id="buildStatus" class="build-status">idle</div>
+    </div>
+    <pre id="buildLog" class="log"></pre>
+  </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+<script src="/ui/app.js"></script>
+</body>
+</html>

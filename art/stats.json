@@ -2,7 +2,7 @@
   "$comment": [
     "Gameplay stats: the single source of truth for player and mob numbers.",
     "Edited by tools/designer and by hand; baked into Stats.java by",
-    "tools/statgen/stats2java.py. Never edit Stats.java — edit this file.",
+    "tools/statgen/stats2java.py. Never edit Stats.java \u2014 edit this file.",
     "",
     "Defaults are deliberately tuned so one sword hit still kills a mob",
     "(attack 25 >= walker hp 20), and a player survives several contacts",

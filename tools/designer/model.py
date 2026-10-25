@@ -38,6 +38,10 @@ class Project:
         # Atomic save with backup
         self._atomic_save(self.stats_path, stats)
 
+    def save_art(self, art):
+        """Atomically write art/art.json, keeping a .bak of the previous file."""
+        self._atomic_save(self.art_path, art)
+
     def _atomic_save(self, path, data):
         # Create backup
         if os.path.exists(path):
@@ -51,6 +55,12 @@ class Project:
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
                 f.write('\n')
+            # mkstemp creates 0600 files; keep the permissions the JSON
+            # files had before (or a sane default for a shared checkout).
+            mode = 0o644
+            if os.path.exists(path):
+                mode = os.stat(path).st_mode & 0o777
+            os.chmod(tmp_path, mode)
             os.replace(tmp_path, path)
         except Exception:
             try:
@@ -168,12 +178,21 @@ class Project:
                 full_path = os.path.join(self.root, src)
                 if not os.path.exists(full_path):
                     errors.append({'field': 'src', 'message': 'file does not exist'})
+                elif os.path.commonpath([os.path.abspath(full_path), self.root]) != self.root:
+                    errors.append({'field': 'src', 'message': 'path escapes the project root'})
             if not isinstance(class_name, str) or not JAVA_IDENT_RE.match(class_name):
                 errors.append({'field': 'class', 'message': 'must be Java identifier'})
             if not isinstance(fit, str) or not FIT_RE.match(fit):
                 errors.append({'field': 'fit', 'message': 'must match WxH'})
             if anchor not in ['bottom-center', 'bottom-left', 'bottom-right', 'center', 'top-left']:
                 errors.append({'field': 'anchor', 'message': 'invalid anchor'})
+            # svg2java.py reads precision with int(); a null must never reach
+            # the manifest, and the generator only accepts 0..6.
+            if precision is None:
+                precision = 2
+            if not isinstance(precision, int) or isinstance(precision, bool) \
+                    or precision < 0 or precision > 6:
+                errors.append({'field': 'precision', 'message': 'must be int 0..6'})
         if errors:
             raise ModelError(errors)
 

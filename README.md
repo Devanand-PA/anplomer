@@ -316,6 +316,22 @@ Authoring rules are in [art/README.md](art/README.md); the CLI contract (exit
 codes, `--json`, manifest schema) that the level/entity designer is meant to
 call is in [tools/artgen/README.md](tools/artgen/README.md).
 
+## Designer
+
+`tools/designer` is the first piece of the GUI designer: a local web app
+(stdlib Python, no external assets) for editing the hero and mob stats
+(`art/stats.json` → `Stats.java`), binding SVG artwork to entities
+(`art/art.json`), and running both generators from one button with a live
+progress bar:
+
+```bash
+python3 tools/designer/designer.py          # http://127.0.0.1:8765
+python3 tools/designer/designer.py --check  # headless selftest
+```
+
+Details, including the HTTP API the future level editor will reuse, are in
+[tools/designer/README.md](tools/designer/README.md).
+
 ## Tests
 
 `tools/run_headless_test.sh` runs both headless suites — no Android SDK or
