@@ -39,7 +39,7 @@
       "id": "sword",
       "name": "Sword",
       "damage": 25,
-      "cooldown": 0.0,
+      "cooldown": 0,
       "$comment": "the sword is always equipped; swings are gated by Player's own attack cooldown"
     },
     {

@@ -16,7 +16,7 @@
     {
       "src": "art/player.svg",
       "class": "ArtPlayer",
-      "fit": "26x36",
+      "fit": "52x72",
       "anchor": "bottom-center",
       "precision": 2,
       "entity": "player"
