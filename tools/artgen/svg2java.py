@@ -812,6 +812,112 @@ def main(argv=None) -> int:
         return 3
 
 
+def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
+                  reporter) -> dict:
+    """Writes ArtBindings.java, the entity -> artwork registry Renderer uses.
+
+    The game never reads art.json; this generated class is the one place that
+    knows which entity has baked artwork and which generated class draws it.
+    An empty manifest still emits the class (every method a no-op), so the
+    game always compiles against a registry.
+    """
+    target_dir = out_dir or package_dir(package)
+    target = target_dir / "ArtBindings.java"
+    regen = f"python3 tools/artgen/svg2java.py --manifest {rel(manifest_path)}"
+    lines = [
+        "// GENERATED FILE - DO NOT EDIT BY HAND.",
+        f"// Source:      {rel(manifest_path)}",
+        "// Generator:   tools/artgen/svg2java.py",
+        f"// Regenerate:  {regen}",
+        "//",
+        "// Entity -> baked-artwork registry. Renderer asks has()/draw() whether",
+        "// an entity has generated art and falls back to its hand-drawn vector",
+        "// code when it does not.",
+        f"package {package};",
+        "",
+        "import android.graphics.Canvas;",
+        "import android.graphics.Paint;",
+        "",
+        "/** Registry of entities that have baked artwork (from the art manifest). */",
+        "public final class ArtBindings {",
+        "",
+        "    private ArtBindings() {",
+        "    }",
+        "",
+        "    /** @return true when {@code entity} has artwork the renderer can draw */",
+        "    public static boolean has(String entity) {",
+        "        switch (entity) {",
+    ]
+    for entity, _cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append("                return true;")
+    lines += [
+        "            default:",
+        "                return false;",
+        "        }",
+        "    }",
+        "",
+        "    /** Fitted ink-box width of the bound artwork; 0 when there is none. */",
+        "    public static float width(String entity) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {cls}.WIDTH;")
+    lines += [
+        "            default:",
+        "                return 0f;",
+        "        }",
+        "    }",
+        "",
+        "    /** Fitted ink-box height of the bound artwork; 0 when there is none. */",
+        "    public static float height(String entity) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {cls}.HEIGHT;")
+    lines += [
+        "            default:",
+        "                return 0f;",
+        "        }",
+        "    }",
+        "",
+        "    /**",
+        "     * Draws the bound artwork with its manifest anchor at (x, y),",
+        "     * scaled about that point. No-op when the entity has no artwork.",
+        "     */",
+        "    public static void draw(String entity, Canvas c, Paint fill,",
+        "                            Paint stroke, float x, float y, float scale) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                {cls}.draw(c, fill, stroke, x, y, scale);")
+        lines.append("                return;")
+    lines += [
+        "            default:",
+        "        }",
+        "    }",
+        "}",
+        "",
+    ]
+    text = "\n".join(lines)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    changed = True
+    if target.exists():
+        changed = target.read_text(encoding="utf-8") != text
+    if changed:
+        tmp = target.with_suffix(".java.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, target)
+    reporter.info(f"{rel(manifest_path)} -> {rel(target)}  "
+                  f"ArtBindings: {len(bound)} entit"
+                  f"{'y' if len(bound) == 1 else 'ies'} bound"
+                  + ("" if changed else "  (unchanged)"))
+    return {"out": rel(target), "entities": [e for e, _ in bound],
+            "written": changed}
+
 def run_manifest(args, reporter) -> int:
     manifest_path = Path(args.manifest)
     try:
@@ -834,6 +940,8 @@ def run_manifest(args, reporter) -> int:
 
     results = []
     failed = False
+    bound: list[tuple[str, str]] = []
+    seen_entities: set[str] = set()
     for i, asset in enumerate(assets):
         try:
             src = Path(asset["src"])
@@ -841,6 +949,16 @@ def run_manifest(args, reporter) -> int:
                 src = PROJECT_ROOT / src
             package = asset.get("package", base_package)
             class_name = asset.get("class") or default_class(src)
+            entity = asset.get("entity")
+            if isinstance(entity, str) and entity.strip():
+                entity = entity.strip()
+                if entity in seen_entities:
+                    reporter.warn(
+                        f"asset {i}: entity {entity!r} already bound; keeping "
+                        f"the first binding")
+                else:
+                    seen_entities.add(entity)
+                    bound.append((entity, class_name))
             fit = parse_fit(asset["fit"]) if asset.get("fit") else None
             anchor = asset.get("anchor", "bottom-center")
             if anchor not in ANCHORS:
@@ -857,8 +975,16 @@ def run_manifest(args, reporter) -> int:
             reporter.error(f"asset {i}: {exc}")
 
     warnings = sum(len(r["warnings"]) for r in results)
+    if not failed and not args.check:
+        bindings_out = emit_bindings(base_package, out_dir, bound,
+                                     Path(args.manifest), reporter)
+    else:
+        bindings_out = None
     if args.json:
-        print(json.dumps({"ok": not failed, "assets": results}, indent=2))
+        payload = {"ok": not failed, "assets": results}
+        if bindings_out is not None:
+            payload["bindings"] = bindings_out
+        print(json.dumps(payload, indent=2))
     if failed:
         return 3
     return 4 if (args.strict and warnings) else 0

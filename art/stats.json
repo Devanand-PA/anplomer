@@ -18,7 +18,7 @@
     {
       "id": "walker",
       "name": "Walker",
-      "maxHp": 20,
+      "maxHp": 50,
       "attack": 15,
       "speed": 95,
       "width": 48,
@@ -27,7 +27,7 @@
     {
       "id": "flyer",
       "name": "Flyer",
-      "maxHp": 12,
+      "maxHp": 40,
       "attack": 12,
       "speed": 120,
       "width": 46,

@@ -29,6 +29,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -319,6 +320,10 @@ def test_server(tmp: Path) -> None:
               and body["entities"][0]["kind"] == "player")
         check("state has mob entities",
               any(e["id"] == "walker" for e in body["entities"]))
+        check("entities carry in-game status + anchor hints",
+              body["entities"][0]["suggestedAnchor"] == "bottom-center"
+              and "fallback" in body["entities"][0]["inGame"]
+              and body["entities"][0]["asset"] is None)
         check("state carries stats, art, svgs, build",
               "player" in body["stats"] and "assets" in body["art"]
               and body["svgs"] == ["art/mob.svg"]
@@ -343,6 +348,17 @@ def test_server(tmp: Path) -> None:
         status, body = http("GET", f"{base}/api/svgs")
         check("GET /api/svgs lists svg paths",
               status == 200 and body["svgs"] == ["art/mob.svg"])
+
+        status, body = http("GET", f"{base}/api/svg?path=art/mob.svg")
+        check("GET /api/svg serves the file",
+              status == 200 and "<svg" in body["raw"], f"status {status}")
+        status, body = http("GET", f"{base}/api/svg?path=art/missing.svg")
+        check("GET /api/svg 400 on missing file", status == 400)
+        status, body = http("GET", f"{base}/api/svg?path=tools/designer/model.py")
+        check("GET /api/svg rejects non-svg", status == 400)
+        status, body = http("GET",
+              f"{base}/api/svg?path=" + urllib.parse.quote("../server.py"))
+        check("GET /api/svg rejects traversal", status == 400)
 
         status, body = http("GET", f"{base}/nope")
         check("unknown route 404 JSON", status == 404 and body["ok"] is False)

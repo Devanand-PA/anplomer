@@ -14,7 +14,7 @@
   "outDir": "app/src/main/java/com/example/anplomer",
   "assets": [
     {
-      "src": "tools/artgen/samples/player.svg",
+      "src": "art/player.svg",
       "class": "ArtPlayer",
       "fit": "26x36",
       "anchor": "bottom-center",

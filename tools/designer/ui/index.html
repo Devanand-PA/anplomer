@@ -26,6 +26,11 @@
       <div class="art-block">
         <h3>Artwork (SVG &rarr; Java)</h3>
         <p id="artCurrent" class="art-current">no SVG bound</p>
+        <div class="preview-wrap">
+          <img id="svgPreview" class="svg-preview hidden" alt="SVG preview">
+          <div id="previewEmpty" class="preview-empty">no preview &mdash; pick or type an .svg path</div>
+        </div>
+        <p id="artStatus" class="hint"></p>
         <div class="art-grid">
           <label>file
             <select id="svgSelect"><option value="">— pick a file —</option></select>

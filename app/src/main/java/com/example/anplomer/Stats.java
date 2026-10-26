@@ -52,8 +52,8 @@ public final class Stats {
 
     /** Every mob, in stats.json order. */
     public static final Mob[] MOBS = {
-        new Mob("walker", "Walker", 20, 15, 95f, 48f, 42f),
-        new Mob("flyer", "Flyer", 12, 12, 120f, 46f, 38f),
+        new Mob("walker", "Walker", 50, 15, 95f, 48f, 42f),
+        new Mob("flyer", "Flyer", 40, 12, 120f, 46f, 38f),
     };
 
     /**

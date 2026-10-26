@@ -122,6 +122,8 @@ class DesignerHandler(BaseHTTPRequestHandler):
                 return self.api_state()
             if path == "/api/svgs":
                 return self.api_svgs()
+            if path == "/api/svg":
+                return self.api_svg()
             if path == "/api/build":
                 return self._send_json(self.runner.snapshot())
             raise ApiError(404, {"ok": False, "error": f"no such route: {path}"})
@@ -156,6 +158,18 @@ class DesignerHandler(BaseHTTPRequestHandler):
 
     def api_svgs(self):
         self._send_json({"ok": True, "svgs": self.project.list_svgs()})
+
+    def api_svg(self):
+        # Preview source for the inspector's <img>: same validation as a bind,
+        # raw file bytes with an SVG content type (no JSON wrapping).
+        from urllib.parse import parse_qs
+        query = parse_qs(urlsplit(self.path).query)
+        src = (query.get("path") or [None])[0]
+        try:
+            text = self.project.read_svg(src)
+        except ModelError as exc:
+            raise ApiError(400, {"ok": False, "errors": exc.args[0]})
+        self._send_bytes(text.encode("utf-8"), "image/svg+xml")
 
     # ---- POST ----------------------------------------------------------
 

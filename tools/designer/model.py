@@ -131,13 +131,18 @@ class Project:
                 'attack': player_stats.get('attack'),
                 'hurtInvuln': player_stats.get('hurtInvuln'),
             },
-            'asset': player_asset
+            'asset': player_asset,
+            'suggestedAnchor': self.anchor_hint('player'),
+            'inGame': ('drawn from the bound SVG after Convert to Java'
+                       if player_asset else
+                       'hand-drawn fallback (no SVG bound)'),
         })
         # Mobs
         for mob in stats.get('mobs', []):
             asset = self._find_asset_for_entity(art, mob.get('id'))
+            mid = mob.get('id')
             entities.append({
-                'id': mob.get('id'),
+                'id': mid,
                 'kind': 'mob',
                 'name': mob.get('name'),
                 'stats': {
@@ -149,7 +154,11 @@ class Project:
                     'width': mob.get('width'),
                     'height': mob.get('height'),
                 },
-                'asset': asset
+                'asset': asset,
+                'suggestedAnchor': self.anchor_hint(mid),
+                'inGame': ('drawn from the bound SVG after Convert to Java'
+                           if asset else
+                           'hand-drawn fallback (no SVG bound)'),
             })
         return entities
 
@@ -223,6 +232,33 @@ class Project:
         if 'outDir' not in art and 'outDir' in art_data:
             art['outDir'] = art_data['outDir']
         return art
+
+    def read_svg(self, src):
+        """Returns the text of a repo-relative .svg, or raises ModelError.
+
+        Used by the preview endpoint; the same rules as binding apply.
+        """
+        if not isinstance(src, str) or not src.endswith('.svg'):
+            raise ModelError([{'field': 'src', 'message': 'must be repo-relative .svg'}])
+        full_path = os.path.abspath(os.path.join(self.root, src))
+        if os.path.commonpath([full_path, self.root]) != self.root:
+            raise ModelError([{'field': 'src', 'message': 'path escapes the project root'}])
+        if not os.path.isfile(full_path):
+            raise ModelError([{'field': 'src', 'message': 'file does not exist'}])
+        with open(full_path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def anchor_hint(self, entity_id):
+        """The anchor the game draws this entity at, so binds line up.
+
+        The player and walkers are feet-anchored; anything that flies/hovers
+        is drawn around its centre, so 'center' is the right default there.
+        """
+        low = (entity_id or '').lower()
+        for key in ('fly', 'wing', 'bat', 'wisp'):
+            if key in low:
+                return 'center'
+        return 'bottom-center'
 
     def list_svgs(self):
         svgs = []

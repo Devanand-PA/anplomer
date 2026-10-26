@@ -935,25 +935,36 @@ public final class Renderer {
         }
     }
 
+    /** Entity box height / fitted art height, so baked art fills the box. */
+    private float artScale(Enemy e, String entity) {
+        float artH = ArtBindings.height(entity);
+        return artH > 0f ? e.h / artH : 1f;
+    }
+
     private void drawEnemyHpBar(Canvas c, Game g, Enemy e) {
-        if (e.dead || e.maxHp <= 0 || e.hp >= e.maxHp) {
+        // Always visible (the designer makes maxHp a real tuning knob now);
+        // only the dead skip it. Flyers sit their bar higher so the wing
+        // tips never poke through it.
+        if (e.dead || e.maxHp <= 0) {
             return;
         }
-        float scale = Math.min(g.screenWidth,g.screenHeight) / 480f;
-        float bw = Math.min(e.w * 1.2f, 72f);
+        float bw = Math.max(30f, Math.min(e.w * 1.15f, 80f));
         float bh = Constants.HP_BAR_H;
         float bx = e.x + (e.w - bw) / 2f;
-        float by = e.y - Constants.HP_BAR_GAP;
-        float frac = Math.max(0f, Math.min(1f, e.hpFraction()));
-        fill.setColor(0xAA000000);
-        c.drawRoundRect(rect(bx, by, bx + bw, by + bh), 3f, 3f, fill);
+        float by = e.y - (e.type == Enemy.Type.FLYER
+                ? 26f : Constants.HP_BAR_GAP) - bh;
+        float frac = e.hpFraction();
+        fill.setColor(0xB0000000);
+        c.drawRoundRect(rect(bx - 1.5f, by - 1.5f, bx + bw + 1.5f, by + bh + 1.5f),
+                4f, 4f, fill);
         if (frac > 0f) {
-            fill.setColor(0xFFE4453A);
-            c.drawRoundRect(rect(bx + 1f, by + 1f, bx + 1f + (bw - 2f) * frac, by + bh - 1f), 2f, 2f, fill);
+            fill.setColor(frac > 0.5f ? 0xFFE4453A
+                    : frac > 0.25f ? 0xFFFF7A3D : 0xFFFFC857);
+            c.drawRoundRect(rect(bx, by, bx + bw * frac, by + bh), 3f, 3f, fill);
         }
-        stroke.setColor(0x88FFFFFF);
-        stroke.setStrokeWidth(1.2f);
-        c.drawRoundRect(rect(bx, by, bx + bw, by + bh), 3f, 3f, stroke);
+        stroke.setColor(0x99FFFFFF);
+        stroke.setStrokeWidth(1.4f);
+        c.drawRoundRect(rect(bx, by, bx + bw, by + bh), 4f, 4f, stroke);
     }
 
     private void drawEnemies(Canvas c, Game g) {
@@ -979,6 +990,19 @@ public final class Renderer {
         if (e.hitFlash > 0f && !e.dead) {
             fill.setColor(0xCCFFFFFF);
             c.drawRoundRect(rect(e.x, e.y, e.x + e.w, e.y + e.h), 10f, 10f, fill);
+            return;
+        }
+        if (ArtBindings.has("walker")) {
+            // Baked artwork: feet anchor, death squash and a facing flip so a
+            // side-authored sprite reads correctly from both directions.
+            c.save();
+            c.translate(e.x + e.w / 2f, e.y + e.h);
+            float wide = Math.min(1.7f, 0.7f / Math.max(squashY, 0.3f) + 0.3f);
+            c.scale(wide, squashY);
+            c.scale(sx, 1f);
+            ArtBindings.draw("walker", c, fill, stroke, 0f, 0f,
+                    artScale(e, "walker"));
+            c.restore();
             return;
         }
         c.save();
@@ -1059,6 +1083,20 @@ public final class Renderer {
         if (e.hitFlash > 0f && !e.dead) {
             fill.setColor(0xCCFFFFFF);
             c.drawOval(rect(e.x, e.y, e.x + e.w, e.y + e.h), fill);
+            return;
+        }
+        if (ArtBindings.has("flyer")) {
+            // Baked artwork: centre anchor (bind with --anchor center), a
+            // gentle hover wobble and a facing flip keep a static sprite alive.
+            c.save();
+            c.translate(e.x + e.w / 2f, e.y + e.h / 2f);
+            if (!e.dead) {
+                c.rotate(sinf(g.worldTime * 3f + e.animTime) * 8f);
+                c.scale(e.facing < 0f ? -1f : 1f, 1f);
+            }
+            ArtBindings.draw("flyer", c, fill, stroke, 0f, 0f,
+                    artScale(e, "flyer"));
+            c.restore();
             return;
         }
         float flap = sinf(g.worldTime * 14f + e.animTime * 2f);
@@ -1155,9 +1193,27 @@ public final class Renderer {
             c.drawOval(rect(p.x + w * 0.14f, p.y + h - 5f, p.x + w * 0.86f, p.y + h + 8f), fill);
         }
 
-        c.save();
-        c.translate(p.x + w / 2f, p.y + h);
-        c.scale(sx, 1f);
+        if (ArtBindings.has("player")) {
+            // Baked artwork (bound in art/art.json by the designer). The game
+            // supplies every motion: facing flip, landing squash, the death
+            // tumble and a small airborne lean; the SVG is just the body.
+            c.save();
+            c.translate(p.x + w / 2f, p.y + h);
+            c.scale(sx, 1f);
+            float sy = p.squash;
+            float sxw = 1f / Math.max(sy, 0.5f) * 0.6f + 0.4f;
+            c.scale(sxw, sy);
+            if (p.dead) {
+                c.rotate(-90f * Math.min(1f,
+                        (Constants.RESPAWN_DELAY - p.deadTimer) * 2.2f));
+            } else if (!p.onGround) {
+                c.rotate(Math.max(-8f, Math.min(8f, p.vy * 0.006f)));
+            }
+            float artH = ArtBindings.height("player");
+            ArtBindings.draw("player", c, fill, stroke, 0f, 0f,
+                    artH > 0f ? h / artH : 1f);
+            c.restore();
+        } else {
         float sy = p.squash;
         float sxw = 1f / Math.max(sy, 0.5f) * 0.6f + 0.4f;
         c.scale(sxw, sy);
@@ -1274,7 +1330,7 @@ public final class Renderer {
             path.quadTo(13f, -h * 0.63f, 20f, -h * 0.69f);
             c.drawPath(path, stroke);
         }
-        c.restore();
+        }
 
         // invulnerable/landing sparkle
         if (p.landFlash > 0.5f) {
@@ -1708,32 +1764,34 @@ public final class Renderer {
                     pad + 26f * scale + hearts * 46f * scale, hy + 30f * scale, text);
         }
 
-        // --- player HP bar under the lives/hearts row --------------------
-        float barY = (g.lives > hearts ? hy + 48f : hy + 38f) * scale + (g.lives > hearts ? 16f : 10f) * scale;
-        if (g.lives <= hearts) {
-            barY = hy + 38f * scale;
-        }
-        // easier: draw just below the hearts row regardless of overflow text
-        barY = hy + 44f * scale;
+        // --- player HP bar: its own band under the hearts -----------------
+        // The left column is a stack of fixed bands so nothing ever overlaps:
+        //   panels row | hearts (+overflow) | HP bar | power chips | shield
+        //   pips | wallet fallback. All offsets are multiples of `scale` off
+        //   `hy`, the hearts-row origin.
+        float barY = hy + 50f * scale;
+        float barH = 9f * scale;
         float barW = 118f * scale;
         float barX = pad + 16f * scale;
         float frac = 0f;
         if (g.player != null && g.player.maxHp > 0) {
             frac = Math.max(0f, Math.min(1f, (float) g.player.hp / g.player.maxHp));
         }
-        fill.setColor(0xAA000000);
-        c.drawRoundRect(rect(barX, barY, barX + barW, barY + 8f * scale), 5f, 5f, fill);
+        fill.setColor(0xB0000000);
+        c.drawRoundRect(rect(barX - 1.5f, barY - 1.5f,
+                barX + barW + 1.5f, barY + barH + 1.5f), 6f, 6f, fill);
         if (frac > 0f) {
             int hpCol = frac > 0.5f ? 0xFF3DDC84 : (frac > 0.25f ? 0xFFFFC857 : 0xFFE4453A);
             fill.setColor(hpCol);
-            c.drawRoundRect(rect(barX + 1f, barY + 1f, barX + 1f + (barW - 2f) * frac, barY + 7f * scale), 4f, 4f, fill);
+            c.drawRoundRect(rect(barX, barY, barX + barW * frac, barY + barH),
+                    5f, 5f, fill);
         }
         stroke.setColor(0x88FFFFFF);
         stroke.setStrokeWidth(1.6f * scale);
-        c.drawRoundRect(rect(barX, barY, barX + barW, barY + 8f * scale), 5f, 5f, stroke);
+        c.drawRoundRect(rect(barX, barY, barX + barW, barY + barH), 6f, 6f, stroke);
 
-        // --- active power-ups: chips under the hearts -------------------
-        float chipY = barY + 18f * scale;
+        // --- active power-ups: chips in the next band --------------------
+        float chipY = hy + 80f * scale;
         float chipX = pad + 6f * scale;
         chipX = drawPowerChip(c, g, PowerUp.Type.SPEED, g.speedBoostTimer, chipX, chipY, scale);
         chipX = drawPowerChip(c, g, PowerUp.Type.MAGNET, g.magnetTimer, chipX, chipY, scale);
@@ -1762,18 +1820,21 @@ public final class Renderer {
             text.setTextAlign(Paint.Align.CENTER);
         }
 
-        // --- shield pips -------------------------------------------------
+        // --- shield pips: band below the chips ----------------------------
         if (g.shieldCharges > 0) {
-            float shY = chipY + 26f * scale;
+            float shY = chipY + 30f * scale;
             int pips = Math.min(6, g.shieldCharges);
             for (int i = 0; i < pips; i++) {
                 drawShieldPip(c, pad + 14f * scale + i * 30f * scale, shY, 12f * scale);
             }
         }
 
-        // --- wallet fallback position -----------------------------------
+        // --- wallet fallback: bottom band of the left column --------------
+        // (narrow screens: inline placement beside the level panel did not
+        // fit, so the wallet drops below the whole stack instead of fighting
+        // the hearts row for space)
         if (!walletInline) {
-            drawWalletChip(c, g, pad + boxW + 12f * scale, pad + boxH + 44f * scale,
+            drawWalletChip(c, g, pad, hy + 112f * scale,
                     walletW, boxH * 0.62f, scale);
         }
 

@@ -161,6 +161,29 @@ html, body {
 }
 .muted { color: var(--muted); }
 
+.preview-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  margin-bottom: 10px;
+  background:
+    repeating-conic-gradient(#12172a 0 25%, #0d111d 0 50%) 0 0/22px 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.svg-preview {
+  max-width: 100%;
+  max-height: 114px;
+}
+
+.preview-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .art-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));

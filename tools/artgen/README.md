@@ -115,9 +115,20 @@ Default output path follows the package:
 ```
 
 Per-asset keys: `src` (required), `class`, `package`, `fit`, `anchor`,
-`precision`, `out`. Relative paths resolve against the repository root, so the
+`precision`, `out`, and the optional `entity` (an id from `art/stats.json`, or
+`"player"`). Relative paths resolve against the repository root, so the
 same manifest works from any working directory — and from a GUI process that
 shells out.
+
+Every manifest run also writes **`ArtBindings.java`** into `outDir`: the
+entity → artwork registry the game reads. `Renderer` calls
+`ArtBindings.has(entity)`; when an asset declares `"entity"`, the registry
+maps it to the generated class (`has` → `true`, `draw` → `ArtPlayer.draw(...)`,
+plus `width`/`height` so the caller can fit the art to the entity's box).
+Assets without an `entity` key are still baked as classes but stay out of the
+registry. An **empty** manifest still emits the registry — every method a
+no-op — so the game always compiles and every entity falls back to the
+hand-drawn vector code. Duplicate `entity` bindings keep the first and warn.
 
 ## Generated class shape
 
@@ -142,7 +153,9 @@ public final class ArtPlayer {
 ```
 
 `draw` saves the canvas, translates to `(x, y)`, applies `scale`, paints each
-part in document order and restores. It **mutates** the two `Paint` objects
+part in document order and restores. Entities are scaled to their hitbox
+height by the caller (`scale = entity.h / ArtBindings.height(entity)`), so
+`fit` controls proportions and the entity box controls on-screen size. It **mutates** the two `Paint` objects
 (style, colour, stroke width) exactly like the hand-written drawing code, so a
 caller can hand it the renderer's shared `fill`/`stroke` paints.
 

@@ -149,15 +149,37 @@ function renderArtBlock(ent) {
        ${esc(asset.anchor)}, precision ${esc(asset.precision)})</span>`
     : 'no SVG bound';
 
+  // In-game status: this is what answers "I bound an SVG and nothing changed".
+  $('artStatus').innerHTML = 'in-game: ' + esc(ent.inGame || '')
+    + (asset ? ' &mdash; rebuild the APK to see it' : '');
+
   if (document.activeElement !== $('svgPath')) {
     $('svgPath').value = asset ? asset.src : '';
   }
   $('fitInput').value = asset ? asset.fit
     : (ent.kind === 'player' ? '26x36' : `${Math.round(ent.stats.width)}x${Math.round(ent.stats.height)}`);
-  $('anchorSelect').value = asset ? asset.anchor : 'bottom-center';
+  // The game anchors the player and walkers at their feet, hovering mobs at
+  // their centre: prefill whatever the renderer will actually draw at.
+  $('anchorSelect').value = asset ? asset.anchor : (ent.suggestedAnchor || 'bottom-center');
   $('precisionInput').value = asset ? asset.precision : 2;
   $('classInput').value = asset ? asset.class
     : 'Art' + ent.id.charAt(0).toUpperCase() + ent.id.slice(1);
+  updatePreview();
+}
+
+function updatePreview() {
+  const img = $('svgPreview');
+  const empty = $('previewEmpty');
+  const src = $('svgPath').value.trim();
+  if (src.toLowerCase().endsWith('.svg')) {
+    img.src = '/api/svg?path=' + encodeURIComponent(src);
+    img.classList.remove('hidden');
+    empty.classList.add('hidden');
+  } else {
+    img.removeAttribute('src');
+    img.classList.add('hidden');
+    empty.classList.remove('hidden');
+  }
 }
 
 function renderSvgSelect() {
@@ -312,9 +334,17 @@ async function boot() {
   $('removeBtn').addEventListener('click', () => bindAsset(true));
   $('buildBtn').addEventListener('click', startBuild);
   $('svgSelect').addEventListener('change', () => {
-    if ($('svgSelect').value) $('svgPath').value = $('svgSelect').value;
+    if ($('svgSelect').value) {
+      $('svgPath').value = $('svgSelect').value;
+      updatePreview();
+    }
   });
-  $('svgPath').addEventListener('input', renderSvgSelect);
+  $('svgPath').addEventListener('input', () => { renderSvgSelect(); updatePreview(); });
+  $('svgPreview').addEventListener('error', () => {
+    $('svgPreview').classList.add('hidden');
+    $('previewEmpty').textContent = 'preview failed \u2014 file not found?';
+    $('previewEmpty').classList.remove('hidden');
+  });
 }
 
 boot();

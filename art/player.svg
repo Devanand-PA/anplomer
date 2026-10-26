@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="64"
+   height="88"
+   viewBox="0 0 64 88"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="player.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="9.7159091"
+     inkscape:cx="50.535673"
+     inkscape:cy="56.350877"
+     inkscape:window-width="1920"
+     inkscape:window-height="1056"
+     inkscape:window-x="0"
+     inkscape:window-y="24"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <g
+     id="legs"
+     inkscape:label="legs"
+     transform="matrix(0.79415205,0,0,1,6.3812866,-0.20584795)">
+    <rect
+       id="leg-left"
+       x="22"
+       y="62"
+       width="9"
+       height="18"
+       rx="4"
+       fill="#2a3f7a" />
+    <rect
+       id="leg-right"
+       x="33"
+       y="62"
+       width="9"
+       height="18"
+       rx="4"
+       fill="#2a3f7a" />
+  </g>
+  <g
+     id="shoes"
+     inkscape:label="shoes"
+     transform="matrix(0.76842105,0,0,1,6.1754385,-1.1321637)">
+    <rect
+       id="shoe-left"
+       x="20"
+       y="80"
+       width="11"
+       height="8"
+       rx="3"
+       fill="#1b243f" />
+    <rect
+       id="shoe-right"
+       x="33"
+       y="80"
+       width="11"
+       height="8"
+       rx="3"
+       fill="#1b243f" />
+  </g>
+  <rect
+     id="body"
+     x="20.528654"
+     y="29.588305"
+     width="23.148539"
+     height="34"
+     rx="7.2339182"
+     fill="#3f6be0"
+     style="stroke-width:0.850524" />
+  <rect
+     id="chest"
+     x="23.422222"
+     y="32.588303"
+     width="17.361404"
+     height="12"
+     rx="4.3403511"
+     fill="#5a85f5"
+     style="stroke-width:0.850524" />
+  <rect
+     id="belt"
+     x="20.528654"
+     y="51.588303"
+     width="23.148539"
+     height="5"
+     fill="#243458"
+     style="stroke-width:0.850524" />
+  <rect
+     id="buckle"
+     x="29.932747"
+     y="51.588303"
+     width="4.3403511"
+     height="5"
+     fill="#ffcb3d"
+     style="stroke-width:0.850524" />
+  <g
+     id="arms"
+     inkscape:label="arms"
+     transform="matrix(0.8769933,0,0,0.85159799,4.0906011,5.2515165)">
+    <rect
+       id="arm-back"
+       x="12"
+       y="34"
+       width="6"
+       height="16"
+       rx="3"
+       fill="#3560d2" />
+    <rect
+       id="arm-front"
+       x="46"
+       y="34"
+       width="6"
+       height="16"
+       rx="3"
+       fill="#3560d2" />
+    <circle
+       id="hand-back"
+       cx="15"
+       cy="52"
+       r="3.5"
+       fill="#f0be92" />
+    <circle
+       id="hand-front"
+       cx="49"
+       cy="52"
+       r="3.5"
+       fill="#f0be92" />
+  </g>
+  <rect
+     id="head"
+     x="20"
+     y="6"
+     width="24"
+     height="24"
+     rx="8"
+     fill="#F3C79A" />
+  <path
+     id="hair"
+     fill="#4a2e1d"
+     d="M 19.490552,13.816653 V 8.5228172 q 12.473058,-13.2345883 24.946117,0 V 13.816653 L 38.20014,9.8462765 31.96361,13.816653 25.727081,9.8462765 Z"
+     style="stroke-width:1.17287" />
+  <circle
+     id="eye-white"
+     cx="26.06082"
+     cy="19.02924"
+     r="4"
+     fill="#ffffff"
+     inkscape:transform-center-x="-1.2350877"
+     inkscape:transform-center-y="-0.10292398" />
+  <circle
+     id="pupil"
+     cx="27.06082"
+     cy="19.02924"
+     r="2"
+     fill="#2a2118"
+     inkscape:transform-center-x="-2.2350877"
+     inkscape:transform-center-y="-0.10292398" />
+  <path
+     id="brow"
+     fill="#4A2E1D"
+     d="M34 13 L43 12 L43 14 L34 15 Z" />
+  <path
+     id="mouth"
+     fill="#b3754b"
+     d="m 30.339181,24.823392 q 3,2 6,0 v 1 q -3,2 -6,0 z" />
+  <circle
+     id="circle1"
+     cx="38.308773"
+     cy="19.02924"
+     r="4"
+     fill="#ffffff"
+     inkscape:transform-center-x="-1.2350877"
+     inkscape:transform-center-y="-0.10292398" />
+  <circle
+     id="circle2"
+     cx="39.308773"
+     cy="19.02924"
+     r="2"
+     fill="#2a2118"
+     inkscape:transform-center-x="-2.2350877"
+     inkscape:transform-center-y="-0.10292398" />
+  <path
+     id="path2"
+     fill="#4a2e1d"
+     d="m 21.134503,13.154386 9,-1 v 2 l -9,1 z" />
+</svg>

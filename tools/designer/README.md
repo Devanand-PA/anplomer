@@ -24,9 +24,12 @@ Then open <http://127.0.0.1:8765>. The page has three regions:
 - **Inspector** (right): number inputs for the selected entity's stats
   (HP, attack, hurt-invulnerability for the hero; HP, attack, speed, size for
   mobs) with inline validation straight from the server. Below that, the
-  **Artwork** block binds an SVG to the entity: pick a file (or type a
-  repo-relative path), set fit `WxH`, an anchor, precision and the generated
-  Java class name, then Bind/Remove.
+  **Artwork** block binds an SVG to the entity: a **live preview** renders the
+  current file as you pick or type it, an **in-game** line says whether the
+  entity is drawn from its SVG or the hand-drawn fallback, then fit `WxH`,
+  anchor (prefilled to what the game actually anchors that entity at — feet
+  for the hero and walkers, centre for hovering mobs), precision and the
+  generated Java class name, then Bind/Remove.
 - **Build** (bottom): **Convert to Java** runs the real generators in the repo
   root and shows a live progress bar plus the merged log.
 
@@ -52,6 +55,7 @@ save — the designer merges, it never rewrites from scratch.
 | POST   | `/api/stats`    | `{player, mobs}` → validate + atomic save      |
 | POST   | `/api/asset`    | `{entity, src, class, fit, anchor, precision}`; `src: null` unbinds |
 | GET    | `/api/svgs`    | repo-relative `.svg` paths, sorted, cap 500    |
+| GET    | `/api/svg?path=` | raw SVG bytes for the inspector's live preview |
 | POST   | `/api/build`    | start a build (409 while one runs)             |
 | GET    | `/api/build`    | `{state, steps, progress, message, exitCode, startedAt, finishedAt}` |
 
@@ -81,11 +85,14 @@ tools/designer/
 
 ## Note on generated art
 
-The classes produced by the art step land in
-`app/src/main/java/com/example/anplomer/`, but **`Renderer` does not draw them
-yet** — the game still uses its hand-drawn vector code. Swapping generated art
-into `Renderer` (per-entity, with `RendererSmoke`'s primitive counts updated)
-is the next milestone.
+The art step writes `Art*.java` classes plus **`ArtBindings.java`**, and
+`Renderer` draws through that registry: bind an SVG to an entity, hit
+**Convert to Java**, rebuild the APK, and that entity is drawn from your SVG.
+Unbound entities keep the hand-drawn vector code.
+
+The SVG is the body, not the behaviour: running, jumping, squash, facing and
+the death tumble all come from the game and are applied around the artwork —
+author the player side-on facing right and let the renderer mirror it.
 
 ## Tests
 

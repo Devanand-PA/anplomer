@@ -16,3 +16,6 @@ shots/
 # python bytecode from the PC-side tools
 __pycache__/
 *.pyc
+
+# designer save backups (art/*.bak are refresh-on-save scratch, not source)
+art/*.bak

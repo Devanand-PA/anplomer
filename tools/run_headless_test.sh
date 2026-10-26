@@ -37,6 +37,15 @@ PURE_SOURCES=(
   "tools/RendererSmoke.java"
 )
 
+# Generated art (entity registry + any bound Art*.java classes). With an empty
+# art manifest only ArtBindings.java exists and every entity falls back to the
+# hand-drawn code, so the smoke counts stay stable until art is bound.
+shopt -s nullglob
+for f in "$SRC"/Art*.java; do
+  PURE_SOURCES+=("$f")
+done
+shopt -u nullglob
+
 if [ -n "${JAVA_HOME:-}" ]; then
   JAVAC="$JAVA_HOME/bin/javac"; JAVA="$JAVA_HOME/bin/java"
 else

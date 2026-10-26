@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -256,6 +257,57 @@ def pipeline_checks() -> None:
           _quiet_main([str(SAMPLES / "nope.svg"), "--check", "--json"]) == 3)
     check("bad usage exits 2",
           _quiet_main(["--fit", "nonsense", str(SAMPLES / "player.svg")]) == 2)
+
+    # --manifest also bakes ArtBindings.java, the entity -> art registry the
+    # game reads. One entity per asset (first binding wins on duplicates),
+    # and an empty manifest still emits an empty registry so the game always
+    # has the class to compile against.
+    out = tmp / "out"
+    manifest = tmp / "art.json"
+    manifest.write_text(json.dumps({
+        "package": "com.example.anplomer",
+        "outDir": str(out),
+        "assets": [
+            {"src": str(SAMPLES / "shapes.svg"), "class": "ArtBindA",
+             "fit": "10x10", "entity": "walker"},
+            {"src": str(SAMPLES / "player.svg"), "class": "ArtBindB",
+             "fit": "26x36", "entity": "flyer"},
+            {"src": str(SAMPLES / "shapes.svg"), "class": "ArtBindC",
+             "entity": "flyer"},
+        ],
+    }), encoding="utf-8")
+    rc = _quiet_main(["--manifest", str(manifest), "--json"])
+    bindings_path = out / "ArtBindings.java"
+    text = bindings_path.read_text(encoding="utf-8") \
+        if bindings_path.exists() else ""
+    check("manifest exits 0", rc == 0, f"rc {rc}")
+    check("ArtBindings.java emitted", bool(text), "file missing")
+    check("bindings map entity -> class",
+          'case "walker":' in text and "ArtBindA.draw(" in text
+          and 'case "flyer":' in text and "ArtBindB.draw(" in text, text[:200])
+    check("duplicate entity keeps first binding",
+          text.count('case "flyer":') == 4, str(text.count('case "flyer":')))
+    check("bindings import android.graphics",
+          "import android.graphics.Canvas;" in text)
+    empty = tmp / "empty.json"
+    empty.write_text(json.dumps({"package": "com.example.anplomer",
+                                 "outDir": str(tmp / "empty-out"),
+                                 "assets": []}), encoding="utf-8")
+    _quiet_main(["--manifest", str(empty)])
+    empty_text = (tmp / "empty-out" / "ArtBindings.java").read_text(encoding="utf-8")
+    check("empty manifest emits an empty registry",
+          "public final class ArtBindings" in empty_text
+          and 'case' not in empty_text, empty_text[:120])
+    (tmp / "none-out").mkdir(exist_ok=True)
+    check_only = tmp / "check.json"
+    check_only.write_text(json.dumps({
+        "package": "com.example.anplomer", "outDir": str(tmp / "none-out"),
+        "assets": [{"src": str(SAMPLES / "shapes.svg"),
+                    "class": "ArtBindD", "entity": "player"}],
+    }), encoding="utf-8")
+    _quiet_main(["--manifest", str(check_only), "--check"])
+    check("--check writes no bindings",
+          not (tmp / "none-out" / "ArtBindings.java").exists())
 
     shutil.rmtree(tmp, ignore_errors=True)
 

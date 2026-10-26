@@ -1,7 +1,7 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Source:      tools/artgen/samples/player.svg
+// Source:      art/player.svg
 // Generator:   tools/artgen/svg2java.py
-// Regenerate:  python3 tools/artgen/svg2java.py tools/artgen/samples/player.svg --class ArtPlayer --fit 26x36
+// Regenerate:  python3 tools/artgen/svg2java.py art/player.svg --class ArtPlayer --fit 26x36
 //
 // Segments are baked to absolute M/L/Q/C/Z in game units (y down);
 // `--fit` moved the artwork's anchor to the origin, so drawing needs
