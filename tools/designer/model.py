@@ -86,6 +86,46 @@ class Project:
             errors.append({'field': 'player', 'message': str(e)})
 
         try:
+            weapons = stats.get('weapons', [])
+            if weapons is None:
+                weapons = []
+            if not isinstance(weapons, list):
+                errors.append({'field': 'weapons', 'message': 'must be a list'})
+                weapons = []
+            seen_weapons = set()
+            for i, wpn in enumerate(weapons):
+                if not isinstance(wpn, dict):
+                    errors.append({'field': f'weapons[{i}]',
+                                   'message': 'must be an object'})
+                    continue
+                wid = wpn.get('id')
+                if not isinstance(wid, str) or not MOB_ID_RE.match(wid):
+                    errors.append({'field': f'weapons[{i}].id',
+                                   'message': 'must match ^[a-z][a-z0-9_]*$'})
+                elif wid in seen_weapons:
+                    errors.append({'field': f'weapons[{i}].id',
+                                   'message': 'duplicate id'})
+                else:
+                    seen_weapons.add(wid)
+                wname = wpn.get('name')
+                if wname is not None and (not isinstance(wname, str)
+                                          or not wname.strip()):
+                    errors.append({'field': f'weapons[{i}].name',
+                                   'message': 'must be a non-empty string'})
+                val = wpn.get('damage')
+                if not isinstance(val, int) or isinstance(val, bool) \
+                        or val < 0 or val > 9999:
+                    errors.append({'field': f'weapons[{i}].damage',
+                                   'message': 'must be int 0..9999'})
+                val = wpn.get('cooldown')
+                if not isinstance(val, (int, float)) or isinstance(val, bool) \
+                        or val < 0 or val > 10:
+                    errors.append({'field': f'weapons[{i}].cooldown',
+                                   'message': 'must be float 0..10'})
+        except Exception as e:
+            errors.append({'field': 'weapons', 'message': str(e)})
+
+        try:
             mobs = stats.get('mobs', [])
             seen_ids = set()
             for i, mob in enumerate(mobs):
@@ -159,6 +199,22 @@ class Project:
                 'inGame': ('drawn from the bound SVG after Convert to Java'
                            if asset else
                            'hand-drawn fallback (no SVG bound)'),
+            })
+        for wpn in stats.get('weapons', []) or []:
+            if not isinstance(wpn, dict):
+                continue
+            entities.append({
+                'id': wpn.get('id'),
+                'kind': 'weapon',
+                'name': wpn.get('name', wpn.get('id')),
+                'stats': {
+                    'id': wpn.get('id'),
+                    'name': wpn.get('name', wpn.get('id')),
+                    'damage': wpn.get('damage'),
+                    'cooldown': wpn.get('cooldown'),
+                },
+                'asset': None,
+                'inGame': 'damage + cooldown tune the real weapon',
             })
         return entities
 

@@ -319,12 +319,14 @@ call is in [tools/artgen/README.md](tools/artgen/README.md).
 ## Designer
 
 `tools/designer` is the first piece of the GUI designer: a local web app
-(stdlib Python, no external assets) for editing the hero and mob stats
+(stdlib Python, no external assets) for editing the hero, mob and weapon stats
 (`art/stats.json` → `Stats.java`), binding SVG artwork to entities
 (`art/art.json` → `Art*.java` + the `ArtBindings` registry the renderer draws
 through), and running both generators from one button with a live progress
 bar. It shows a live SVG preview and tells you per entity whether the game
-draws the bound SVG or its hand-drawn fallback:
+draws the bound SVG or its hand-drawn fallback. Baked artwork animates from
+layer names (`leg-left`, `arm-front`, `wing`… see
+[art/README.md](art/README.md)):
 
 ```bash
 python3 tools/designer/designer.py          # http://127.0.0.1:8765

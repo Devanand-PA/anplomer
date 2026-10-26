@@ -50,6 +50,47 @@ public final class Stats {
         }
     }
 
+    /** One weapon archetype; immutable. */
+    public static final class Weapon {
+        public final String id;
+        public final String name;
+        public final int damage;
+        public final float cooldown;
+
+        Weapon(String id, String name, int damage, float cooldown) {
+            this.id = id;
+            this.name = name;
+            this.damage = damage;
+            this.cooldown = cooldown;
+        }
+
+        @Override
+        public String toString() {
+            return name + "(" + damage + "dmg, " + cooldown + "s)";
+        }
+    }
+
+    /**
+     * Looks a weapon up by id. Unlike {@link #mob} there is no
+     * fallback: an unknown id returns null and Weapons.java keeps its
+     * built-in default, so an older stats.json never changes the game.
+     */
+    public static Weapon findWeapon(String id) {
+        for (Weapon w : WEAPONS) {
+            if (w.id.equals(id)) {
+                return w;
+            }
+        }
+        return null;
+    }
+
+    /** Every weapon, in stats.json order (may be empty). */
+    public static final Weapon[] WEAPONS = {
+        new Weapon("sword", "Sword", 25, 0f),
+        new Weapon("bow", "Bow", 25, 0.42f),
+        new Weapon("boomerang", "Boomerang", 25, 0.7f),
+    };
+
     /** Every mob, in stats.json order. */
     public static final Mob[] MOBS = {
         new Mob("walker", "Walker", 50, 15, 95f, 48f, 42f),

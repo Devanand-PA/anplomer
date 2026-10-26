@@ -60,4 +60,59 @@ public final class ArtBindings {
             default:
         }
     }
+
+    /** Part count of the bound artwork; 0 when the entity has none. */
+    public static int partCount(String entity) {
+        switch (entity) {
+            case "player":
+                return ArtPlayer.count();
+            default:
+                return 0;
+        }
+    }
+
+    /** Layer name of part i (drives the name-based animation). */
+    public static String partName(String entity, int i) {
+        switch (entity) {
+            case "player":
+                return ArtPlayer.partName(i);
+            default:
+                return "";
+        }
+    }
+
+    /** Part pivot (joint) in art units; 0 when the entity has none. */
+    public static float partPivotX(String entity, int i) {
+        switch (entity) {
+            case "player":
+                return ArtPlayer.partPivotX(i);
+            default:
+                return 0f;
+        }
+    }
+
+    /** @see #partPivotX */
+    public static float partPivotY(String entity, int i) {
+        switch (entity) {
+            case "player":
+                return ArtPlayer.partPivotY(i);
+            default:
+                return 0f;
+        }
+    }
+
+    /**
+     * Draws one part of the bound artwork. Renderer rotates limbs by
+     * transforming the canvas about the part's pivot, then calls this.
+     */
+    public static void drawPart(String entity, int i, Canvas c,
+                               Paint fill, Paint stroke,
+                               float x, float y, float scale) {
+        switch (entity) {
+            case "player":
+                ArtPlayer.drawPart(i, c, fill, stroke, x, y, scale);
+                return;
+            default:
+        }
+    }
 }

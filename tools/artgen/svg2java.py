@@ -465,6 +465,20 @@ def emit_java(parts: list[Part], class_name: str, package: str, source: str,
         used.add(n)
         names.append(n)
 
+    # Per-part pivot: top-centre of the part's own ink box, in fitted units.
+    # Legs pivot at the hip, arms at the shoulder, wings at the root -- exactly
+    # what a name-driven animation wants to rotate around.
+    pivots = []
+    for p in parts:
+        if not p.segments:
+            pivots.append((0.0, 0.0))
+            continue
+        x0, _y0, x1, _y1 = svgpath.bbox_of_segments(p.segments)
+        if x1 < x0:
+            pivots.append((0.0, 0.0))
+            continue
+        pivots.append(((x0 + x1) / 2.0, _y0))
+
     lines = [
         "// GENERATED FILE - DO NOT EDIT BY HAND.",
         f"// Source:      {source}",
@@ -493,14 +507,19 @@ def emit_java(parts: list[Part], class_name: str, package: str, source: str,
         "        public final int strokeColor;",
         "        public final float strokeWidth;",
         "        public final Path path;",
+        "        /** Top-centre of the part's ink box in art units: joint pivot. */",
+        "        public final float pivotX;",
+        "        public final float pivotY;",
         "",
         "        Part(String name, int color, int strokeColor, float strokeWidth,",
-        "             Path path) {",
+        "             Path path, float pivotX, float pivotY) {",
         "            this.name = name;",
         "            this.color = color;",
         "            this.strokeColor = strokeColor;",
         "            this.strokeWidth = strokeWidth;",
         "            this.path = path;",
+        "            this.pivotX = pivotX;",
+        "            this.pivotY = pivotY;",
         "        }",
         "    }",
         "",
@@ -508,11 +527,11 @@ def emit_java(parts: list[Part], class_name: str, package: str, source: str,
 
     if parts:
         lines.append("    private static final Part[] P = {")
-        for part, name in zip(parts, names):
+        for part, name, piv in zip(parts, names, pivots):
             lines.append(
                 f'        new Part({json.dumps(part.name)}, {hex_argb(part.color)}, '
                 f'{hex_argb(part.stroke_color)}, {fmt(part.stroke_width, precision)}, '
-                f"{name}()),")
+                f"{name}(), {fmt(piv[0], precision)}, {fmt(piv[1], precision)}),")
         lines.append("    };")
     else:
         lines.append("    private static final Part[] P = {};")
@@ -527,6 +546,48 @@ def emit_java(parts: list[Part], class_name: str, package: str, source: str,
         "",
         "    public static Part part(int i) {",
         "        return P[i];",
+        "    }",
+        "",
+        "    /** The layer's SVG id (lowercased), for name-driven animation. */",
+        "    public static String partName(int i) {",
+        "        return P[i].name;",
+        "    }",
+        "",
+        "    /** Top-centre of part i's ink box in art units: its joint pivot. */",
+        "    public static float partPivotX(int i) {",
+        "        return P[i].pivotX;",
+        "    }",
+        "",
+        "    /** @see #partPivotX */",
+        "    public static float partPivotY(int i) {",
+        "        return P[i].pivotY;",
+        "    }",
+        "",
+        "    /**",
+        "     * Draws a single part with the anchor at (x, y), scaled about that",
+        "     * point. Renderer animates limbs by rotating the canvas about the",
+        "     * part's pivot and calling this with x = y = 0.",
+        "     */",
+        "    public static void drawPart(int i, Canvas c, Paint fill, Paint stroke,",
+        "                               float x, float y, float scale) {",
+        "        Part p = P[i];",
+        "        c.save();",
+        "        c.translate(x, y);",
+        "        if (scale != 1f) {",
+        "            c.scale(scale, scale);",
+        "        }",
+        "        if (p.color != 0) {",
+        "            fill.setStyle(Paint.Style.FILL);",
+        "            fill.setColor(p.color);",
+        "            c.drawPath(p.path, fill);",
+        "        }",
+        "        if (p.strokeColor != 0 && stroke != null) {",
+        "            stroke.setStyle(Paint.Style.STROKE);",
+        "            stroke.setColor(p.strokeColor);",
+        "            stroke.setStrokeWidth(p.strokeWidth);",
+        "            c.drawPath(p.path, stroke);",
+        "        }",
+        "        c.restore();",
         "    }",
         "",
         "    /**",
@@ -894,6 +955,76 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
     for entity, cls in bound:
         lines.append(f"            case {json.dumps(entity)}:")
         lines.append(f"                {cls}.draw(c, fill, stroke, x, y, scale);")
+        lines.append("                return;")
+    lines += [
+        "            default:",
+        "        }",
+        "    }",
+        "",
+        "    /** Part count of the bound artwork; 0 when the entity has none. */",
+        "    public static int partCount(String entity) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {cls}.count();")
+    lines += [
+        "            default:",
+        "                return 0;",
+        "        }",
+        "    }",
+        "",
+        "    /** Layer name of part i (drives the name-based animation). */",
+        "    public static String partName(String entity, int i) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {cls}.partName(i);")
+    lines += [
+        "            default:",
+        "                return \"\";",
+        "        }",
+        "    }",
+        "",
+        "    /** Part pivot (joint) in art units; 0 when the entity has none. */",
+        "    public static float partPivotX(String entity, int i) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {cls}.partPivotX(i);")
+    lines += [
+        "            default:",
+        "                return 0f;",
+        "        }",
+        "    }",
+        "",
+        "    /** @see #partPivotX */",
+        "    public static float partPivotY(String entity, int i) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {cls}.partPivotY(i);")
+    lines += [
+        "            default:",
+        "                return 0f;",
+        "        }",
+        "    }",
+        "",
+        "    /**",
+        "     * Draws one part of the bound artwork. Renderer rotates limbs by",
+        "     * transforming the canvas about the part's pivot, then calls this.",
+        "     */",
+        "    public static void drawPart(String entity, int i, Canvas c,",
+        "                               Paint fill, Paint stroke,",
+        "                               float x, float y, float scale) {",
+        "        switch (entity) {",
+    ]
+    for entity, cls in bound:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                {cls}.drawPart(i, c, fill, stroke, x, y, scale);")
         lines.append("                return;")
     lines += [
         "            default:",

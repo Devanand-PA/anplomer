@@ -36,6 +36,33 @@ Full detail (and the complete list of what is and is not supported) is in
   filters, masks, clip paths or patterns.
 * One `<g id="...">` per part that Java will animate separately (run cycle,
   scarf, squash/stretch, weapon swing). The `id` becomes the `Part` name.
+
+## Animation: name your layers, the game does the rest
+
+`Renderer` animates baked artwork from the **layer ids** — no keyframes, no
+timeline. Draw the player in a neutral pose, name the moving parts, and the
+game swings them around pivots it computes itself (top-centre of each part, so
+a leg rotates at the hip, an arm at the shoulder):
+
+| the id contains…                | what the game does                                   |
+|---------------------------------|------------------------------------------------------|
+| `leg`, `foot`, `shoe`, `boot`   | walk swing, in phase with the run cycle              |
+| `arm`, `hand`                   | counter-swing against the legs                       |
+| `wing`                          | flap (for flying mobs)                               |
+| anything else (`head`, `body`…) | static                                               |
+
+Sides pick phases: `leg-left` swings forward while `leg-right` swings back.
+`left`/`front` are one phase, `right`/`back` the opposite — so
+`leg-left`+`leg-right` and `arm-front`+`arm-back` both work.
+
+Everything else — squash and stretch on landing, the mirror when facing left,
+the death tumble, the hover wobble on flyers — is applied by the game around
+the whole sprite. Extra parts in the SVG (a scarf, a belt) just sit still; a
+`scarf` id is not special (yet).
+
+`art/player.svg` follows this convention: `leg-left`, `leg-right`, `shoe-left`,
+`arm-front`, and so on. Copy those names when drawing a new mob and it will
+walk the moment you bind it.
 * Flatten gradients to solid fills, or accept the middle-stop approximation
   that the converter reports as a warning.
 * Compound paths with holes need `fill-rule: evenodd`.

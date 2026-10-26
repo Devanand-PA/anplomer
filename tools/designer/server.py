@@ -202,6 +202,8 @@ class DesignerHandler(BaseHTTPRequestHandler):
             merged["player"] = body["player"]
         if "mobs" in body:
             merged["mobs"] = body["mobs"]
+        if "weapons" in body:
+            merged["weapons"] = body["weapons"]
         try:
             self.project.save_stats(merged)
         except ModelError as exc:
@@ -216,8 +218,11 @@ class DesignerHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             raise ApiError(400, {"ok": False,
                                  "errors": [{"field": "stats", "message": str(exc)}]})
-        known = {"player"} | {m.get("id") for m in stats.get("mobs", [])
-                              if isinstance(m, dict)}
+        known = ({"player"}
+                 | {m.get("id") for m in stats.get("mobs", [])
+                    if isinstance(m, dict)}
+                 | {w.get("id") for w in stats.get("weapons", [])
+                    if isinstance(w, dict)})
         if entity not in known:
             raise ApiError(400, {"ok": False, "errors": [
                 {"field": "entity", "message": f"unknown entity {entity!r}"}]})

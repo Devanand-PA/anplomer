@@ -34,5 +34,25 @@
       "height": 38
     }
   ],
-  "weapons": []
+  "weapons": [
+    {
+      "id": "sword",
+      "name": "Sword",
+      "damage": 25,
+      "cooldown": 0.0,
+      "$comment": "the sword is always equipped; swings are gated by Player's own attack cooldown"
+    },
+    {
+      "id": "bow",
+      "name": "Bow",
+      "damage": 25,
+      "cooldown": 0.42
+    },
+    {
+      "id": "boomerang",
+      "name": "Boomerang",
+      "damage": 25,
+      "cooldown": 0.7
+    }
+  ]
 }

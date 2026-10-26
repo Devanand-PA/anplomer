@@ -147,7 +147,12 @@ public final class ArtPlayer {
 
     public static int count();
     public static Part part(int i);
+    public static String partName(int i);      // layer id, for animation
+    public static float partPivotX(int i);     // top-centre of the part's ink
+    public static float partPivotY(int i);     // box: a ready-made joint
     public static void draw(Canvas c, Paint fill, Paint stroke,
+                            float x, float y, float scale);
+    public static void drawPart(int i, Canvas c, Paint fill, Paint stroke,
                             float x, float y, float scale);
 }
 ```
@@ -162,6 +167,11 @@ caller can hand it the renderer's shared `fill`/`stroke` paints.
 All coordinates are absolute `moveTo` / `lineTo` / `quadTo` / `cubicTo` /
 `close` values in game units with **y down** (SVG and `Canvas` agree), with
 every transform already multiplied in. Nothing is computed at runtime.
+
+`Renderer` animates artwork through the **layer ids** (`leg*`, `arm*`, `wing*`
+swing around their pivots; the naming convention is documented in
+[`art/README.md`](../../art/README.md)), which is why `partName` and the
+pivots are part of the emitted API.
 
 ### Why `bottom-center` is the default anchor
 

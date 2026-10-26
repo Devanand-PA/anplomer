@@ -286,7 +286,7 @@ def pipeline_checks() -> None:
           'case "walker":' in text and "ArtBindA.draw(" in text
           and 'case "flyer":' in text and "ArtBindB.draw(" in text, text[:200])
     check("duplicate entity keeps first binding",
-          text.count('case "flyer":') == 4, str(text.count('case "flyer":')))
+          "ArtBindB.draw(" in text and "ArtBindC" not in text)
     check("bindings import android.graphics",
           "import android.graphics.Canvas;" in text)
     empty = tmp / "empty.json"

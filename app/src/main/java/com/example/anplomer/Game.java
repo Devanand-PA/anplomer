@@ -1807,7 +1807,7 @@ public final class Game implements Player.Listener {
                         }
                         if (p.overlaps(e.x, e.y, e.w, e.h) && e.lastHitBy != p) {
                             e.lastHitBy = p;
-                            hitEnemy(e, Stats.Hero.ATTACK, null);
+                            hitEnemy(e, Weapons.projectileDamage(p.kind), null);
                             if (p.kind == Projectile.ARROW) {
                                 p.dead = true;
                                 break;

@@ -185,7 +185,10 @@ public final class HeadlessTest {
         }
         tick(g, 20);
 
-        // one swing kills the walker in front, never the one behind
+        // the sword kills whatever is in front, never what is behind. How
+        // many swings a kill takes comes from the tuned stats (the designer
+        // can raise mob HP past one hit), so swing the exact number the
+        // numbers require -- no more, no less.
         Game h = new Game(new Silent());
         h.resize(1920, 1080);
         h.newGame();
@@ -197,12 +200,22 @@ public final class HeadlessTest {
                 h.player.x - 90f, h.player.y);
         h.enemies.add(front);
         h.enemies.add(behind);
+        int swingsNeeded = (Stats.mob("walker").maxHp + Stats.Hero.ATTACK - 1)
+                / Stats.Hero.ATTACK;
         int score0 = h.score;
-        h.input.key(InputController.KEY_ATTACK, true);
-        tick(h, 3);
-        h.input.key(InputController.KEY_ATTACK, false);
+        for (int i = 0; i < swingsNeeded && !front.dead; i++) {
+            // the walker keeps patrolling while we swing; pin it back in
+            // front of the blade each round
+            front.x = h.player.x + h.player.w + 12f;
+            front.y = h.player.y;
+            h.input.key(InputController.KEY_ATTACK, true);
+            tick(h, 3);
+            h.input.key(InputController.KEY_ATTACK, false);
+            tick(h, 24);          // swing window (12) + cooldown (18)
+        }
         if (!front.dead) {
-            return fail("combat", "the sword did not kill the walker in front");
+            return fail("combat", "the sword did not kill the walker in front ("
+                    + swingsNeeded + " swings of " + Stats.Hero.ATTACK + ")");
         }
         if (behind.dead) {
             return fail("combat", "the sword killed a walker behind the player");
@@ -239,7 +252,8 @@ public final class HeadlessTest {
             return fail("combat", "the falling swing did not bounce the player");
         }
 
-        System.out.println("combat OK: four arcs, cooldown, one-hit kills, plunge bounce");
+        System.out.println("combat OK: four arcs, cooldown, front-only kill ("
+                + swingsNeeded + " swing(s)), plunge bounce");
         return true;
     }
 
@@ -275,21 +289,43 @@ public final class HeadlessTest {
         if (b.projectiles.isEmpty() || b.projectiles.get(0).x <= arrowX) {
             return fail("secondary", "the arrow did not fly forwards");
         }
-        for (int i = 0; i < 60 && !target.dead; i++) {
+        for (int i = 0; i < 90 && !b.projectiles.isEmpty(); i++) {
+            tick(b, 1);                    // until the first arrow lands
+        }
+        if (!b.projectiles.isEmpty()) {
+            return fail("secondary", "the first arrow never landed");
+        }
+        // arrow damage comes from art/stats.json, so a tuned walker HP can
+        // need several arrows. Fire exactly as many as the numbers require.
+        int arrowDamage = Weapons.projectileDamage(Projectile.ARROW);
+        int shotsNeeded = (target.hp + arrowDamage - 1) / arrowDamage;
+        for (int shot = 0; shot < shotsNeeded && !target.dead; shot++) {
+            for (int t = 0; t < 120 && b.secondaryCooldown > 0f; t++) {
+                tick(b, 1);
+            }
+            b.input.key(InputController.KEY_SECONDARY, true);
             tick(b, 1);
+            b.input.key(InputController.KEY_SECONDARY, false);
+            for (int t = 0; t < 90 && !target.dead; t++) {
+                tick(b, 1);
+            }
         }
         if (!target.dead) {
-            return fail("secondary", "the arrow did not kill the walker");
+            return fail("secondary", "the arrows did not kill the walker ("
+                    + shotsNeeded + " more hits of " + arrowDamage + ")");
         }
         if (!b.projectiles.isEmpty()) {
-            return fail("secondary", "the arrow did not die after a hit");
+            return fail("secondary", "the killing arrow did not die after a hit");
         }
-        // cooldown gates a second shot
-        b.input.key(InputController.KEY_SECONDARY, true);
-        tick(b, 1);
-        b.input.key(InputController.KEY_SECONDARY, false);
-        if (!b.projectiles.isEmpty()) {
-            return fail("secondary", "the bow fired while cooling down");
+        // cooldown gates a second shot: pressing while the killing arrow's
+        // cooldown still runs must not fire anything
+        if (b.secondaryCooldown > 0f) {
+            b.input.key(InputController.KEY_SECONDARY, true);
+            tick(b, 1);
+            b.input.key(InputController.KEY_SECONDARY, false);
+            if (!b.projectiles.isEmpty()) {
+                return fail("secondary", "the bow fired while cooling down");
+            }
         }
         tick(b, 90);
         if (!b.projectiles.isEmpty()) {
@@ -327,7 +363,8 @@ public final class HeadlessTest {
         if (!r.projectiles.isEmpty()) {
             return fail("secondary", "the boomerang was never caught");
         }
-        // the boomerang kills on the outbound leg
+        // the boomerang hits on the outbound leg; a tuned walker can need
+        // several throws (one hit per boomerang -- see Enemy.lastHitBy)
         Game k = new Game(new Silent());
         k.resize(1920, 1080);
         k.newGame();
@@ -336,14 +373,25 @@ public final class HeadlessTest {
         k.enemies.clear();
         Enemy close = new Enemy(Enemy.Type.WALKER, k.player.x + 120f, k.player.y);
         k.enemies.add(close);
-        k.input.key(InputController.KEY_SECONDARY, true);
-        tick(k, 1);
-        k.input.key(InputController.KEY_SECONDARY, false);
-        for (int i = 0; i < 90 && !close.dead; i++) {
+        int boomDamage = Weapons.projectileDamage(Projectile.BOOMERANG);
+        int throwsNeeded = (close.hp + boomDamage - 1) / boomDamage;
+        for (int t = 0; t < throwsNeeded && !close.dead; t++) {
+            for (int w = 0; w < 150 && k.secondaryCooldown > 0f; w++) {
+                tick(k, 1);
+            }
+            k.input.key(InputController.KEY_SECONDARY, true);
             tick(k, 1);
+            k.input.key(InputController.KEY_SECONDARY, false);
+            for (int i = 0; i < 150 && !close.dead && !k.projectiles.isEmpty(); i++) {
+                tick(k, 1);
+            }
+            for (int i = 0; i < 300 && !k.projectiles.isEmpty(); i++) {
+                tick(k, 1);          // let it come home before the next throw
+            }
         }
         if (!close.dead) {
-            return fail("secondary", "the boomerang did not kill on the way out");
+            return fail("secondary", "the boomerang did not kill on the way out ("
+                    + throwsNeeded + " throw(s) of " + boomDamage + ")");
         }
 
         // ---- no weapon, and persistence ------------------------------

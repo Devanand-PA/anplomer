@@ -79,6 +79,29 @@ public final class SampleArtCheck {
         require(spans >= 2, "expected separate legs, found " + spans + " filled span(s)");
         require(spans(all, -20.0) == 1, "torso should be one solid span");
 
+        // Per-part API: names + joint pivots (top-centre of each part's ink
+        // box), which the name-driven limb animation rotates around.
+        int legIdx = -1;
+        int shoeIdx = -1;
+        for (int i = 0; i < ArtPlayer.count(); i++) {
+            if (ArtPlayer.partName(i).equals("leg-left")) {
+                legIdx = i;
+            }
+            if (ArtPlayer.partName(i).equals("shoe-left")) {
+                shoeIdx = i;
+            }
+        }
+        require(legIdx >= 0, "leg-left part should exist");
+        require(ArtPlayer.partPivotY(legIdx) < -9f,
+                "leg pivot should sit at the hip, not the shoe");
+        require(ArtPlayer.partPivotY(legIdx) > -12f,
+                "leg pivot should not float above the leg");
+        require(shoeIdx >= 0
+                && ArtPlayer.partPivotY(shoeIdx) > ArtPlayer.partPivotY(legIdx),
+                "shoe pivot should be lower than the leg pivot");
+        require(Math.abs(ArtPlayer.partPivotX(legIdx) + 1.5f) < 2f,
+                "leg pivot should be roughly centred on the leg");
+
         System.out.println("ArtShapes parts=" + ArtShapes.count()
                 + " segs=" + shapesSegs + " evenOddDonut=" + donutEvenOdd
                 + " holeEmpty=" + !donut.contains(26.0, 78.0));

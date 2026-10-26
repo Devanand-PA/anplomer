@@ -25,28 +25,33 @@ public final class ArtShapes {
         public final int strokeColor;
         public final float strokeWidth;
         public final Path path;
+        /** Top-centre of the part's ink box in art units: joint pivot. */
+        public final float pivotX;
+        public final float pivotY;
 
         Part(String name, int color, int strokeColor, float strokeWidth,
-             Path path) {
+             Path path, float pivotX, float pivotY) {
             this.name = name;
             this.color = color;
             this.strokeColor = strokeColor;
             this.strokeWidth = strokeWidth;
             this.path = path;
+            this.pivotX = pivotX;
+            this.pivotY = pivotY;
         }
     }
 
     private static final Part[] P = {
-        new Part("all-commands", 0xFF3F6BE0, 0x00000000, 0f, all_commands()),
-        new Part("relative", 0xFFE14A4A, 0x00000000, 0f, relative()),
-        new Part("rounded", 0xFFFFCB3D, 0x00000000, 0f, rounded()),
-        new Part("plain", 0xFF8BC34A, 0x00000000, 0f, plain()),
-        new Part("disc", 0xFF102030, 0x00000000, 0f, disc()),
-        new Part("oval", 0xFF9C27B0, 0xFF222222, 2f, oval()),
-        new Part("rule", 0xFF000000, 0xFF555555, 1.5f, rule()),
-        new Part("zig", 0x00000000, 0xFF00897B, 2f, zig()),
-        new Part("tri", 0xFFFF7043, 0x00000000, 0f, tri()),
-        new Part("donut", 0xFF263238, 0x00000000, 0f, donut()),
+        new Part("all-commands", 0xFF3F6BE0, 0x00000000, 0f, all_commands(), 44.5f, 2f),
+        new Part("relative", 0xFFE14A4A, 0x00000000, 0f, relative(), 89f, 14f),
+        new Part("rounded", 0xFFFFCB3D, 0x00000000, 0f, rounded(), 25f, 40f),
+        new Part("plain", 0xFF8BC34A, 0x00000000, 0f, plain(), 52f, 40f),
+        new Part("disc", 0xFF102030, 0x00000000, 0f, disc(), 70f, 41f),
+        new Part("oval", 0xFF9C27B0, 0xFF222222, 2f, oval(), 92f, 44f),
+        new Part("rule", 0xFF000000, 0xFF555555, 1.5f, rule(), 35f, 66f),
+        new Part("zig", 0x00000000, 0xFF00897B, 2f, zig(), 75f, 60f),
+        new Part("tri", 0xFFFF7043, 0x00000000, 0f, tri(), 104f, 58f),
+        new Part("donut", 0xFF263238, 0x00000000, 0f, donut(), 26f, 72f),
     };
 
     private ArtShapes() { }
@@ -58,6 +63,48 @@ public final class ArtShapes {
 
     public static Part part(int i) {
         return P[i];
+    }
+
+    /** The layer's SVG id (lowercased), for name-driven animation. */
+    public static String partName(int i) {
+        return P[i].name;
+    }
+
+    /** Top-centre of part i's ink box in art units: its joint pivot. */
+    public static float partPivotX(int i) {
+        return P[i].pivotX;
+    }
+
+    /** @see #partPivotX */
+    public static float partPivotY(int i) {
+        return P[i].pivotY;
+    }
+
+    /**
+     * Draws a single part with the anchor at (x, y), scaled about that
+     * point. Renderer animates limbs by rotating the canvas about the
+     * part's pivot and calling this with x = y = 0.
+     */
+    public static void drawPart(int i, Canvas c, Paint fill, Paint stroke,
+                               float x, float y, float scale) {
+        Part p = P[i];
+        c.save();
+        c.translate(x, y);
+        if (scale != 1f) {
+            c.scale(scale, scale);
+        }
+        if (p.color != 0) {
+            fill.setStyle(Paint.Style.FILL);
+            fill.setColor(p.color);
+            c.drawPath(p.path, fill);
+        }
+        if (p.strokeColor != 0 && stroke != null) {
+            stroke.setStyle(Paint.Style.STROKE);
+            stroke.setColor(p.strokeColor);
+            stroke.setStrokeWidth(p.strokeWidth);
+            c.drawPath(p.path, stroke);
+        }
+        c.restore();
     }
 
     /**

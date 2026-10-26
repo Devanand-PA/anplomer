@@ -50,6 +50,10 @@ public final class Weapons {
 
     /** Seconds between two shots of the secondary weapon. */
     public static float cooldown(int id) {
+        Stats.Weapon w = Stats.findWeapon(statsId(id));
+        if (w != null) {
+            return w.cooldown;
+        }
         switch (id) {
             case BOW:
                 return Constants.BOW_COOLDOWN;
@@ -57,6 +61,27 @@ public final class Weapons {
                 return Constants.BOOMERANG_COOLDOWN;
             default:
                 return 0f;
+        }
+    }
+
+    /** Damage one projectile of this kind deals (tuned in art/stats.json). */
+    public static int projectileDamage(int kind) {
+        Stats.Weapon w = Stats.findWeapon(kind == Projectile.BOOMERANG
+                ? "boomerang" : "bow");
+        // No stats entry (older stats.json): the pre-stats behaviour was
+        // "every projectile hits with the hero's attack".
+        return w != null ? w.damage : Stats.Hero.ATTACK;
+    }
+
+    /** The stats.json id for a catalogue weapon, or null for the sword/NONE. */
+    private static String statsId(int id) {
+        switch (id) {
+            case BOW:
+                return "bow";
+            case BOOMERANG:
+                return "boomerang";
+            default:
+                return null;
         }
     }
 }

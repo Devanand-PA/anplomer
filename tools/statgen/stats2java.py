@@ -41,6 +41,13 @@ JAVA_KEYWORDS = {
     "transient", "try", "void", "volatile", "while", "true", "false", "null",
 }
 
+# Weapons are optional: an empty list keeps the hardcoded defaults in
+# Weapons.java, so an older stats.json still works.
+WEAPON_FIELDS = {
+    "damage": ("int", 0, 9999),
+    "cooldown": ("float", 0.0, 10.0),
+}
+
 # field -> (kind, minimum, maximum)
 PLAYER_FIELDS = {
     "maxHp": ("int", 1, 9999),
@@ -72,6 +79,7 @@ class Problem:
 class Validation:
     player: dict = field(default_factory=dict)
     mobs: list[dict] = field(default_factory=list)
+    weapons: list[dict] = field(default_factory=list)
     errors: list[Problem] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -127,6 +135,52 @@ def validate(data) -> Validation:
             if key not in PLAYER_FIELDS:
                 v.warnings.append(f"player: ignoring unknown field {key!r}")
 
+    weapons = data.get("weapons", [])
+    if weapons is None:
+        weapons = []
+    if not isinstance(weapons, list):
+        v.errors.append(Problem("weapons", "must be a list"))
+        weapons = []
+    seen_weapons: set[str] = set()
+    for i, wpn in enumerate(weapons):
+        where = f"weapons[{i}]"
+        if not isinstance(wpn, dict):
+            v.errors.append(Problem(where, "must be an object"))
+            continue
+        wid = wpn.get("id")
+        if not isinstance(wid, str) or not ID_RE.match(wid or ""):
+            v.errors.append(Problem(f"{where}.id", "must match [a-z][a-z0-9_]*"))
+            continue
+        if wid in seen_weapons:
+            v.errors.append(Problem(f"{where}.id", "duplicate id"))
+            continue
+        if wid in JAVA_KEYWORDS:
+            v.errors.append(Problem(f"{where}.id", f"'{wid}' is a Java keyword"))
+            continue
+        seen_weapons.add(wid)
+        entry = {"id": wid, "name": wid}
+        wname = wpn.get("name", wid)
+        if not isinstance(wname, str) or not wname.strip():
+            v.errors.append(Problem(f"{where}.name", "must be a non-empty string"))
+        else:
+            if len(wname) > 40:
+                v.warnings.append(f"{where}.name is longer than 40 characters")
+            entry["name"] = wname.strip()
+        for key, (kind, lo, hi) in WEAPON_FIELDS.items():
+            value = _number(wpn.get(key), kind, lo, hi, f"{where}.{key}", v.errors)
+            if value is not None:
+                entry[key] = value
+        for key in wpn:
+            if key not in WEAPON_FIELDS and key not in ("id", "name") \
+                    and not key.startswith("$"):
+                v.warnings.append(f"{where}: ignoring unknown field {key!r}")
+        v.weapons.append(entry)
+    for known in ("bow", "boomerang"):
+        if known not in seen_weapons:
+            v.warnings.append(
+                f"no weapon with id {known!r}; the game falls back to its "
+                f"built-in default for it")
+
     mobs = data.get("mobs")
     if not isinstance(mobs, list):
         v.errors.append(Problem("mobs", "missing or not a list"))
@@ -165,7 +219,8 @@ def validate(data) -> Validation:
             if value is not None:
                 entry[key] = value
         for key in mob:
-            if key not in MOB_FIELDS and key not in ("id", "name"):
+            if key not in MOB_FIELDS and key not in ("id", "name") \
+                    and not key.startswith("$"):
                 v.warnings.append(f"{where}: ignoring unknown field {key!r}")
         v.mobs.append(entry)
 
@@ -249,6 +304,50 @@ def emit(v: Validation, package: str, class_name: str, source: str,
         "            return name + \"(\" + maxHp + \"hp/\" + attack + \"atk)\";",
         "        }",
         "    }",
+        "",
+        "    /** One weapon archetype; immutable. */",
+        "    public static final class Weapon {",
+        "        public final String id;",
+        "        public final String name;",
+        "        public final int damage;",
+        "        public final float cooldown;",
+        "",
+        "        Weapon(String id, String name, int damage, float cooldown) {",
+        "            this.id = id;",
+        "            this.name = name;",
+        "            this.damage = damage;",
+        "            this.cooldown = cooldown;",
+        "        }",
+        "",
+        "        @Override",
+        "        public String toString() {",
+        '            return name + "(" + damage + "dmg, " + cooldown + "s)";',
+        "        }",
+        "    }",
+        "",
+        "    /**",
+        "     * Looks a weapon up by id. Unlike {@link #mob} there is no",
+        "     * fallback: an unknown id returns null and Weapons.java keeps its",
+        "     * built-in default, so an older stats.json never changes the game.",
+        "     */",
+        "    public static Weapon findWeapon(String id) {",
+        "        for (Weapon w : WEAPONS) {",
+        "            if (w.id.equals(id)) {",
+        "                return w;",
+        "            }",
+        "        }",
+        "        return null;",
+        "    }",
+        "",
+        "    /** Every weapon, in stats.json order (may be empty). */",
+        "    public static final Weapon[] WEAPONS = {",
+    ]
+    for wpn in v.weapons:
+        out.append(
+            f"        new Weapon({java_string(wpn['id'])}, {java_string(wpn['name'])}, "
+            f"{fmt(wpn['damage'])}, {fmt(wpn['cooldown'])}),")
+    out += [
+        "    };",
         "",
         "    /** Every mob, in stats.json order. */",
         "    public static final Mob[] MOBS = {",
@@ -378,6 +477,8 @@ def run(args, reporter: Reporter) -> int:
             raise StatsError(f"{rel(out_path)}: {exc.strerror or exc}") from None
 
     mobs = ", ".join(f"{m['id']}({m['maxHp']}hp/{m['attack']}atk)" for m in v.mobs)
+    wpns = ", ".join(f"{w['id']}({w['damage']}dmg/{w['cooldown']}s)"
+                     for w in v.weapons)
     summary = {
         "ok": True,
         "src": source_label,
@@ -386,6 +487,7 @@ def run(args, reporter: Reporter) -> int:
         "written": written,
         "player": dict(v.player),
         "mobs": [dict(m) for m in v.mobs],
+        "weapons": [dict(w) for w in v.weapons],
         "warnings": list(v.warnings),
     }
     if args.json:
@@ -395,7 +497,8 @@ def run(args, reporter: Reporter) -> int:
             "checked" if args.check else "wrote")
         reporter.info(f"{source_label} -> {rel(out_path)}  {verb}: "
                       f"hero {v.player['maxHp']}hp/{v.player['attack']}atk, "
-                      f"mobs {mobs}")
+                      f"mobs {mobs}"
+                      + (f", weapons {wpns}" if wpns else ""))
     return 4 if (args.strict and v.warnings) else 0
 
 

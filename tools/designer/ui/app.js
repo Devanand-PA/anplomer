@@ -68,8 +68,6 @@ function renderEntityList() {
        <span class="row-name">${esc(e.name || e.id)}</span>
        <span class="row-kind">${esc(e.kind)}</span>
      </button>`);
-  rows.push('<div class="row weapons" title="weapons and other customizations come later">' +
-    '<span class="row-name">Weapons</span><span class="row-kind">later</span></div>');
   $('entityRows').innerHTML = rows.join('');
   document.querySelectorAll('#entityRows .row[data-entity]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -93,6 +91,11 @@ const MOB_FIELDS = [
   { key: 'height', label: 'height', type: 'number', min: 4, max: 512, step: 1 },
 ];
 
+const WEAPON_FIELDS = [
+  { key: 'damage', label: 'damage', type: 'number', min: 0, max: 9999, step: 1 },
+  { key: 'cooldown', label: 'cooldown (s)', type: 'number', min: 0, max: 10, step: 0.05 },
+];
+
 function fieldPath(entity, key) {
   return entity.kind === 'player' ? `player.${key}` : `mobs[${entity.index}].${key}`;
 }
@@ -100,7 +103,9 @@ function fieldPath(entity, key) {
 function renderInspector() {
   const ent = entityById(state.selected);
   if (!ent) { $('inspectorTitle').textContent = '—'; return; }
-  $('inspectorTitle').textContent = ent.kind === 'player' ? 'Player' : `Mob: ${ent.name || ent.id}`;
+  $('inspectorTitle').textContent = ent.kind === 'player' ? 'Player'
+    : ent.kind === 'weapon' ? `Weapon: ${ent.name || ent.id}`
+    : `Mob: ${ent.name || ent.id}`;
 
   const rows = [];
   if (ent.kind === 'mob') {
@@ -108,7 +113,8 @@ function renderInspector() {
     rows.push(`<label class="field">name<input type="text" data-mob-name="${ent.index}"
         value="${esc(ent.name || '')}"></label>`);
   }
-  const fields = ent.kind === 'player' ? PLAYER_FIELDS : MOB_FIELDS;
+  const fields = ent.kind === 'player' ? PLAYER_FIELDS
+    : ent.kind === 'weapon' ? WEAPON_FIELDS : MOB_FIELDS;
   for (const f of fields) {
     const path = fieldPath(ent, f.key);
     const value = ent.stats[f.key];
@@ -142,6 +148,11 @@ function renderInspector() {
 }
 
 function renderArtBlock(ent) {
+  if (ent.kind === 'weapon') {
+    document.querySelector('.art-block').classList.add('hidden');
+    return;
+  }
+  document.querySelector('.art-block').classList.remove('hidden');
   const asset = ent.asset;
   $('artCurrent').innerHTML = asset
     ? `bound: <code>${esc(asset.src)}</code>
@@ -208,7 +219,8 @@ function showFieldErrors(errors, formSel) {
 }
 
 async function saveStats() {
-  const body = { player: state.stats.player, mobs: state.stats.mobs };
+  const body = { player: state.stats.player, mobs: state.stats.mobs,
+    weapons: state.stats.weapons || [] };
   const { status, body: resp } = await post('/api/stats', body);
   if (status === 200 && resp.ok) {
     showFieldErrors([]);

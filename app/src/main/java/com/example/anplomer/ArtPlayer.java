@@ -25,39 +25,44 @@ public final class ArtPlayer {
         public final int strokeColor;
         public final float strokeWidth;
         public final Path path;
+        /** Top-centre of the part's ink box in art units: joint pivot. */
+        public final float pivotX;
+        public final float pivotY;
 
         Part(String name, int color, int strokeColor, float strokeWidth,
-             Path path) {
+             Path path, float pivotX, float pivotY) {
             this.name = name;
             this.color = color;
             this.strokeColor = strokeColor;
             this.strokeWidth = strokeWidth;
             this.path = path;
+            this.pivotX = pivotX;
+            this.pivotY = pivotY;
         }
     }
 
     private static final Part[] P = {
-        new Part("leg-left", 0xFF2A3F7A, 0x00000000, 0f, leg_left()),
-        new Part("leg-right", 0xFF2A3F7A, 0x00000000, 0f, leg_right()),
-        new Part("shoe-left", 0xFF1B243F, 0x00000000, 0f, shoe_left()),
-        new Part("shoe-right", 0xFF1B243F, 0x00000000, 0f, shoe_right()),
-        new Part("body", 0xFF3F6BE0, 0x00000000, 0f, body()),
-        new Part("chest", 0xFF5A85F5, 0x00000000, 0f, chest()),
-        new Part("belt", 0xFF243458, 0x00000000, 0f, belt()),
-        new Part("buckle", 0xFFFFCB3D, 0x00000000, 0f, buckle()),
-        new Part("arm-back", 0xFF3560D2, 0x00000000, 0f, arm_back()),
-        new Part("arm-front", 0xFF3560D2, 0x00000000, 0f, arm_front()),
-        new Part("hand-back", 0xFFF0BE92, 0x00000000, 0f, hand_back()),
-        new Part("hand-front", 0xFFF0BE92, 0x00000000, 0f, hand_front()),
-        new Part("head", 0xFFF3C79A, 0x00000000, 0f, head()),
-        new Part("hair", 0xFF4A2E1D, 0x00000000, 0f, hair()),
-        new Part("eye-white", 0xFFFFFFFF, 0x00000000, 0f, eye_white()),
-        new Part("pupil", 0xFF2A2118, 0x00000000, 0f, pupil()),
-        new Part("brow", 0xFF4A2E1D, 0x00000000, 0f, brow()),
-        new Part("mouth", 0xFFB3754B, 0x00000000, 0f, mouth()),
-        new Part("circle1", 0xFFFFFFFF, 0x00000000, 0f, circle1()),
-        new Part("circle2", 0xFF2A2118, 0x00000000, 0f, circle2()),
-        new Part("path2", 0xFF4A2E1D, 0x00000000, 0f, path2()),
+        new Part("leg-left", 0xFF2A3F7A, 0x00000000, 0f, leg_left(), -1.86f, -9.86f),
+        new Part("leg-right", 0xFF2A3F7A, 0x00000000, 0f, leg_right(), 1.58f, -9.86f),
+        new Part("shoe-left", 0xFF1B243F, 0x00000000, 0f, shoe_left(), -2.51f, -3.14f),
+        new Part("shoe-right", 0xFF1B243F, 0x00000000, 0f, shoe_right(), 1.42f, -3.14f),
+        new Part("body", 0xFF3F6BE0, 0x00000000, 0f, body(), -0.02f, -22.52f),
+        new Part("chest", 0xFF5A85F5, 0x00000000, 0f, chest(), -0.02f, -21.34f),
+        new Part("belt", 0xFF243458, 0x00000000, 0f, belt(), -0.02f, -13.87f),
+        new Part("buckle", 0xFFFFCB3D, 0x00000000, 0f, buckle(), -0.02f, -13.87f),
+        new Part("arm-back", 0xFF3560D2, 0x00000000, 0f, arm_back(), -5.86f, -20.7f),
+        new Part("arm-front", 0xFF3560D2, 0x00000000, 0f, arm_front(), 5.86f, -20.7f),
+        new Part("hand-back", 0xFFF0BE92, 0x00000000, 0f, hand_back(), -5.86f, -15.85f),
+        new Part("hand-front", 0xFFF0BE92, 0x00000000, 0f, hand_front(), 5.86f, -15.85f),
+        new Part("head", 0xFFF3C79A, 0x00000000, 0f, head(), -0.06f, -31.79f),
+        new Part("hair", 0xFF4A2E1D, 0x00000000, 0f, hair(), -0.07f, -36f),
+        new Part("eye-white", 0xFFFFFFFF, 0x00000000, 0f, eye_white(), -2.4f, -28.24f),
+        new Part("pupil", 0xFF2A2118, 0x00000000, 0f, pupil(), -2f, -27.45f),
+        new Part("brow", 0xFF4A2E1D, 0x00000000, 0f, brow(), 2.49f, -29.43f),
+        new Part("mouth", 0xFFB3754B, 0x00000000, 0f, mouth(), 0.47f, -24.39f),
+        new Part("circle1", 0xFFFFFFFF, 0x00000000, 0f, circle1(), 2.42f, -28.24f),
+        new Part("circle2", 0xFF2A2118, 0x00000000, 0f, circle2(), 2.81f, -27.45f),
+        new Part("path2", 0xFF4A2E1D, 0x00000000, 0f, path2(), -2.56f, -29.37f),
     };
 
     private ArtPlayer() { }
@@ -69,6 +74,48 @@ public final class ArtPlayer {
 
     public static Part part(int i) {
         return P[i];
+    }
+
+    /** The layer's SVG id (lowercased), for name-driven animation. */
+    public static String partName(int i) {
+        return P[i].name;
+    }
+
+    /** Top-centre of part i's ink box in art units: its joint pivot. */
+    public static float partPivotX(int i) {
+        return P[i].pivotX;
+    }
+
+    /** @see #partPivotX */
+    public static float partPivotY(int i) {
+        return P[i].pivotY;
+    }
+
+    /**
+     * Draws a single part with the anchor at (x, y), scaled about that
+     * point. Renderer animates limbs by rotating the canvas about the
+     * part's pivot and calling this with x = y = 0.
+     */
+    public static void drawPart(int i, Canvas c, Paint fill, Paint stroke,
+                               float x, float y, float scale) {
+        Part p = P[i];
+        c.save();
+        c.translate(x, y);
+        if (scale != 1f) {
+            c.scale(scale, scale);
+        }
+        if (p.color != 0) {
+            fill.setStyle(Paint.Style.FILL);
+            fill.setColor(p.color);
+            c.drawPath(p.path, fill);
+        }
+        if (p.strokeColor != 0 && stroke != null) {
+            stroke.setStyle(Paint.Style.STROKE);
+            stroke.setColor(p.strokeColor);
+            stroke.setStrokeWidth(p.strokeWidth);
+            c.drawPath(p.path, stroke);
+        }
+        c.restore();
     }
 
     /**

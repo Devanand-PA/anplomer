@@ -20,10 +20,12 @@ python3 tools/designer/designer.py --check       # run the selftest and exit
 
 Then open <http://127.0.0.1:8765>. The page has three regions:
 
-- **Entities** (left): the hero and each mob. Weapons are a placeholder for now.
+- **Entities** (left): the hero, each mob, then each weapon (damage,
+  cooldown) from `art/stats.json`.
 - **Inspector** (right): number inputs for the selected entity's stats
   (HP, attack, hurt-invulnerability for the hero; HP, attack, speed, size for
-  mobs) with inline validation straight from the server. Below that, the
+  mobs; damage, cooldown for weapons) with inline validation straight from the
+  server. Below that, the
   **Artwork** block binds an SVG to the entity: a **live preview** renders the
   current file as you pick or type it, an **in-game** line says whether the
   entity is drawn from its SVG or the hand-drawn fallback, then fit `WxH`,
@@ -92,7 +94,10 @@ Unbound entities keep the hand-drawn vector code.
 
 The SVG is the body, not the behaviour: running, jumping, squash, facing and
 the death tumble all come from the game and are applied around the artwork —
-author the player side-on facing right and let the renderer mirror it.
+author the player side-on facing right and let the renderer mirror it. Limbs
+animate from **layer names**: name a group `leg-left`, `arm-front`, `wing`…
+and it swings/flaps around its own pivot. The full convention (and the list
+of recognised names) is in [`art/README.md`](../../art/README.md).
 
 ## Tests
 

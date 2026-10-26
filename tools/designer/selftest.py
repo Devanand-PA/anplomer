@@ -62,7 +62,10 @@ FIXTURE_STATS = {
         {"id": "walker", "name": "Walker", "maxHp": 20, "attack": 15,
          "speed": 95, "width": 48, "height": 42, "hat": "green"},
     ],
-    "weapons": [{"id": "sword", "damage": 10}],
+    "weapons": [
+        {"id": "sword", "name": "Sword", "damage": 25, "cooldown": 0.0},
+        {"id": "bow", "name": "Bow", "damage": 10, "cooldown": 0.42},
+    ],
 }
 
 FIXTURE_ART = {
@@ -148,6 +151,24 @@ def test_model(tmp: Path) -> None:
     check("atomic save keeps a .bak",
           bak.exists()
           and json.loads(bak.read_text())["player"]["maxHp"] == 100)
+
+    for name, patch in [
+        ("weapon damage high", {"weapons": [{"id": "bow", "damage": 10000}]}),
+        ("weapon cooldown high", {"weapons": [{"id": "bow", "damage": 5,
+                                               "cooldown": 11}]}),
+        ("weapon duplicate id", {"weapons": [
+            {"id": "bow", "damage": 5}, {"id": "bow", "damage": 6}]}),
+        ("weapon bad id", {"weapons": [{"id": "Big Sword", "damage": 5}]}),
+        ("weapon damage string", {"weapons": [{"id": "bow", "damage": "lots"}]}),
+    ]:
+        doc = json.loads(json.dumps(FIXTURE_STATS))
+        doc.update(patch)
+        errs = proj.validate_stats(doc)
+        check(f"rejects {name}", bool(errs), str(errs))
+
+    good_weapons = json.loads(json.dumps(FIXTURE_STATS))
+    good_weapons["weapons"][1]["damage"] = 33
+    check("valid weapons pass", not proj.validate_stats(good_weapons))
 
     bad_id = json.loads(json.dumps(FIXTURE_STATS))
     bad_id["mobs"].append(dict(bad_id["mobs"][0]))          # duplicate id
@@ -329,6 +350,12 @@ def test_server(tmp: Path) -> None:
               and body["svgs"] == ["art/mob.svg"]
               and body["build"]["state"] == "idle")
 
+        check("state lists weapon entities",
+              any(e["id"] == "bow" and e["kind"] == "weapon"
+                  and e["stats"]["damage"] == 10
+                  for e in body["entities"]),
+              str([e["id"] for e in body["entities"]]))
+
         status, body = http("GET", f"{base}/")
         check("GET / serves index.html",
               status == 200 and "Anplomer" in body["raw"]
@@ -369,16 +396,30 @@ def test_server(tmp: Path) -> None:
         check("encoded traversal rejected", status == 404, f"status {status}")
 
         status, body = http("POST", f"{base}/api/stats", {
-            "player": {"maxHp": 140, "attack": 25, "hurtInvuln": 0.8},
+            # like the real UI: the whole sections as loaded, edits applied
+            "player": dict(FIXTURE_STATS["player"], maxHp=140),
             "mobs": FIXTURE_STATS["mobs"],
+            "weapons": [
+                {"id": "sword", "name": "Sword", "damage": 25, "cooldown": 0.0},
+                {"id": "bow", "name": "Bow", "damage": 33, "cooldown": 0.42},
+            ],
         })
         check("POST /api/stats saves", status == 200 and body["ok"])
         on_disk = json.loads((root / "art" / "stats.json").read_text())
         check("stats save landed on disk",
               on_disk["player"]["maxHp"] == 140)
+        check("weapons save landed on disk",
+              on_disk["weapons"][1]["damage"] == 33
+              and on_disk["weapons"][0]["id"] == "sword")
         check("stats save preserved unknown keys",
-              on_disk["surpriseKey"] == "must survive saves"
-              and on_disk["weapons"] == FIXTURE_STATS["weapons"])
+              on_disk["$comment"] == FIXTURE_STATS["$comment"]
+              and on_disk["surpriseKey"] == "must survive saves"
+              and on_disk["player"]["hat"] == "red"
+              and on_disk["mobs"][0]["hat"] == "green"
+              and on_disk["weapons"] == [
+                  {"id": "sword", "name": "Sword", "damage": 25, "cooldown": 0.0},
+                  {"id": "bow", "name": "Bow", "damage": 33, "cooldown": 0.42},
+              ])
         check("stats save kept a .bak",
               (root / "art" / "stats.json.bak").exists())
 
@@ -388,6 +429,14 @@ def test_server(tmp: Path) -> None:
         check("invalid stats 400 with field errors",
               status == 400 and body["ok"] is False
               and any(e["field"] == "player.maxHp" for e in body["errors"]),
+              json.dumps(body))
+
+        status, body = http("POST", f"{base}/api/stats", {
+            "weapons": [{"id": "bow", "damage": 99999}],
+        })
+        check("invalid weapon 400 with field errors",
+              status == 400 and body["ok"] is False
+              and any(e["field"] == "weapons[0].damage" for e in body["errors"]),
               json.dumps(body))
 
         status, body = http("POST", f"{base}/api/asset", {
