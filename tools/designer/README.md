@@ -20,8 +20,9 @@ python3 tools/designer/designer.py --check       # run the selftest and exit
 
 Then open <http://127.0.0.1:8765>. The page has three regions:
 
-- **Entities** (left): the hero, each mob, then each weapon (damage,
-  cooldown) from `art/stats.json`.
+- **Entities** (left): three tabs — Player, Mobs, Weapons — so the list stays
+  short; the hero, each mob and each weapon (damage, cooldown) from
+  `art/stats.json`.
 - **Inspector** (right): number inputs for the selected entity's stats
   (HP, attack, hurt-invulnerability for the hero; HP, attack, speed, size for
   mobs; damage, cooldown for weapons) with inline validation straight from the
@@ -31,7 +32,11 @@ Then open <http://127.0.0.1:8765>. The page has three regions:
   entity is drawn from its SVG or the hand-drawn fallback, then fit `WxH`,
   anchor (prefilled to what the game actually anchors that entity at — feet
   for the hero and walkers, centre for hovering mobs), precision and the
-  generated Java class name, then Bind/Remove.
+  generated Java class name, then Bind/Remove. Below that, the **Animation**
+  panel: every part of the bound SVG with an animation-role dropdown
+  (limb/arm/wing phases, `flutter` for capes, `static` for still parts),
+  prefilled with the by-name default. Save makes the mapping explicit;
+  "Use layer names" clears it.
 - **Build** (bottom): **Convert to Java** runs the real generators in the repo
   root and shows a live progress bar plus the merged log.
 

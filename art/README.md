@@ -63,6 +63,15 @@ the whole sprite. Extra parts in the SVG (a scarf, a belt) just sit still; a
 `art/player.svg` follows this convention: `leg-left`, `leg-right`, `shoe-left`,
 `arm-front`, and so on. Copy those names when drawing a new mob and it will
 walk the moment you bind it.
+
+The name convention is only the **default**. The designer's **Animation**
+panel lists every part of the bound SVG with a role dropdown (prefilled with
+the by-name role), so you can override anything: map `cape` to `flutter`, a
+hat to `static`, or give a character two left legs the same phase. Saving
+writes an explicit `anim` map into `art/art.json` — from then on it is
+authoritative (unlisted parts stay still). "Use layer names" clears the map
+and returns to the table above. Parts that share a role swing as one rigid
+group around a shared pivot, which is why a shoe belongs on its leg's role.
 * Flatten gradients to solid fills, or accept the middle-stop approximation
   that the converter reports as a warning.
 * Compound paths with holes need `fill-rule: evenodd`.

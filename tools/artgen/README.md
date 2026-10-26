@@ -115,10 +115,36 @@ Default output path follows the package:
 ```
 
 Per-asset keys: `src` (required), `class`, `package`, `fit`, `anchor`,
-`precision`, `out`, and the optional `entity` (an id from `art/stats.json`, or
-`"player"`). Relative paths resolve against the repository root, so the
-same manifest works from any working directory — and from a GUI process that
-shells out.
+`precision`, `out`, the optional `entity` (an id from `art/stats.json`, or
+`"player"`), and the optional `anim` (see below). Relative paths resolve
+against the repository root, so the same manifest works from any working
+directory — and from a GUI process that shells out.
+
+#### `anim`: explicit animation roles
+
+```json
+{ "entity": "player", "anim": { "leg-left": "limb-a", "shoe-left": "limb-a",
+  "cape": "flutter" } }
+```
+
+`anim` maps **part (layer) names to animation roles**. It is authoritative:
+parts it does not list are `static`, and role groups share one pivot — the
+top-centre of the group's largest part — so a shoe rides its leg's hip and a
+hand its arm's shoulder instead of peeling off. Without an `anim` key, roles
+are inferred from layer names (the table in [`art/README.md`](../../art/README.md)).
+
+| role | motion |
+|------|--------|
+| `static` | never moves |
+| `limb-a` / `limb-b` | leg/foot/shoe swing, opposite phases (left+front / right+back) |
+| `arm-a` / `arm-b` | arm/hand counter-swing against the limbs |
+| `wing-a` / `wing-b` | flap, mirrored |
+| `flutter` | capes/scarves: gentle sway around the attachment point |
+
+A part name in `anim` that the SVG does not contain warns (the SVG changed
+under the manifest); an unknown role name fails the asset. The registry
+(`ArtBindings.partRole` / `rolePivotX` / `rolePivotY`) bakes the resolved
+roles and pivots, so the renderer does no name matching at runtime.
 
 Every manifest run also writes **`ArtBindings.java`** into `outDir`: the
 entity → artwork registry the game reads. `Renderer` calls

@@ -873,18 +873,111 @@ def main(argv=None) -> int:
         return 3
 
 
+# ----------------------------------------------------------------------
+# Animation roles
+# ----------------------------------------------------------------------
+# The catalog the designer edits per part (asset key "anim": {part: role}).
+# Without an explicit map, roles are inferred from the layer name: leg/foot/
+# shoe/boot swing like limbs, arm/hand counter-swing, wings flap, capes and
+# the rest stay still. Parts sharing a role move as one rigid group around
+# the role's shared pivot (the largest part of the group -- the leg leads the
+# shoe, the arm leads the hand).
+ROLES = [
+    "static",   # 0: never moves
+    "limb-a",   # 1: leg/foot/shoe, left|front phase
+    "limb-b",   # 2: leg/foot/shoe, right|back phase
+    "arm-a",    # 3: arm/hand, left|front phase (counter to limb-a)
+    "arm-b",    # 4: arm/hand, right|back phase
+    "wing-a",   # 5: wing, flaps up
+    "wing-b",   # 6: wing, flaps down (mirror of wing-a)
+    "flutter",  # 7: capes/scarves/tails: sway around the attachment point
+]
+ROLE_INDEX = {name: i for i, name in enumerate(ROLES)}
+
+
+def infer_role(name: str) -> str:
+    """Name-based fallback when the designer has not mapped a part."""
+    n = (name or "").lower()
+    side_b = "right" in n or "back" in n
+    if "wing" in n:
+        return "wing-b" if side_b else "wing-a"
+    if "arm" in n or "hand" in n:
+        return "arm-b" if side_b else "arm-a"
+    if "leg" in n or "foot" in n or "shoe" in n or "boot" in n:
+        return "limb-b" if side_b else "limb-a"
+    return "static"
+
+
+def part_ink_info(part) -> tuple:
+    """(name, pivot_x, pivot_y, ink_area) of a fitted part, top-centre pivot."""
+    if not part.segments:
+        return (part.name, 0.0, 0.0, 0.0)
+    x0, y0, x1, y1 = svgpath.bbox_of_segments(part.segments)
+    if x1 < x0 or y1 < y0:
+        return (part.name, 0.0, 0.0, 0.0)
+    return (part.name, (x0 + x1) / 2.0, y0, max(0.0, (x1 - x0) * (y1 - y0)))
+
+
+def resolve_roles(parts_info, anim, warnings, where):
+    """Roles for one asset: the explicit map wins, names infer the rest.
+
+    An `anim` key is authoritative: parts it does not list are `static`
+    (the author decided exactly what moves). Unknown names in the map mean
+    the SVG changed under the manifest -- warn and ignore them.
+    """
+    names = [info[0] for info in parts_info]
+    roles = []
+    if anim is None:
+        roles = [infer_role(n) for n in names]
+    else:
+        seen = set()
+        for n in names:
+            role = anim.get(n)
+            if role is None:
+                roles.append("static")
+                continue
+            if role not in ROLE_INDEX:
+                raise SvgError(
+                    f"{where}: anim maps {n!r} to unknown role {role!r} "
+                    f"(choose from {', '.join(ROLES)})")
+            roles.append(role)
+            seen.add(n)
+        for n, role in anim.items():
+            if n not in seen and n not in names:
+                warnings.append(
+                    f"{where}: anim maps {n!r} but the SVG has no such part")
+    # shared pivot per role: the largest-ink part of the group is the root
+    pivots = [(0.0, 0.0)] * len(ROLES)
+    best = [0.0] * len(ROLES)
+    for (n, px, py, area), role in zip(parts_info, roles):
+        ri = ROLE_INDEX[role]
+        if area > best[ri]:
+            best[ri] = area
+            pivots[ri] = (px, py)
+    return roles, pivots
+
+
 def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
                   reporter) -> dict:
-    """Writes ArtBindings.java, the entity -> artwork registry Renderer uses.
+    """Writes ArtBindings.java, the entity -> artwork registry.
 
-    The game never reads art.json; this generated class is the one place that
-    knows which entity has baked artwork and which generated class draws it.
+    The registry is the one place that knows which entity has baked artwork,
+    which generated class draws it and -- the point of this rewrite -- which
+    ANIMATION ROLE each part plays. Roles come from the asset's explicit
+    "anim" map when the designer set one, otherwise from the layer names
+    (see infer_role). Parts of one role share the pivot of the group's
+    largest part, so a shoe rides its leg's hip instead of peeling off.
+
     An empty manifest still emits the class (every method a no-op), so the
     game always compiles against a registry.
     """
     target_dir = out_dir or package_dir(package)
     target = target_dir / "ArtBindings.java"
     regen = f"python3 tools/artgen/svg2java.py --manifest {rel(manifest_path)}"
+
+    def java_ident(entity):
+        return re.sub(r"[^A-Za-z0-9_]", "_", entity).upper()
+
     lines = [
         "// GENERATED FILE - DO NOT EDIT BY HAND.",
         f"// Source:      {rel(manifest_path)}",
@@ -893,7 +986,8 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "//",
         "// Entity -> baked-artwork registry. Renderer asks has()/draw() whether",
         "// an entity has generated art and falls back to its hand-drawn vector",
-        "// code when it does not.",
+        "// code when it does not. Roles (partRole) drive the name-mapped limb",
+        "// animation; rolePivot* give each role group its shared joint.",
         f"package {package};",
         "",
         "import android.graphics.Canvas;",
@@ -905,12 +999,37 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "    private ArtBindings() {",
         "    }",
         "",
+    ]
+    # role constants (index order must match ROLES in the generator)
+    for name in ROLES:
+        const = "ROLE_" + name.upper().replace("-", "_")
+        lines.append(f"    public static final int {const} = {ROLE_INDEX[name]};")
+    lines.append("")
+
+    arrays = []
+    for entry in bound:
+        ident = java_ident(entry["entity"])
+        roles_arr = f"{ident}_ROLES"
+        piv_arr = f"{ident}_ROLE_PIVOTS"
+        r, pivots = resolve_roles(entry["parts"], entry["anim"],
+                                  entry["warnings"], entry["where"])
+        lines.append(f"    private static final int[] {roles_arr} = {{"
+                     + ", ".join(str(ROLE_INDEX[x]) for x in r) + "};")
+        flat = []
+        for px, py in pivots:
+            flat += [px, py]
+        lines.append(f"    private static final float[] {piv_arr} = {{"
+                     + ", ".join(f"{v:.3f}f" for v in flat) + "};")
+        lines.append("")
+        arrays.append((entry["entity"], roles_arr, piv_arr))
+
+    lines += [
         "    /** @return true when {@code entity} has artwork the renderer can draw */",
         "    public static boolean has(String entity) {",
         "        switch (entity) {",
     ]
-    for entity, _cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
         lines.append("                return true;")
     lines += [
         "            default:",
@@ -922,9 +1041,9 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "    public static float width(String entity) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                return {cls}.WIDTH;")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
+        lines.append(f"                return {entry['class']}.WIDTH;")
     lines += [
         "            default:",
         "                return 0f;",
@@ -935,9 +1054,9 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "    public static float height(String entity) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                return {cls}.HEIGHT;")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
+        lines.append(f"                return {entry['class']}.HEIGHT;")
     lines += [
         "            default:",
         "                return 0f;",
@@ -952,9 +1071,9 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "                            Paint stroke, float x, float y, float scale) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                {cls}.draw(c, fill, stroke, x, y, scale);")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
+        lines.append(f"                {entry['class']}.draw(c, fill, stroke, x, y, scale);")
         lines.append("                return;")
     lines += [
         "            default:",
@@ -965,35 +1084,35 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "    public static int partCount(String entity) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
+    for entity, roles_arr, _ in arrays:
         lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                return {cls}.count();")
+        lines.append(f"                return {roles_arr}.length;")
     lines += [
         "            default:",
         "                return 0;",
         "        }",
         "    }",
         "",
-        "    /** Layer name of part i (drives the name-based animation). */",
+        "    /** Layer name of part i (informational; roles come from partRole). */",
         "    public static String partName(String entity, int i) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                return {cls}.partName(i);")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
+        lines.append(f"                return {entry['class']}.partName(i);")
     lines += [
         "            default:",
-        "                return \"\";",
+        '                return "";',
         "        }",
         "    }",
         "",
-        "    /** Part pivot (joint) in art units; 0 when the entity has none. */",
+        "    /** Per-part top-centre pivot in art units (informational). */",
         "    public static float partPivotX(String entity, int i) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                return {cls}.partPivotX(i);")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
+        lines.append(f"                return {entry['class']}.partPivotX(i);")
     lines += [
         "            default:",
         "                return 0f;",
@@ -1004,9 +1123,9 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "    public static float partPivotY(String entity, int i) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                return {cls}.partPivotY(i);")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
+        lines.append(f"                return {entry['class']}.partPivotY(i);")
     lines += [
         "            default:",
         "                return 0f;",
@@ -1014,20 +1133,62 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
         "    }",
         "",
         "    /**",
-        "     * Draws one part of the bound artwork. Renderer rotates limbs by",
-        "     * transforming the canvas about the part's pivot, then calls this.",
+        "     * Draws one part of the bound artwork. Renderer rotates animated",
+        "     * roles about the shared pivot, then calls this.",
         "     */",
         "    public static void drawPart(String entity, int i, Canvas c,",
         "                               Paint fill, Paint stroke,",
         "                               float x, float y, float scale) {",
         "        switch (entity) {",
     ]
-    for entity, cls in bound:
-        lines.append(f"            case {json.dumps(entity)}:")
-        lines.append(f"                {cls}.drawPart(i, c, fill, stroke, x, y, scale);")
+    for entry in bound:
+        lines.append(f"            case {json.dumps(entry['entity'])}:")
+        lines.append(f"                {entry['class']}.drawPart(i, c, fill, stroke, x, y, scale);")
         lines.append("                return;")
     lines += [
         "            default:",
+        "        }",
+        "    }",
+        "",
+        "    /**",
+        "     * The animation role of part i (one of the ROLE_* constants).",
+        "     * Explicit designer mapping first, layer-name inference fallback.",
+        "     */",
+        "    public static int partRole(String entity, int i) {",
+        "        switch (entity) {",
+    ]
+    for entity, roles_arr, _ in arrays:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {roles_arr}[i];")
+    lines += [
+        "            default:",
+        f"                return {ROLE_INDEX['static']};",
+        "        }",
+        "    }",
+        "",
+        "    /** Shared pivot x of a role group, in art units. */",
+        "    public static float rolePivotX(String entity, int role) {",
+        "        switch (entity) {",
+    ]
+    for entity, _, piv_arr in arrays:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {piv_arr}[role * 2];")
+    lines += [
+        "            default:",
+        "                return 0f;",
+        "        }",
+        "    }",
+        "",
+        "    /** Shared pivot y of a role group, in art units. */",
+        "    public static float rolePivotY(String entity, int role) {",
+        "        switch (entity) {",
+    ]
+    for entity, _, piv_arr in arrays:
+        lines.append(f"            case {json.dumps(entity)}:")
+        lines.append(f"                return {piv_arr}[role * 2 + 1];")
+    lines += [
+        "            default:",
+        "                return 0f;",
         "        }",
         "    }",
         "}",
@@ -1046,8 +1207,9 @@ def emit_bindings(package: str, out_dir, bound, manifest_path: Path,
                   f"ArtBindings: {len(bound)} entit"
                   f"{'y' if len(bound) == 1 else 'ies'} bound"
                   + ("" if changed else "  (unchanged)"))
-    return {"out": rel(target), "entities": [e for e, _ in bound],
+    return {"out": rel(target), "entities": [e["entity"] for e in bound],
             "written": changed}
+
 
 def run_manifest(args, reporter) -> int:
     manifest_path = Path(args.manifest)
@@ -1071,15 +1233,32 @@ def run_manifest(args, reporter) -> int:
 
     results = []
     failed = False
-    bound: list[tuple[str, str]] = []
+    bound: list[dict] = []
     seen_entities: set[str] = set()
     for i, asset in enumerate(assets):
         try:
+            binding_index = None
             src = Path(asset["src"])
             if not src.is_absolute():
                 src = PROJECT_ROOT / src
             package = asset.get("package", base_package)
             class_name = asset.get("class") or default_class(src)
+            fit = parse_fit(asset["fit"]) if asset.get("fit") else None
+            anchor = asset.get("anchor", "bottom-center")
+            if anchor not in ANCHORS:
+                raise SvgError(f"unknown anchor {anchor!r}")
+            precision = int(asset.get("precision", args.precision))
+            anim = asset.get("anim")
+            if anim is not None and not isinstance(anim, dict):
+                raise SvgError("'anim' must map part names to role names")
+            for key, role in (anim or {}).items():
+                if role not in ROLE_INDEX:
+                    raise SvgError(f"anim maps {key!r} to unknown role "
+                                   f"{role!r} (choose from: "
+                                   f"{', '.join(ROLES)})")
+            out_path = Path(asset["out"]) if asset.get("out") else out_dir / f"{class_name}.java"
+            if not out_path.is_absolute():
+                out_path = PROJECT_ROOT / out_path
             entity = asset.get("entity")
             if isinstance(entity, str) and entity.strip():
                 entity = entity.strip()
@@ -1089,28 +1268,41 @@ def run_manifest(args, reporter) -> int:
                         f"the first binding")
                 else:
                     seen_entities.add(entity)
-                    bound.append((entity, class_name))
-            fit = parse_fit(asset["fit"]) if asset.get("fit") else None
-            anchor = asset.get("anchor", "bottom-center")
-            if anchor not in ANCHORS:
-                raise SvgError(f"unknown anchor {anchor!r}")
-            precision = int(asset.get("precision", args.precision))
-            out_path = Path(asset["out"]) if asset.get("out") else out_dir / f"{class_name}.java"
-            if not out_path.is_absolute():
-                out_path = PROJECT_ROOT / out_path
+                    bound.append({
+                        "entity": entity,
+                        "class": class_name,
+                        "parts": [],
+                        "anim": anim,
+                        "warnings": [],
+                        "where": f"asset {i} (entity {entity})",
+                    })
+                    binding_index = len(bound) - 1
             result = run_one(args, src, class_name, package, out_path,
                              fit, anchor, precision, reporter)
             results.append(result.summary)
+            # the registry needs each part's name, pivot and ink area to bake
+            # roles + shared pivots (Result.parts are the fitted parts)
+            if binding_index is not None:
+                bound[binding_index]["parts"] = [part_ink_info(p) for p in result.parts]
         except (SvgError, KeyError, ValueError, argparse.ArgumentTypeError) as exc:
             failed = True
             reporter.error(f"asset {i}: {exc}")
+            if binding_index is not None \
+                    and not bound[binding_index]["parts"]:
+                bound.pop()      # never register an entity whose art failed
+                seen_entities.discard(entity)
 
-    warnings = sum(len(r["warnings"]) for r in results)
     if not failed and not args.check:
         bindings_out = emit_bindings(base_package, out_dir, bound,
                                      Path(args.manifest), reporter)
     else:
         bindings_out = None
+    # resolve_roles() ran inside emit_bindings, so collect the role warnings
+    # only after the registry has been written
+    role_warnings = [w for e in bound for w in e["warnings"]]
+    for w in role_warnings:
+        reporter.warn(w)
+    warnings = sum(len(r["warnings"]) for r in results) + len(role_warnings)
     if args.json:
         payload = {"ok": not failed, "assets": results}
         if bindings_out is not None:

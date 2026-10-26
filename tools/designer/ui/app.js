@@ -13,8 +13,16 @@ const state = {
   svgs: [],
   errors: [],
   selected: 'player',
+  tab: 'player',
+  anim: null,          // /api/anim payload for the selected entity
   pollTimer: null,
 };
+
+const TABS = [
+  { id: 'player', kinds: ['player'], label: 'Player' },
+  { id: 'mobs', kinds: ['mob'], label: 'Mobs' },
+  { id: 'weapons', kinds: ['weapon'], label: 'Weapons' },
+];
 
 /* ---- helpers ---------------------------------------------------------- */
 
@@ -38,6 +46,69 @@ function esc(text) {
     (c) => ({ "&": '&amp;', "<": '&lt;', ">": '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/* ---- animation editor -------------------------------------------------- */
+
+async function loadAnim(ent) {
+  const block = $('animBlock');
+  if (!ent.asset) {
+    state.anim = null;
+    block.classList.add('hidden');
+    return;
+  }
+  const { status, body } = await api('/api/anim?entity=' + encodeURIComponent(ent.id));
+  if (status !== 200 || !body.ok) {
+    state.anim = null;
+    block.classList.add('hidden');
+    return;
+  }
+  state.anim = body;
+  renderAnim();
+}
+
+function renderAnim() {
+  const a = state.anim;
+  const block = $('animBlock');
+  if (!a) { block.classList.add('hidden'); return; }
+  block.classList.remove('hidden');
+  $('animRows').innerHTML = a.parts.map((p, i) =>
+    `<div class="anim-row">
+       <span class="anim-name" title="${esc(p.name)}">${esc(p.name)}</span>
+       <span class="inferred">name: ${esc(p.byName)}</span>
+       <select data-anim-idx="${i}">
+         ${a.roles.map((r) =>
+           `<option value="${esc(r)}" ${r === p.role ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+       </select>
+     </div>`).join('');
+  document.querySelectorAll('#animRows select').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const part = a.parts[Number(sel.dataset.animIdx)];
+      part.role = sel.value;
+    });
+  });
+}
+
+async function saveAnim(clear) {
+  if (!state.anim) return;
+  const ent = entityById(state.selected);
+  if (!ent) return;
+  const mapping = {};
+  if (!clear) {
+    for (const p of state.anim.parts) mapping[p.name] = p.role;
+  }
+  const { status, body } = await post('/api/anim', {
+    entity: ent.id, anim: clear ? {} : mapping });
+  if (status === 200 && body.ok) {
+    showFieldErrors([], '#animErrors');
+    toast(clear ? 'animation: back to layer names' : 'animation saved');
+    await loadState();
+    renderAll();
+  } else {
+    showFieldErrors((body && body.errors) || [{ field: '', message: 'save failed' }],
+      '#animErrors');
+    toast('animation NOT saved', true);
+  }
+}
+
 let toastTimer = null;
 function toast(message, bad) {
   const el = $('toast');
@@ -56,13 +127,39 @@ function entityById(id) {
 
 function renderAll() {
   $('rootLabel').textContent = state.root;
+  renderTabs();
   renderEntityList();
   renderInspector();
   renderSvgSelect();
 }
 
+function renderTabs() {
+  const counts = {};
+  for (const t of TABS) {
+    counts[t.id] = state.entities.filter((e) => t.kinds.includes(e.kind)).length;
+  }
+  $('entityTabs').innerHTML = TABS.map((t) =>
+    `<button type="button" class="${t.id === state.tab ? 'sel' : ''}"
+        data-tab="${t.id}">${t.label}
+        <span class="tab-count">${counts[t.id]}</span></button>`).join('');
+  document.querySelectorAll('#entityTabs button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.tab = btn.dataset.tab;
+      const kinds = TABS.find((t) => t.id === state.tab).kinds;
+      if (!kinds.includes(entityById(state.selected)?.kind)) {
+        const first = state.entities.find((e) => kinds.includes(e.kind));
+        if (first) state.selected = first.id;
+      }
+      renderAll();
+    });
+  });
+}
+
 function renderEntityList() {
-  const rows = state.entities.map((e) =>
+  const kinds = TABS.find((t) => t.id === state.tab).kinds;
+  const rows = state.entities
+    .filter((e) => kinds.includes(e.kind))
+    .map((e) =>
     `<button type="button" class="row ${e.id === state.selected ? 'sel' : ''}"
         data-entity="${esc(e.id)}">
        <span class="row-name">${esc(e.name || e.id)}</span>
@@ -150,9 +247,11 @@ function renderInspector() {
 function renderArtBlock(ent) {
   if (ent.kind === 'weapon') {
     document.querySelector('.art-block').classList.add('hidden');
+    $('animBlock').classList.add('hidden');
     return;
   }
   document.querySelector('.art-block').classList.remove('hidden');
+  loadAnim(ent);
   const asset = ent.asset;
   $('artCurrent').innerHTML = asset
     ? `bound: <code>${esc(asset.src)}</code>
@@ -345,6 +444,8 @@ async function boot() {
   $('bindBtn').addEventListener('click', () => bindAsset(false));
   $('removeBtn').addEventListener('click', () => bindAsset(true));
   $('buildBtn').addEventListener('click', startBuild);
+  $('animSaveBtn').addEventListener('click', () => saveAnim(false));
+  $('animClearBtn').addEventListener('click', () => saveAnim(true));
   $('svgSelect').addEventListener('change', () => {
     if ($('svgSelect').value) {
       $('svgPath').value = $('svgSelect').value;

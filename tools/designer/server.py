@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import xml.etree.ElementTree as ET
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
@@ -126,6 +127,8 @@ class DesignerHandler(BaseHTTPRequestHandler):
                 return self.api_svg()
             if path == "/api/build":
                 return self._send_json(self.runner.snapshot())
+            if path == "/api/anim":
+                return self.api_anim_get()
             raise ApiError(404, {"ok": False, "error": f"no such route: {path}"})
         except ApiError as exc:
             self._send_json(exc.payload, exc.status)
@@ -182,6 +185,8 @@ class DesignerHandler(BaseHTTPRequestHandler):
                 return self.api_asset()
             if path == "/api/build":
                 return self.api_build()
+            if path == "/api/anim":
+                return self.api_anim_post()
             raise ApiError(404, {"ok": False, "error": f"no such route: {path}"})
         except ApiError as exc:
             self._send_json(exc.payload, exc.status)
@@ -242,6 +247,116 @@ class DesignerHandler(BaseHTTPRequestHandler):
             "ok": True,
             "asset": self.project._find_asset_for_entity(new_art, entity),
         })
+
+    def _entity_asset(self, entity):
+        """The manifest asset bound to an entity, or None."""
+        try:
+            art = self.project.load_art()
+        except Exception as exc:
+            raise ApiError(400, {"ok": False,
+                                 "errors": [{"field": "art", "message": str(exc)}]})
+        for a in art.get("assets", []):
+            if isinstance(a, dict) and a.get("entity") == entity:
+                return art, a
+        return art, None
+
+    def api_anim_get(self):
+        # What the animation editor shows: the SVG's real part list (via
+        # artgen's parser), each part's effective role, and the role catalog.
+        from urllib.parse import parse_qs
+        entity = (parse_qs(urlsplit(self.path).query).get("entity")
+                  or [None])[0]
+        if not entity:
+            raise ApiError(400, {"ok": False,
+                                 "errors": [{"field": "entity",
+                                             "message": "entity is required"}]})
+        art, asset = self._entity_asset(entity)
+        if asset is None:
+            raise ApiError(400, {"ok": False, "errors": [
+                {"field": "entity",
+                 "message": f"no SVG bound to {entity!r}; bind one first"}]})
+        try:
+            svg_text = self.project.read_svg(asset.get("src"))
+        except ModelError as exc:
+            raise ApiError(400, {"ok": False, "errors": exc.args[0]})
+        try:
+            from artinfo import ANIM_ROLES, inferred_role, parts_of_text
+            names = parts_of_text(svg_text)
+        except ET.ParseError as exc:
+            raise ApiError(400, {"ok": False, "errors": [
+                {"field": "src", "message": f"bad SVG: {exc}"}]})
+        except Exception as exc:
+            raise ApiError(500, {"ok": False,
+                                 "error": f"{type(exc).__name__}: {exc}"})
+        explicit = asset.get("anim") if isinstance(asset.get("anim"), dict) else None
+        parts = []
+        for n in names:
+            role = (explicit or {}).get(n)
+            if role is None:
+                role = inferred_role(n) if explicit is None else "static"
+            parts.append({
+                "name": n,
+                "role": role,
+                "byName": inferred_role(n),
+            })
+        self._send_json({
+            "ok": True,
+            "entity": entity,
+            "src": asset.get("src"),
+            "roles": ANIM_ROLES,
+            "explicit": explicit is not None,
+            "parts": parts,
+        })
+
+    def api_anim_post(self):
+        from artinfo import ANIM_ROLES, parts_of
+        body = self._read_json()
+        entity = body.get("entity")
+        anim = body.get("anim")
+        if not entity:
+            raise ApiError(400, {"ok": False,
+                                 "errors": [{"field": "entity",
+                                             "message": "entity is required"}]})
+        art, asset = self._entity_asset(entity)
+        if asset is None:
+            raise ApiError(400, {"ok": False, "errors": [
+                {"field": "entity",
+                 "message": f"no SVG bound to {entity!r}; bind one first"}]})
+        # part names must exist in the SVG: this is the typo protection the
+        # generated registry cannot give (it would just warn and skip)
+        try:
+            svg_text = self.project.read_svg(asset.get("src"))
+        except ModelError as exc:
+            raise ApiError(400, {"ok": False, "errors": exc.args[0]})
+        try:
+            from artinfo import parts_of_text
+            known = set(parts_of_text(svg_text))
+        except ET.ParseError as exc:
+            raise ApiError(400, {"ok": False, "errors": [
+                {"field": "src", "message": f"bad SVG: {exc}"}]})
+        if anim is not None and not isinstance(anim, dict):
+            raise ApiError(400, {"ok": False,
+                                 "errors": [{"field": "anim",
+                                             "message": "must be an object"}]})
+        if anim:
+            bad_roles = [{"field": "anim",
+                          "message": f"unknown role {r!r} (choose from: "
+                                     f"{', '.join(ANIM_ROLES)})"}
+                         for r in set(anim.values()) if r not in ANIM_ROLES]
+            unknown = [n for n in anim if n not in known]
+            if bad_roles or unknown:
+                errors = bad_roles + [
+                    {"field": "anim",
+                     "message": f"the SVG has no part named {n!r}"}
+                    for n in unknown]
+                raise ApiError(400, {"ok": False, "errors": errors})
+        try:
+            new_art = self.project.set_asset_anim(art, entity, anim or None)
+        except ModelError as exc:
+            raise ApiError(400, {"ok": False, "errors": exc.args[0]})
+        self.project.save_art(new_art)
+        self._send_json({"ok": True,
+                         "anim": (anim or None)})
 
     def api_build(self):
         try:

@@ -457,6 +457,62 @@ def test_server(tmp: Path) -> None:
         })
         check("POST /api/asset unbinds",
               status == 200 and body["ok"] and body["asset"] is None)
+
+        # --- animation editor: rebind, list real parts, map roles, typo check
+        status, body = http("POST", f"{base}/api/asset", {
+            "entity": "player", "src": "art/mob.svg", "class": "ArtPlayer",
+            "fit": "26x36", "anchor": "bottom-center", "precision": 2,
+        })
+        check("rebind for anim tests", status == 200 and body["ok"])
+
+        status, body = http("GET", f"{base}/api/anim?entity=player")
+        check("GET /api/anim lists parts + catalog",
+              status == 200 and body["ok"] and len(body["parts"]) >= 1
+              and "limb-a" in body["roles"] and body["explicit"] is False,
+              json.dumps(body)[:200])
+        part = body["parts"][0]["name"]
+        check("unmapped parts show the by-name role",
+              body["parts"][0]["role"] == body["parts"][0]["byName"])
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "player", "anim": {part: "limb-a"}})
+        check("POST /api/anim saves a mapping", status == 200 and body["ok"])
+        art_disk = json.loads((root / "art" / "art.json").read_text())
+        entry = [a for a in art_disk["assets"] if a.get("entity") == "player"][0]
+        check("anim mapping landed in art.json",
+              entry.get("anim") == {part: "limb-a"}, str(entry.get("anim")))
+
+        status, body = http("GET", f"{base}/api/anim?entity=player")
+        check("saved mapping is explicit and applied",
+              body["explicit"] is True and body["parts"][0]["role"] == "limb-a"
+              and body["parts"][0]["byName"] != "limb-a",
+              json.dumps(body["parts"][0]))
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "player", "anim": {"no-such-part": "static"}})
+        check("anim typo in part name 400",
+              status == 400 and "no part named" in
+              json.dumps(body.get("errors", [])), json.dumps(body))
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "player", "anim": {part: "jetpack"}})
+        check("anim unknown role 400", status == 400)
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "walker", "anim": {}})
+        check("anim on unbound entity 400", status == 400)
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "player", "anim": {}})
+        check("POST /api/anim {} clears the mapping",
+              status == 200 and body["ok"] and body["anim"] is None)
+        art_disk = json.loads((root / "art" / "art.json").read_text())
+        entry = [a for a in art_disk["assets"] if a.get("entity") == "player"][0]
+        check("cleared mapping removed from art.json",
+              "anim" not in entry, str(entry))
+
+        # leave art.json as the other checks expect it (unbound player)
+        http("POST", f"{base}/api/asset", {"entity": "player", "src": None})
         art_disk = json.loads((root / "art" / "art.json").read_text())
         check("unbind removed the entry",
               not any(a.get("entity") == "player" for a in art_disk["assets"]))

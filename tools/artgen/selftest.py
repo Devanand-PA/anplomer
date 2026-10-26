@@ -271,7 +271,14 @@ def pipeline_checks() -> None:
             {"src": str(SAMPLES / "shapes.svg"), "class": "ArtBindA",
              "fit": "10x10", "entity": "walker"},
             {"src": str(SAMPLES / "player.svg"), "class": "ArtBindB",
-             "fit": "26x36", "entity": "flyer"},
+             "fit": "26x36", "entity": "flyer",
+             # an explicit role map: shoes follow legs, arms counter-swing.
+             # The bogus key proves a typo warns but does not break the bake.
+             "anim": {"leg-left": "limb-a", "leg-right": "limb-b",
+                      "shoe-left": "limb-a", "shoe-right": "limb-b",
+                      "arm-front": "arm-a", "arm-back": "arm-b",
+                      "cape": "flutter",
+                      "typo-part": "static"}},
             {"src": str(SAMPLES / "shapes.svg"), "class": "ArtBindC",
              "entity": "flyer"},
         ],
@@ -289,6 +296,21 @@ def pipeline_checks() -> None:
           "ArtBindB.draw(" in text and "ArtBindC" not in text)
     check("bindings import android.graphics",
           "import android.graphics.Canvas;" in text)
+    check("bindings bake role constants",
+          "public static final int ROLE_STATIC = 0;" in text
+          and "public static final int ROLE_FLUTTER = 7;" in text)
+    check("explicit anim map is authoritative",
+          "FLYER_ROLES = {1, 2, 1, 2," in text.replace("    ", " "),
+          text[:400])
+    check("unlisted parts go static under an anim map",
+          "FLYER_ROLES" in text and text.count(", 0,") > 4)
+    check("role pivots are shared per role group",
+          "ROLE_PIVOTS" in text and "rolePivotX" in text
+          and "rolePivotY" in text)
+    check("anim typo warns but still bakes",
+          any("typo-part" in w for w in _warnings_of(str(manifest))), "")
+    check("unknown anim role fails the asset",
+          _manifest_role_error(tmp), "")
     empty = tmp / "empty.json"
     empty.write_text(json.dumps({"package": "com.example.anplomer",
                                  "outDir": str(tmp / "empty-out"),
@@ -320,6 +342,30 @@ def _quiet_main(argv: list[str]) -> int:
             return svg2java.main(argv)
         except SystemExit as exc:          # argparse errors
             return int(exc.code or 0)
+
+
+def _warnings_of(manifest: str) -> list[str]:
+    """stderr lines from a manifest run (role warnings land there)."""
+    sink = io.StringIO()
+    with contextlib.redirect_stdout(io.StringIO()), \
+            contextlib.redirect_stderr(sink):
+        try:
+            svg2java.main(["--manifest", manifest, "--json"])
+        except SystemExit:
+            pass
+    return [l for l in sink.getvalue().splitlines() if "warning" in l]
+
+
+def _manifest_role_error(tmp) -> bool:
+    """A bad role name in an anim map must fail the asset (exit 3)."""
+    bad = tmp / "bad-roles.json"
+    bad.write_text(json.dumps({
+        "package": "com.example.anplomer",
+        "outDir": str(tmp / "bad-out"),
+        "assets": [{"src": str(SAMPLES / "shapes.svg"), "class": "ArtBad",
+                    "entity": "player", "anim": {"donut": "jetpack"}}],
+    }), encoding="utf-8")
+    return _quiet_main(["--manifest", str(bad)]) == 3
 
 
 def _parts_of(result) -> list:

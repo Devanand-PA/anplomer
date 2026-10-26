@@ -942,99 +942,70 @@ public final class Renderer {
     }
 
     // ---- baked-art limb animation --------------------------------------
-    // Parts are animated by their SVG layer name (the convention lives in
-    // art/README.md): leg/foot/shoe -> limbs, arm/hand -> arms, wing -> wings;
-    // "left"/"front" take phase A, "right"/"back" phase B. Everything else is
-    // static. Roles and pivots are resolved once per entity and cached.
-    private static final int ROLE_STATIC = 0;
-    private static final int ROLE_LIMB_A = 1;
-    private static final int ROLE_LIMB_B = 2;
-    private static final int ROLE_ARM_A = 3;
-    private static final int ROLE_ARM_B = 4;
-    private static final int ROLE_WING_A = 5;
-    private static final int ROLE_WING_B = 6;
-
-    private final java.util.HashMap<String, int[]> artRoles = new java.util.HashMap<>();
-    private final java.util.HashMap<String, float[]> artPivots = new java.util.HashMap<>();
-
-    private static int classifyArtPart(String name) {
-        String n = name.toLowerCase();
-        boolean sideA = n.contains("left") || n.contains("front");
-        boolean sideB = n.contains("right") || n.contains("back");
-        if (n.contains("wing")) {
-            return sideB ? ROLE_WING_B : ROLE_WING_A;
-        }
-        if (n.contains("arm") || n.contains("hand")) {
-            return sideB ? ROLE_ARM_B : ROLE_ARM_A;
-        }
-        if (n.contains("leg") || n.contains("foot") || n.contains("shoe")
-                || n.contains("boot")) {
-            return sideB ? ROLE_LIMB_B : ROLE_LIMB_A;
-        }
-        return ROLE_STATIC;
-    }
+    // Roles and shared pivots are baked into ArtBindings by the generator,
+    // from the designer's per-part mapping (or the layer-name convention).
+    // Parts of one role rotate as one rigid group around the role pivot --
+    // so a shoe rides its leg's hip and a hand its arm's shoulder.
 
     /**
-     * Draws a bound entity's artwork part by part, rotating the animated roles
-     * about their pivots. Z-order follows the SVG document order.
+     * Draws a bound entity's artwork part by part, rotating the animated
+     * roles about their shared pivots. Z-order follows the SVG document order.
      *
-     * @param phase     walk-cycle phase (radians) -- legs swing with it
-     * @param moving    on the ground and actually walking
-     * @param airborne  airborne pose (tucked limbs, raised arms) instead
-     * @param scale     entity box height / artwork height
+     * @param phase         walk-cycle phase; legs swing with it
+     * @param flutterPhase  continuous phase for capes/scarves (ROLE_FLUTTER)
+     * @param moving        on the ground and actually walking
+     * @param airborne      airborne pose (tucked limbs, raised arms) instead
+     * @param scale          entity box height / artwork height
      */
     private void drawBakedArt(String entity, Canvas c, float phase,
-                              boolean moving, boolean airborne, float scale) {
-        int[] roles = artRoles.get(entity);
-        float[] pivots = artPivots.get(entity);
-        if (roles == null) {
-            int n = ArtBindings.partCount(entity);
-            roles = new int[n];
-            pivots = new float[n * 2];
-            for (int i = 0; i < n; i++) {
-                roles[i] = classifyArtPart(ArtBindings.partName(entity, i));
-                pivots[i * 2] = ArtBindings.partPivotX(entity, i);
-                pivots[i * 2 + 1] = ArtBindings.partPivotY(entity, i);
-            }
-            artRoles.put(entity, roles);
-            artPivots.put(entity, pivots);
-        }
+                              float flutterPhase, boolean moving,
+                              boolean airborne, float scale) {
+        int n = ArtBindings.partCount(entity);
         float swing = sinf(phase);
-        for (int i = 0; i < roles.length; i++) {
-            float angle;
-            switch (roles[i]) {
-                case ROLE_LIMB_A:
+        float sway = sinf(flutterPhase * 6f);
+        for (int i = 0; i < n; i++) {
+            int role = ArtBindings.partRole(entity, i);
+            float angle = 0f;
+            float dx = 0f;
+            switch (role) {
+                case ArtBindings.ROLE_LIMB_A:
                     angle = airborne ? 18f : moving ? swing * 26f : 0f;
                     break;
-                case ROLE_LIMB_B:
+                case ArtBindings.ROLE_LIMB_B:
                     angle = airborne ? -26f : moving ? -swing * 26f : 0f;
                     break;
-                case ROLE_ARM_A:
+                case ArtBindings.ROLE_ARM_A:
                     angle = airborne ? -32f : moving ? -swing * 16f : 0f;
                     break;
-                case ROLE_ARM_B:
+                case ArtBindings.ROLE_ARM_B:
                     angle = airborne ? 10f : moving ? swing * 16f : 0f;
                     break;
-                case ROLE_WING_A:
+                case ArtBindings.ROLE_WING_A:
                     angle = swing * 24f;
                     break;
-                case ROLE_WING_B:
+                case ArtBindings.ROLE_WING_B:
                     angle = -swing * 24f;
+                    break;
+                case ArtBindings.ROLE_FLUTTER:
+                    // capes, scarves, tails: a gentle world-space sway around
+                    // the attachment point, running even while standing
+                    angle = sway * 7f;
+                    dx = sway * 3f;
                     break;
                 default:
                     angle = 0f;
                     break;
             }
-            if (angle != 0f) {
-                float px = pivots[i * 2] * scale;
-                float py = pivots[i * 2 + 1] * scale;
+            if (angle != 0f || dx != 0f) {
+                float px = ArtBindings.rolePivotX(entity, role) * scale;
+                float py = ArtBindings.rolePivotY(entity, role) * scale;
                 c.save();
-                c.translate(px, py);
+                c.translate(px + dx * scale, py);
                 c.rotate(angle);
                 c.translate(-px, -py);
             }
             ArtBindings.drawPart(entity, i, c, fill, stroke, 0f, 0f, scale);
-            if (angle != 0f) {
+            if (angle != 0f || dx != 0f) {
                 c.restore();
             }
         }
@@ -1099,8 +1070,8 @@ public final class Renderer {
             float wide = Math.min(1.7f, 0.7f / Math.max(squashY, 0.3f) + 0.3f);
             c.scale(wide, squashY);
             c.scale(sx, 1f);
-            drawBakedArt("walker", c, e.animTime * 10f, !e.dead, false,
-                    artScale(e, "walker"));
+            drawBakedArt("walker", c, e.animTime * 10f, e.animTime, !e.dead,
+                    false, artScale(e, "walker"));
             c.restore();
             return;
         }
@@ -1194,7 +1165,8 @@ public final class Renderer {
                 c.scale(e.facing < 0f ? -1f : 1f, 1f);
             }
             drawBakedArt("flyer", c, g.worldTime * 14f + e.animTime * 2f,
-                    false, false, artScale(e, "flyer"));
+                    g.worldTime + e.animTime, false, false,
+                    artScale(e, "flyer"));
             c.restore();
             return;
         }
@@ -1311,7 +1283,7 @@ public final class Renderer {
             float artH = ArtBindings.height("player");
             float artScale = artH > 0f ? h / artH : 1f;
             boolean moving = Math.abs(p.vx) > 40f && p.onGround;
-            drawBakedArt("player", c, p.runCycle, moving,
+            drawBakedArt("player", c, p.runCycle, g.worldTime, moving,
                     !p.onGround && !p.dead, artScale);
             c.restore();
         } else {

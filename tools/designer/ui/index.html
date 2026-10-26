@@ -14,7 +14,7 @@
 
 <main class="layout">
   <nav id="entityList" class="panel entities" aria-label="Entities">
-    <h2>Entities</h2>
+    <div id="entityTabs" class="tabs"></div>
     <div id="entityRows" class="rows"></div>
   </nav>
 
@@ -61,6 +61,21 @@
         <div class="art-actions">
           <button id="bindBtn" type="button">Bind SVG</button>
           <button id="removeBtn" type="button" class="secondary">Remove</button>
+        </div>
+
+        <div id="animBlock" class="anim-block hidden">
+          <h3>Animation</h3>
+          <p class="hint">How each part of the bound SVG moves. Parts sharing a
+            role swing together around a shared pivot (a shoe rides its leg's
+            hip), so give the whole leg group the same role. Unlisted parts
+            stay still. Without a saved mapping the layer names decide.</p>
+          <div id="animRows" class="anim-rows"></div>
+          <div id="animErrors" class="field-errors"></div>
+          <div class="art-actions">
+            <button id="animSaveBtn" type="button">Save animation</button>
+            <button id="animClearBtn" type="button" class="secondary">
+              Use layer names</button>
+          </div>
         </div>
         <p class="hint">Binding upserts an entry in art/art.json; the build bakes it
           into Java. Generated art is <em>not yet wired into Renderer</em> &mdash; that

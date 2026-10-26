@@ -316,6 +316,46 @@ class Project:
                 return 'center'
         return 'bottom-center'
 
+    def set_asset_anim(self, art_data, entity, anim):
+        """Upserts the explicit role map on the asset bound to `entity`.
+
+        `anim` is {part name: role}; None or {} removes the map and falls the
+        entity back to artgen's by-name inference. Everything else in the
+        manifest (and in the asset entry) survives untouched.
+        """
+        assets = art_data.get('assets', []) if isinstance(art_data, dict) else []
+        idx = None
+        for i, a in enumerate(assets):
+            if isinstance(a, dict) and a.get('entity') == entity:
+                idx = i
+                break
+        if idx is None:
+            raise ModelError([{'field': 'entity',
+                               'message': f'no SVG bound to {entity!r}'}])
+        if anim:
+            if not isinstance(anim, dict):
+                raise ModelError([{'field': 'anim',
+                                   'message': 'must map part names to roles'}])
+            from artinfo import ANIM_ROLES
+            for name, role in anim.items():
+                if not isinstance(name, str) or not name.strip():
+                    raise ModelError([{'field': 'anim',
+                                       'message': f'bad part name {name!r}'}])
+                if role not in ANIM_ROLES:
+                    raise ModelError([{
+                        'field': 'anim',
+                        'message': f'unknown role {role!r} for part '
+                                   f'{name!r} (choose from: '
+                                   f"{', '.join(ANIM_ROLES)})"}])
+        new_art = dict(art_data) if isinstance(art_data, dict) else {}
+        new_assets = [dict(a) if isinstance(a, dict) else a for a in assets]
+        if anim:
+            new_assets[idx]['anim'] = {str(k): v for k, v in anim.items()}
+        else:
+            new_assets[idx].pop('anim', None)
+        new_art['assets'] = new_assets
+        return new_art
+
     def list_svgs(self):
         svgs = []
         for root, dirs, files in os.walk(self.root):

@@ -82,7 +82,84 @@ html, body {
 
 .entities { grid-column: 1; grid-row: 1; }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.tabs button {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 12px;
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  text-transform: capitalize;
+}
+
+.tab-count {
+  font-size: 10px;
+  color: var(--muted);
+  background: #0b0e14;
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+
+.tabs button.sel {
+  background: #223049;
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .rows { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+
+/* ---- animation editor ---------------------------------------------- */
+
+.anim-block { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+
+.anim-rows {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.anim-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.anim-row .anim-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.anim-row select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.anim-row .inferred {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
 
 .row {
   display: flex;
