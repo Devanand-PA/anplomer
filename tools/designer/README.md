@@ -1,9 +1,9 @@
 # Anplomer designer
 
 A local web GUI for editing gameplay stats and triggering the SVG → Java
-build. Barebones by design: today it edits the hero and mob numbers, binds
-artwork files to entities, and runs the generators; the level/enemy/weapon
-editors grow on top of it later.
+build. Barebones by design: today it edits the hero, mob and weapon numbers,
+binds artwork files to entities (weapon icons included), and runs the
+generators; the level/enemy editors grow on top of it later.
 
 It is a Python 3 stdlib-only web app (no pip packages, no JS build step, no
 CDN assets). The server binds `127.0.0.1` only and never modifies anything
@@ -21,22 +21,39 @@ python3 tools/designer/designer.py --check       # run the selftest and exit
 Then open <http://127.0.0.1:8765>. The page has three regions:
 
 - **Entities** (left): three tabs — Player, Mobs, Weapons — so the list stays
-  short; the hero, each mob and each weapon (damage, cooldown) from
+  short; the hero, each mob and each weapon (name, damage, cooldown) from
   `art/stats.json`.
+- **Preview** (top of the inspector, always visible while you work): the
+  bound SVG, big enough to judge. Drag to pan, scroll to zoom about the
+  cursor, double-click or **Fit** to re-fit; `+`/`-` step the zoom and the
+  readout is relative to fit (100% = fits the box). Hovering a part in the
+  Animation panel dims the rest of the artwork and lights that part up, so
+  you can always tell which vector you are editing.
 - **Inspector** (right): number inputs for the selected entity's stats
   (HP, attack, hurt-invulnerability for the hero; HP, attack, speed, size for
   mobs; damage, cooldown for weapons) with inline validation straight from the
   server. Below that, the
-  **Artwork** block binds an SVG to the entity: a **live preview** renders the
+  **Artwork** block binds an SVG to any entity — for a weapon that SVG is its
+  **icon**, drawn on the secondary disc, the HUD chip and the loadout rows
+  after Convert to Java (suggested anchor `center`, since icons are drawn
+  centred); for the hero and mobs it is the body. A **live preview** renders the
   current file as you pick or type it, an **in-game** line says whether the
   entity is drawn from its SVG or the hand-drawn fallback, then fit `WxH`,
   anchor (prefilled to what the game actually anchors that entity at — feet
   for the hero and walkers, centre for hovering mobs), precision and the
   generated Java class name, then Bind/Remove. Below that, the **Animation**
-  panel: every part of the bound SVG with an animation-role dropdown
-  (limb/arm/wing phases, `flutter` for capes, `static` for still parts),
-  prefilled with the by-name default. Save makes the mapping explicit;
-  "Use layer names" clears it.
+  panel (characters only — hidden for weapons, whose icons are static
+  glyphs): a collapsible **"How animation works"** help box, a row of
+  **quick-set** presets (Auto / Wave / Sway all / Freeze — they only fill the
+  rows in, nothing is written until you save), and one row per part with a
+  **channel** dropdown (`limb`, `arm`, `wing`, `flutter`, `none`) plus
+  **phase** and **amplitude** editors in degrees — the whole motion
+  definition, prefilled with the by-name default and hoverable to identify
+  the part. Save makes the mapping explicit and authoritative (the button
+  shows when there are unsaved changes); "Reset to layer names" clears it
+  back to inference. Nothing about the character's shape is assumed: a snake
+  is segments on `limb` with phases 0/60/120/..., a ghost is everything on
+  `flutter`.
 - **Build** (bottom): **Convert to Java** runs the real generators in the repo
   root and shows a live progress bar plus the merged log.
 
@@ -60,7 +77,7 @@ save — the designer merges, it never rewrites from scratch.
 | GET    | `/ui/<file>`    | `app.js` / `style.css` (whitelisted)           |
 | GET    | `/api/state`    | `{ok, root, entities, stats, art, svgs, build, errors}` |
 | POST   | `/api/stats`    | `{player, mobs}` → validate + atomic save      |
-| POST   | `/api/asset`    | `{entity, src, class, fit, anchor, precision}`; `src: null` unbinds |
+| POST   | `/api/asset`    | `{entity, src, class, fit, anchor, precision}`; `entity` is `player`, a mob id or a weapon id; `src: null` unbinds |
 | GET    | `/api/svgs`    | repo-relative `.svg` paths, sorted, cap 500    |
 | GET    | `/api/svg?path=` | raw SVG bytes for the inspector's live preview |
 | POST   | `/api/build`    | start a build (409 while one runs)             |
@@ -111,6 +128,10 @@ python3 tools/designer/selftest.py        # or: designer.py --check
 ```
 
 Exercises the model (round-trip, `.bak`, every validation rule, root
-isolation), the build runner (stub CLIs, success + failure + progress + busy
-refusal), and the server end-to-end on a loopback port (all routes, 400/404/
-409 paths, path-traversal rejection).
+isolation), the UI files (every `$('id')` the script uses exists in the
+markup, zoom/pan and help-box structure, the global `.hidden` rule), the
+preview view maths (executed in Node when it is installed: fit, zoom about
+the cursor, clamping, highlight swaps — skipped, not failed, without Node),
+the build runner (stub CLIs, success + failure + progress + busy refusal),
+and the server end-to-end on a loopback port (all routes, 400/404/409 paths,
+path-traversal rejection).

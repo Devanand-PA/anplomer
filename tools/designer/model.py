@@ -203,18 +203,29 @@ class Project:
         for wpn in stats.get('weapons', []) or []:
             if not isinstance(wpn, dict):
                 continue
+            wid = wpn.get('id')
+            asset = self._find_asset_for_entity(art, wid)
+            # Weapon icons are drawn centred on the HUD disc / loadout rows,
+            # so 'center' is the anchor the renderer will actually use.
+            in_game = 'damage + cooldown tune the real weapon; '
+            if asset:
+                in_game += ('icon drawn from the bound SVG after Convert to '
+                            'Java (secondary disc, HUD chip, loadout rows)')
+            else:
+                in_game += 'hand-drawn icon (no SVG bound)'
             entities.append({
-                'id': wpn.get('id'),
+                'id': wid,
                 'kind': 'weapon',
-                'name': wpn.get('name', wpn.get('id')),
+                'name': wpn.get('name', wid),
                 'stats': {
-                    'id': wpn.get('id'),
-                    'name': wpn.get('name', wpn.get('id')),
+                    'id': wid,
+                    'name': wpn.get('name', wid),
                     'damage': wpn.get('damage'),
                     'cooldown': wpn.get('cooldown'),
                 },
-                'asset': None,
-                'inGame': 'damage + cooldown tune the real weapon',
+                'asset': asset,
+                'suggestedAnchor': 'center',
+                'inGame': in_game,
             })
         return entities
 
@@ -335,18 +346,17 @@ class Project:
         if anim:
             if not isinstance(anim, dict):
                 raise ModelError([{'field': 'anim',
-                                   'message': 'must map part names to roles'}])
-            from artinfo import ANIM_ROLES
-            for name, role in anim.items():
+                                   'message': 'must map part names to motions'}])
+            from artinfo import parse_motion
+            for name, value in anim.items():
                 if not isinstance(name, str) or not name.strip():
                     raise ModelError([{'field': 'anim',
                                        'message': f'bad part name {name!r}'}])
-                if role not in ANIM_ROLES:
-                    raise ModelError([{
-                        'field': 'anim',
-                        'message': f'unknown role {role!r} for part '
-                                   f'{name!r} (choose from: '
-                                   f"{', '.join(ANIM_ROLES)})"}])
+                try:
+                    parse_motion(value)
+                except ValueError as exc:
+                    raise ModelError([{'field': 'anim',
+                                       'message': f'{name!r}: {exc}'}])
         new_art = dict(art_data) if isinstance(art_data, dict) else {}
         new_assets = [dict(a) if isinstance(a, dict) else a for a in assets]
         if anim:

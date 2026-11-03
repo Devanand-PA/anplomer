@@ -942,63 +942,73 @@ public final class Renderer {
     }
 
     // ---- baked-art limb animation --------------------------------------
-    // Roles and shared pivots are baked into ArtBindings by the generator,
-    // from the designer's per-part mapping (or the layer-name convention).
-    // Parts of one role rotate as one rigid group around the role pivot --
-    // so a shoe rides its leg's hip and a hand its arm's shoulder.
+    // Motion is authored per part in the designer: channel (limb/arm/wing/
+    // flutter), phase (position in the cycle, degrees) and amplitude
+    // (degrees of swing). The generator resolves them, plus a shared pivot
+    // per phase group, into ArtBindings -- nothing is inferred at runtime.
+    // Parts sharing channel+phase rotate as one rigid group, so a shoe
+    // rides its leg's hip and a hand its arm's shoulder.
 
     /**
-     * Draws a bound entity's artwork part by part, rotating the animated
-     * roles about their shared pivots. Z-order follows the SVG document order.
+     * Draws a bound entity's artwork part by part. Each part's motion is
+     * fully authored: the channel picks the drive signal, the phase offsets
+     * the part within it, the amplitude scales it, and all parts sharing
+     * channel+phase swing as one rigid group around a shared pivot (baked
+     * per part in ArtBindings). Z-order follows the SVG document order.
      *
-     * @param phase         walk-cycle phase; legs swing with it
-     * @param flutterPhase  continuous phase for capes/scarves (ROLE_FLUTTER)
+     * @param phase         walk-cycle phase in radians (drives limb/arm)
+     * @param flutterPhase  continuous clock for the flutter channel
      * @param moving        on the ground and actually walking
-     * @param airborne      airborne pose (tucked limbs, raised arms) instead
+     * @param airborne      airborne pose instead of the walk cycle
      * @param scale          entity box height / artwork height
      */
     private void drawBakedArt(String entity, Canvas c, float phase,
                               float flutterPhase, boolean moving,
                               boolean airborne, float scale) {
         int n = ArtBindings.partCount(entity);
-        float swing = sinf(phase);
-        float sway = sinf(flutterPhase * 6f);
         for (int i = 0; i < n; i++) {
-            int role = ArtBindings.partRole(entity, i);
+            int channel = ArtBindings.partChannel(entity, i);
             float angle = 0f;
             float dx = 0f;
-            switch (role) {
-                case ArtBindings.ROLE_LIMB_A:
-                    angle = airborne ? 18f : moving ? swing * 26f : 0f;
-                    break;
-                case ArtBindings.ROLE_LIMB_B:
-                    angle = airborne ? -26f : moving ? -swing * 26f : 0f;
-                    break;
-                case ArtBindings.ROLE_ARM_A:
-                    angle = airborne ? -32f : moving ? -swing * 16f : 0f;
-                    break;
-                case ArtBindings.ROLE_ARM_B:
-                    angle = airborne ? 10f : moving ? swing * 16f : 0f;
-                    break;
-                case ArtBindings.ROLE_WING_A:
-                    angle = swing * 24f;
-                    break;
-                case ArtBindings.ROLE_WING_B:
-                    angle = -swing * 24f;
-                    break;
-                case ArtBindings.ROLE_FLUTTER:
-                    // capes, scarves, tails: a gentle world-space sway around
-                    // the attachment point, running even while standing
-                    angle = sway * 7f;
-                    dx = sway * 3f;
-                    break;
-                default:
-                    angle = 0f;
-                    break;
+            if (channel != ArtBindings.CHANNEL_NONE) {
+                // the author's phase, in radians, mixed into the drive
+                float ph = ArtBindings.partPhase(entity, i)
+                        * 0.017453292f;
+                float amp = ArtBindings.partAmplitude(entity, i);
+                switch (channel) {
+                    case ArtBindings.CHANNEL_LIMB:
+                    case ArtBindings.CHANNEL_ARM:
+                        if (airborne) {
+                            // tuck pose: the phase picks where between the
+                            // two extremes this part sits, so 0/180 keeps
+                            // the classic opposite-leg tuck and anything in
+                            // between interpolates smoothly
+                            float a = channel == ArtBindings.CHANNEL_LIMB
+                                    ? 18f : 10f;
+                            float b = channel == ArtBindings.CHANNEL_LIMB
+                                    ? -26f : -32f;
+                            angle = a + (b - a) * (1f - cosf(ph)) * 0.5f;
+                        } else if (moving) {
+                            angle = amp * sinf(phase + ph);
+                        }
+                        break;
+                    case ArtBindings.CHANNEL_WING:
+                        angle = amp * sinf(phase + ph);
+                        break;
+                    case ArtBindings.CHANNEL_FLUTTER:
+                        // capes/scarves/blob bodies: sway around the
+                        // attachment, gently, forever
+                        float sway = sinf(flutterPhase * 6f + ph);
+                        angle = amp * sway;
+                        dx = amp * (3f / 7f) * sway;
+                        break;
+                    default:
+                        break;
+                }
             }
             if (angle != 0f || dx != 0f) {
-                float px = ArtBindings.rolePivotX(entity, role) * scale;
-                float py = ArtBindings.rolePivotY(entity, role) * scale;
+                float px = ArtBindings.partPivotX(entity, i) * scale;
+                float py = ArtBindings.partPivotY(entity, i) * scale;
                 c.save();
                 c.translate(px + dx * scale, py);
                 c.rotate(angle);
@@ -2336,6 +2346,17 @@ public final class Renderer {
 
     /** Glyph for the secondary disc: per equipped weapon, or a disabled dash. */
     private void drawSecondaryGlyph(Canvas c, int weapon, float cx, float cy, float size) {
+        // A weapon with artwork bound in the designer (Weapons tab) is drawn
+        // from its SVG, fitted into the glyph box and anchored at (cx, cy) --
+        // 'center' is the suggested anchor, so the icon sits on the disc.
+        // Everything else falls through to the hand-drawn glyphs below.
+        String art = Weapons.statsId(weapon);
+        if (art != null && ArtBindings.has(art)) {
+            float box = Math.max(ArtBindings.width(art), ArtBindings.height(art));
+            float s = box > 0f ? size * 1.8f / box : 1f;
+            ArtBindings.draw(art, c, fill, stroke, cx, cy, s);
+            return;
+        }
         switch (weapon) {
             case Weapons.BOW: {
                 // bow arc + string + nocked arrow, opening towards the enemy

@@ -164,14 +164,20 @@ class DesignerHandler(BaseHTTPRequestHandler):
 
     def api_svg(self):
         # Preview source for the inspector's <img>: same validation as a bind,
-        # raw file bytes with an SVG content type (no JSON wrapping).
+        # raw file bytes with an SVG content type (no JSON wrapping). With
+        # ?highlight=<part> every other layer is dimmed and the named part
+        # glows -- so "which layer is which" is answerable by hovering.
         from urllib.parse import parse_qs
         query = parse_qs(urlsplit(self.path).query)
         src = (query.get("path") or [None])[0]
+        part = (query.get("highlight") or [None])[0]
         try:
             text = self.project.read_svg(src)
         except ModelError as exc:
             raise ApiError(400, {"ok": False, "errors": exc.args[0]})
+        if part:
+            from artinfo import highlight_svg
+            text = highlight_svg(text, part)
         self._send_bytes(text.encode("utf-8"), "image/svg+xml")
 
     # ---- POST ----------------------------------------------------------
@@ -280,7 +286,8 @@ class DesignerHandler(BaseHTTPRequestHandler):
         except ModelError as exc:
             raise ApiError(400, {"ok": False, "errors": exc.args[0]})
         try:
-            from artinfo import ANIM_ROLES, inferred_role, parts_of_text
+            from artinfo import (CHANNEL_AMPLITUDE, CHANNELS, ROLE_PRESETS,
+                                  inferred_preset, motion_of, parts_of_text)
             names = parts_of_text(svg_text)
         except ET.ParseError as exc:
             raise ApiError(400, {"ok": False, "errors": [
@@ -289,27 +296,44 @@ class DesignerHandler(BaseHTTPRequestHandler):
             raise ApiError(500, {"ok": False,
                                  "error": f"{type(exc).__name__}: {exc}"})
         explicit = asset.get("anim") if isinstance(asset.get("anim"), dict) else None
+
+        def motion_entry(value):
+            from artinfo import parse_motion
+            channel, phase, amplitude = parse_motion(value)
+            return {"channel": channel, "phase": phase,
+                    "amplitude": amplitude}
+
         parts = []
         for n in names:
-            role = (explicit or {}).get(n)
-            if role is None:
-                role = inferred_role(n) if explicit is None else "static"
+            saved = (explicit or {}).get(n)
+            if saved is None:
+                # Without an explicit map the by-name inference IS the
+                # effective motion; under one, unlisted parts never move.
+                # (The UI prefills from `motion`, so conflating these would
+                # freeze the whole character on the first save.)
+                if explicit is None:
+                    saved = inferred_preset(n)
+                else:
+                    saved = "static"
             parts.append({
                 "name": n,
-                "role": role,
-                "byName": inferred_role(n),
+                "motion": motion_entry(saved),
+                "byName": dict(zip(("channel", "phase", "amplitude"),
+                                   motion_of(n))),
             })
         self._send_json({
             "ok": True,
             "entity": entity,
             "src": asset.get("src"),
-            "roles": ANIM_ROLES,
+            "channels": CHANNELS,
+            "defaults": CHANNEL_AMPLITUDE,
+            "presets": ROLE_PRESETS,
             "explicit": explicit is not None,
             "parts": parts,
         })
 
     def api_anim_post(self):
-        from artinfo import ANIM_ROLES, parts_of
+        from artinfo import parts_of_text
         body = self._read_json()
         entity = body.get("entity")
         anim = body.get("anim")
@@ -338,18 +362,20 @@ class DesignerHandler(BaseHTTPRequestHandler):
             raise ApiError(400, {"ok": False,
                                  "errors": [{"field": "anim",
                                              "message": "must be an object"}]})
+        errors = []
         if anim:
-            bad_roles = [{"field": "anim",
-                          "message": f"unknown role {r!r} (choose from: "
-                                     f"{', '.join(ANIM_ROLES)})"}
-                         for r in set(anim.values()) if r not in ANIM_ROLES]
+            from artinfo import parse_motion
+            for n, v in anim.items():
+                try:
+                    parse_motion(v)
+                except ValueError as exc:
+                    errors.append({"field": "anim", "message": f"{n!r}: {exc}"})
             unknown = [n for n in anim if n not in known]
-            if bad_roles or unknown:
-                errors = bad_roles + [
-                    {"field": "anim",
-                     "message": f"the SVG has no part named {n!r}"}
-                    for n in unknown]
-                raise ApiError(400, {"ok": False, "errors": errors})
+            errors += [{"field": "anim",
+                        "message": f"the SVG has no part named {n!r}"}
+                       for n in unknown]
+        if errors:
+            raise ApiError(400, {"ok": False, "errors": errors})
         try:
             new_art = self.project.set_asset_anim(art, entity, anim or None)
         except ModelError as exc:

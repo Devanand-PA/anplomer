@@ -320,7 +320,8 @@ call is in [tools/artgen/README.md](tools/artgen/README.md).
 
 `tools/designer` is the first piece of the GUI designer: a local web app
 (stdlib Python, no external assets) for editing the hero, mob and weapon stats
-(`art/stats.json` → `Stats.java`), binding SVG artwork to entities
+(`art/stats.json` → `Stats.java`), binding SVG artwork to entities — including
+weapon icons, drawn on the secondary disc, HUD chip and loadout rows —
 (`art/art.json` → `Art*.java` + the `ArtBindings` registry the renderer draws
 through), and running both generators from one button with a live progress
 bar. It shows a live SVG preview and tells you per entity whether the game

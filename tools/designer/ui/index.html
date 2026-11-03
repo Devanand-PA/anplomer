@@ -20,16 +20,32 @@
 
   <section class="panel inspector" aria-label="Inspector">
     <h2 id="inspectorTitle">&mdash;</h2>
+
+    <div class="preview-pane">
+      <div class="preview-head">
+        <span class="preview-title">Preview</span>
+        <div class="preview-tools">
+          <button id="zoomOutBtn" type="button" title="zoom out">&minus;</button>
+          <span id="zoomLabel" class="zoom-label">100%</span>
+          <button id="zoomInBtn" type="button" title="zoom in">+</button>
+          <button id="zoomFitBtn" type="button" title="fit the artwork in view">Fit</button>
+        </div>
+      </div>
+      <div id="previewViewport" class="preview-viewport">
+        <img id="svgPreview" class="svg-preview hidden" alt="SVG preview">
+        <div id="previewEmpty" class="preview-empty">no SVG selected &mdash;
+          pick or type a path below</div>
+      </div>
+      <p class="preview-hint">drag to pan &middot; scroll to zoom &middot;
+        hover a part to light it up</p>
+    </div>
+
     <div class="scroll">
       <form id="statsForm" autocomplete="off" onsubmit="return false"></form>
 
       <div class="art-block">
         <h3>Artwork (SVG &rarr; Java)</h3>
         <p id="artCurrent" class="art-current">no SVG bound</p>
-        <div class="preview-wrap">
-          <img id="svgPreview" class="svg-preview hidden" alt="SVG preview">
-          <div id="previewEmpty" class="preview-empty">no preview &mdash; pick or type an .svg path</div>
-        </div>
         <p id="artStatus" class="hint"></p>
         <div class="art-grid">
           <label>file
@@ -65,21 +81,55 @@
 
         <div id="animBlock" class="anim-block hidden">
           <h3>Animation</h3>
-          <p class="hint">How each part of the bound SVG moves. Parts sharing a
-            role swing together around a shared pivot (a shoe rides its leg's
-            hip), so give the whole leg group the same role. Unlisted parts
-            stay still. Without a saved mapping the layer names decide.</p>
+
+          <details class="help">
+            <summary>How animation works</summary>
+            <p>Each part moves by <strong>channel + phase + amplitude</strong>:</p>
+            <ul>
+              <li><strong>channel</strong> &mdash; which movement drives it:
+                <code>limb</code> (walking legs), <code>arm</code> (also
+                walk-driven), <code>wing</code> (flap), <code>flutter</code>
+                (slow sway, always on), <code>none</code> (still).</li>
+              <li><strong>phase</strong> &mdash; where in the cycle it sits, in
+                degrees. Legs at <code>0</code> and <code>180</code> step
+                alternately; <code>0/60/120/180</code> makes a wave.</li>
+              <li><strong>amplitude</strong> &mdash; how far it swings, in
+                degrees. 26&deg; is a normal walk, 5&deg; a small tremble.</li>
+            </ul>
+            <p>Parts with the <em>same channel and phase</em> move together as
+              one piece &mdash; give a shoe its leg's settings and it rides
+              along. Nothing is assumed about your character: a snake is
+              <code>limb</code> at 0/60/120/180, a ghost is <code>flutter</code>
+              everywhere.</p>
+            <p>Names come from the Inkscape layer/group ids. Hover a part to see
+              which vector it is.</p>
+          </details>
+
+          <div class="anim-presets">
+            <span class="preset-label">quick set</span>
+            <button type="button" data-preset="auto" title="use the by-layer-name defaults">Auto</button>
+            <button type="button" data-preset="wave" title="every part on limb, phases spread around the cycle">Wave</button>
+            <button type="button" data-preset="sway" title="every part flutters gently (ghost / slime)">Sway all</button>
+            <button type="button" data-preset="freeze" title="nothing moves">Freeze</button>
+          </div>
+
+          <div class="anim-head">
+            <span>part</span><span>channel</span><span>phase&deg;</span>
+            <span>amp&deg;</span>
+          </div>
           <div id="animRows" class="anim-rows"></div>
           <div id="animErrors" class="field-errors"></div>
           <div class="art-actions">
-            <button id="animSaveBtn" type="button">Save animation</button>
+            <button id="animSaveBtn" type="button">Save</button>
             <button id="animClearBtn" type="button" class="secondary">
-              Use layer names</button>
+              Reset to layer names</button>
+            <span id="animDirty" class="dirty-note hidden">unsaved changes</span>
           </div>
         </div>
-        <p class="hint">Binding upserts an entry in art/art.json; the build bakes it
-          into Java. Generated art is <em>not yet wired into Renderer</em> &mdash; that
-          is the next milestone.</p>
+        <p class="hint">Binding upserts an entry in art/art.json; the build bakes
+          it into Java, and the renderer draws it for the bound entity &mdash;
+          for a weapon, that is its icon on the secondary disc, the HUD chip
+          and the loadout rows.</p>
       </div>
     </div>
     <div class="inspector-actions">

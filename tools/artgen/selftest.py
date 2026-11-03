@@ -23,6 +23,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -272,12 +273,16 @@ def pipeline_checks() -> None:
              "fit": "10x10", "entity": "walker"},
             {"src": str(SAMPLES / "player.svg"), "class": "ArtBindB",
              "fit": "26x36", "entity": "flyer",
-             # an explicit role map: shoes follow legs, arms counter-swing.
-             # The bogus key proves a typo warns but does not break the bake.
+             # an explicit motion map: presets for the limbs (shoes ride
+             # their leg's phase -> shared pivot), and the object form with
+             # a custom phase + amplitude override for the scarf. The bogus
+             # key proves a typo warns but does not break the bake. Parts
+             # not listed here (the hands) stay still.
              "anim": {"leg-left": "limb-a", "leg-right": "limb-b",
                       "shoe-left": "limb-a", "shoe-right": "limb-b",
                       "arm-front": "arm-a", "arm-back": "arm-b",
-                      "cape": "flutter",
+                      "scarf": {"channel": "flutter", "phase": 90,
+                                "amplitude": 12},
                       "typo-part": "static"}},
             {"src": str(SAMPLES / "shapes.svg"), "class": "ArtBindC",
              "entity": "flyer"},
@@ -296,17 +301,38 @@ def pipeline_checks() -> None:
           "ArtBindB.draw(" in text and "ArtBindC" not in text)
     check("bindings import android.graphics",
           "import android.graphics.Canvas;" in text)
-    check("bindings bake role constants",
-          "public static final int ROLE_STATIC = 0;" in text
-          and "public static final int ROLE_FLUTTER = 7;" in text)
+    check("bindings bake channel constants",
+          "public static final int CHANNEL_NONE = 0;" in text
+          and "public static final int CHANNEL_FLUTTER = 4;" in text)
+    channels = re.search(r"FLYER_CHANNELS = \{([^}]*)\}", text)
+    phases = re.search(r"FLYER_PHASES = \{([^}]*)\}", text)
+    amps = re.search(r"FLYER_AMPS = \{([^}]*)\}", text)
+    pivots = re.search(r"FLYER_PIVOTS = \{([^}]*)\}", text)
     check("explicit anim map is authoritative",
-          "FLYER_ROLES = {1, 2, 1, 2," in text.replace("    ", " "),
-          text[:400])
+          channels is not None
+          and channels.group(1).replace(" ", "").startswith("1,1,1,1")
+          and phases is not None
+          and phases.group(1).replace(" ", "").startswith("0.00f,180.00f,0.00f,180.00f"),
+          (channels.group(1) if channels else "no channels array")[:120])
+    check("object form bakes custom phase + amplitude",
+          channels is not None
+          and "4" in [c.strip() for c in channels.group(1).split(",")]
+          and phases is not None and "90.00f" in phases.group(1)
+          and amps is not None and "12.00f" in amps.group(1),
+          (phases.group(1) if phases else "?")[:160])
     check("unlisted parts go static under an anim map",
-          "FLYER_ROLES" in text and text.count(", 0,") > 4)
-    check("role pivots are shared per role group",
-          "ROLE_PIVOTS" in text and "rolePivotX" in text
-          and "rolePivotY" in text)
+          channels is not None
+          and channels.group(1).count("0") >= 10,   # hands, torso, face...
+          (channels.group(1) if channels else "?")[:160])
+    check("parts sharing channel+phase share a pivot",
+          pivots is not None, "no pivots array")
+    if pivots is not None:
+        vals = [float(v) for v in pivots.group(1).replace("f", "").split(",")]
+        check("shoes swing on the leg's pivot",
+              vals[4:6] == vals[0:2] and vals[6:8] == vals[2:4],
+              str(vals[:8]))
+    else:
+        check("shoes swing on the leg's pivot", False, "no pivots array")
     check("anim typo warns but still bakes",
           any("typo-part" in w for w in _warnings_of(str(manifest))), "")
     check("unknown anim role fails the asset",

@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -79,7 +81,7 @@ FIXTURE_ART = {
 }
 
 SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
-<path d="M0 10 L5 0 L10 10 Z" fill="#f00"/></svg>
+<path id="leg-left" d="M0 10 L5 0 L10 10 Z" fill="#f00"/></svg>
 """
 
 STUB_STATS_OK = """#!%s
@@ -244,6 +246,21 @@ def test_model(tmp: Path) -> None:
     new_art = proj.update_asset(new_art, "player", None, None, None, None, None)
     check("src null unbinds",
           not any(a.get("entity") == "player" for a in new_art["assets"]))
+
+    # weapons are bindable entities too: the icon lands in the entity list
+    art = proj.load_art()
+    wpn_art = proj.update_asset(art, "bow", "art/mob.svg", "ArtBow",
+                                "32x32", "center", 2)
+    ents = proj.get_entities(proj.load_stats(), wpn_art)
+    bow = [e for e in ents if e["id"] == "bow"][0]
+    check("weapon entity carries its bound icon",
+          bow["kind"] == "weapon" and bow["asset"]["src"] == "art/mob.svg"
+          and bow["suggestedAnchor"] == "center" and "SVG" in bow["inGame"],
+          str(bow))
+    ents = proj.get_entities(proj.load_stats(), art)
+    bow = [e for e in ents if e["id"] == "bow"][0]
+    check("unbound weapon reports the hand-drawn fallback",
+          bow["asset"] is None and "hand-drawn" in bow["inGame"], str(bow))
 
     check("svgs listed repo-relative",
           proj.list_svgs() == ["art/mob.svg"], str(proj.list_svgs()))
@@ -458,7 +475,19 @@ def test_server(tmp: Path) -> None:
         check("POST /api/asset unbinds",
               status == 200 and body["ok"] and body["asset"] is None)
 
-        # --- animation editor: rebind, list real parts, map roles, typo check
+        # --- highlight: dim others, glow the named part, ignore unknown
+        status, plain = http("GET", f"{base}/api/svg?path=art/mob.svg")
+        status, lit = http("GET", f"{base}/api/svg?path=art/mob.svg"
+                           "&highlight=no-such-part")
+        check("highlight of unknown part is a no-op",
+              status == 200 and lit["raw"] == plain["raw"])
+        status, lit = http("GET", f"{base}/api/svg?path=art/mob.svg"
+                           "&highlight=leg-left")
+        check("highlight dims and glows the named part",
+              status == 200 and "drop-shadow" in lit["raw"]
+              and lit["raw"] != plain["raw"], lit["raw"][:120])
+
+        # --- animation editor: rebind, list real parts, map motions
         status, body = http("POST", f"{base}/api/asset", {
             "entity": "player", "src": "art/mob.svg", "class": "ArtPlayer",
             "fit": "26x36", "anchor": "bottom-center", "precision": 2,
@@ -466,27 +495,43 @@ def test_server(tmp: Path) -> None:
         check("rebind for anim tests", status == 200 and body["ok"])
 
         status, body = http("GET", f"{base}/api/anim?entity=player")
-        check("GET /api/anim lists parts + catalog",
+        check("GET /api/anim lists parts + channels",
               status == 200 and body["ok"] and len(body["parts"]) >= 1
-              and "limb-a" in body["roles"] and body["explicit"] is False,
+              and "limb" in body["channels"] and "flutter" in body["channels"]
+              and body["explicit"] is False,
               json.dumps(body)[:200])
         part = body["parts"][0]["name"]
-        check("unmapped parts show the by-name role",
-              body["parts"][0]["role"] == body["parts"][0]["byName"])
+        check("unmapped parts show the by-name motion",
+              body["parts"][0]["motion"]["channel"] == "limb"
+              and body["parts"][0]["motion"]["phase"] == 0.0
+              and body["parts"][0]["motion"]["amplitude"] is None
+              and body["defaults"]["limb"] == 26.0,
+              json.dumps(body["parts"][0]))
 
         status, body = http("POST", f"{base}/api/anim", {
-            "entity": "player", "anim": {part: "limb-a"}})
-        check("POST /api/anim saves a mapping", status == 200 and body["ok"])
+            "entity": "player",
+            "anim": {part: {"channel": "limb", "phase": 45,
+                            "amplitude": 12}}})
+        check("POST /api/anim saves a motion object",
+              status == 200 and body["ok"], json.dumps(body))
         art_disk = json.loads((root / "art" / "art.json").read_text())
         entry = [a for a in art_disk["assets"] if a.get("entity") == "player"][0]
-        check("anim mapping landed in art.json",
-              entry.get("anim") == {part: "limb-a"}, str(entry.get("anim")))
+        check("motion object landed in art.json",
+              entry.get("anim") == {part: {"channel": "limb", "phase": 45,
+                                           "amplitude": 12}},
+              str(entry.get("anim")))
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "player", "anim": {part: "flutter"}})
+        check("preset strings still accepted",
+              status == 200 and body["ok"], json.dumps(body))
 
         status, body = http("GET", f"{base}/api/anim?entity=player")
-        check("saved mapping is explicit and applied",
-              body["explicit"] is True and body["parts"][0]["role"] == "limb-a"
-              and body["parts"][0]["byName"] != "limb-a",
-              json.dumps(body["parts"][0]))
+        check("saved motion is explicit and applied",
+              body["explicit"] is True
+              and body["parts"][0]["motion"]["channel"] == "flutter"
+              and body["parts"][0]["motion"]["phase"] == 0.0,
+              json.dumps(body["parts"][0]["motion"]))
 
         status, body = http("POST", f"{base}/api/anim", {
             "entity": "player", "anim": {"no-such-part": "static"}})
@@ -496,7 +541,17 @@ def test_server(tmp: Path) -> None:
 
         status, body = http("POST", f"{base}/api/anim", {
             "entity": "player", "anim": {part: "jetpack"}})
-        check("anim unknown role 400", status == 400)
+        check("anim unknown preset 400", status == 400)
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "player",
+            "anim": {part: {"channel": "warp", "phase": 0}}})
+        check("anim unknown channel 400", status == 400)
+
+        status, body = http("POST", f"{base}/api/anim", {
+            "entity": "player",
+            "anim": {part: {"channel": "limb", "amplitude": 999}}})
+        check("anim amplitude out of range 400", status == 400)
 
         status, body = http("POST", f"{base}/api/anim", {
             "entity": "walker", "anim": {}})
@@ -527,6 +582,36 @@ def test_server(tmp: Path) -> None:
             "fit": "26x36", "anchor": "bottom-center", "precision": 2,
         })
         check("missing svg 400", status == 400)
+
+        # --- weapon icons: bind, surface in /api/state, unbind ------------
+        status, body = http("POST", f"{base}/api/asset", {
+            "entity": "bow", "src": "art/mob.svg", "class": "ArtBow",
+            "fit": "32x32", "anchor": "center", "precision": 2,
+        })
+        check("POST /api/asset binds a weapon icon",
+              status == 200 and body["ok"]
+              and body["asset"]["src"] == "art/mob.svg"
+              and body["asset"]["anchor"] == "center", json.dumps(body))
+        art_disk = json.loads((root / "art" / "art.json").read_text())
+        check("weapon icon landed in art.json",
+              any(a.get("entity") == "bow" and a.get("class") == "ArtBow"
+                  for a in art_disk["assets"]), str(art_disk["assets"]))
+        status, body = http("GET", f"{base}/api/state")
+        went = [e for e in body["entities"] if e["id"] == "bow"][0]
+        check("weapon entity reports the bound icon + center anchor",
+              went["kind"] == "weapon" and went["asset"]["src"] == "art/mob.svg"
+              and went["suggestedAnchor"] == "center"
+              and "SVG" in went["inGame"], json.dumps(went))
+        status, body = http("POST", f"{base}/api/asset", {
+            "entity": "bow", "src": None,
+        })
+        check("POST /api/asset unbinds a weapon",
+              status == 200 and body["ok"] and body["asset"] is None)
+        status, body = http("GET", f"{base}/api/state")
+        went = [e for e in body["entities"] if e["id"] == "bow"][0]
+        check("unbound weapon falls back in state",
+              went["asset"] is None and "hand-drawn" in went["inGame"],
+              json.dumps(went))
 
         status, body = http("POST", f"{base}/api/build", {})
         check("POST /api/build starts", status == 200 and body["ok"])
@@ -566,6 +651,204 @@ def test_server(tmp: Path) -> None:
         thread.join(timeout=2)
 
 
+# Runs the page's own preview functions in Node against a stub DOM. The zoom
+# "about the cursor" maths and the clamping are the parts a human cannot
+# eyeball, so they get executed for real instead of being eyeballed.
+# Skipped (not failed) when Node is not installed: the designer itself needs
+# only the Python stdlib.
+HARNESS_JS = """
+'use strict';
+const fs = require('fs');
+
+const els = {};
+function el(id) {
+  if (!els[id]) {
+    els[id] = {
+      id: id,
+      style: {}, dataset: {}, textContent: '', value: '',
+      classList: {
+        _s: new Set(),
+        add(c) { this._s.add(c); },
+        remove(c) { this._s.delete(c); },
+        contains(c) { return this._s.has(c); },
+        toggle(c, v) { if (v) { this.add(c); } else { this.remove(c); } },
+      },
+      addEventListener() {}, removeAttribute() {}, setAttribute() {},
+      getAttribute() { return null; },
+      clientWidth: 400, clientHeight: 300,
+      getBoundingClientRect() {
+        return { left: 0, top: 0, width: 400, height: 300 };
+      },
+      querySelector() { return null; }, querySelectorAll() { return []; },
+      naturalWidth: 100, naturalHeight: 100, complete: true,
+    };
+  }
+  return els[id];
+}
+globalThis.document = {
+  getElementById: el,
+  querySelector() { return { classList: { add() {}, remove() {} } }; },
+  querySelectorAll() { return []; },
+  addEventListener() {},
+  activeElement: null,
+};
+globalThis.window = { addEventListener() {} };
+globalThis.CSS = { escape: (x) => x };
+globalThis.fetch = () => Promise.reject(new Error('no network in this test'));
+
+// load the page's script with boot() (network) removed, then reach into its
+// scope for the pure view functions
+let src = fs.readFileSync(process.argv[2], 'utf8').replace(/boot\\(\\);\\s*$/, '');
+src += '\\nglobalThis.__app = { view: view, zoomBy: zoomBy, fitView: fitView, '
+     + 'onPreviewLoad: onPreviewLoad, applyView: applyView };\\n';
+eval(src);
+const app = globalThis.__app;
+const view = app.view;
+
+const results = [];
+function ok(name, cond, detail) {
+  results.push([name, !!cond, detail === undefined ? '' : String(detail)]);
+}
+
+el('svgPath').value = 'art/player.svg';
+app.onPreviewLoad();
+
+const fitted = view.scale;
+ok('fit scales artwork into the viewport', Math.abs(fitted - 2.84) < 1e-6, fitted);
+ok('fit centres the artwork', Math.abs(view.tx - 58) < 1e-6 && Math.abs(view.ty - 8) < 1e-6,
+   view.tx + ',' + view.ty);
+
+// the point under the cursor must not move while zooming
+const cx = 100, cy = 50;
+const beforeX = (cx - view.tx) / view.scale;
+const beforeY = (cy - view.ty) / view.scale;
+app.zoomBy(2, cx, cy);
+const afterX = (cx - view.tx) / view.scale;
+const afterY = (cy - view.ty) / view.scale;
+ok('zoom doubles the scale', Math.abs(view.scale - fitted * 2) < 1e-6, view.scale);
+ok('zoom keeps the point under the cursor pinned',
+   Math.abs(afterX - beforeX) < 1e-6 && Math.abs(afterY - beforeY) < 1e-6,
+   beforeX.toFixed(4) + ' -> ' + afterX.toFixed(4));
+ok('readout is relative to fit', el('zoomLabel').textContent === '200%',
+   el('zoomLabel').textContent);
+
+app.zoomBy(1e9, cx, cy);
+ok('zoom clamps at 40x fit', Math.abs(view.scale - fitted * 40) < 1e-6, view.scale);
+app.zoomBy(1e-9, cx, cy);
+ok('zoom clamps at 0.1x fit', Math.abs(view.scale - fitted * 0.1) < 1e-6, view.scale);
+
+// a highlight swap re-loads the same file: the view must survive it
+const scaleBefore = view.scale, txBefore = view.tx;
+el('svgPreview').naturalWidth = 999;
+app.onPreviewLoad();
+ok('highlight swap keeps the current view',
+   view.scale === scaleBefore && view.tx === txBefore);
+
+// a genuinely different file starts from a fresh fit
+el('svgPreview').naturalWidth = 100;
+el('svgPath').value = 'art/mob.svg';
+app.onPreviewLoad();
+ok('a different file re-fits', Math.abs(view.scale - fitted) < 1e-6, view.scale);
+
+let bad = 0;
+for (const r of results) {
+  if (r[1]) { console.log('  ok    ' + r[0]); }
+  else { bad++; console.log('  FAIL  ' + r[0] + (r[2] ? ': ' + r[2] : '')); }
+}
+process.exit(bad ? 1 : 0);
+"""
+
+
+def test_ui_math(tmp: Path) -> None:
+    """Executes the preview view maths in Node, when Node is available."""
+    print("ui math:")
+    node = shutil.which("node")
+    if node is None:
+        print("  skip  preview zoom/pan math (node not installed)")
+        return
+    harness_path = tmp / "preview_math.js"
+    harness_path.write_text(HARNESS_JS, encoding="utf-8")
+    try:
+        proc = subprocess.run(
+            [node, str(harness_path), str(HERE / "ui" / "app.js")],
+            capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        check("preview zoom/pan math runs", False, str(exc))
+        return
+    for line in proc.stdout.rstrip().splitlines():
+        print(line)
+    if proc.returncode != 0 and not proc.stdout.strip():
+        check("preview zoom/pan math runs", False,
+              (proc.stderr.strip().splitlines() or ["no output"])[-1][:200])
+    else:
+        check("preview zoom/pan math (executed in node)", proc.returncode == 0)
+
+
+def test_ui(tmp) -> None:
+    """Static checks on the single-page UI.
+
+    The page has no build step and no JS test runner, so these cover the
+    failure mode that actually bites: an id referenced by app.js that does
+    not exist in index.html (a silent no-op in the browser), plus the
+    structural pieces the feature set depends on.
+    """
+    print("ui:")
+    ui = HERE / "ui"
+    html = (ui / "index.html").read_text(encoding="utf-8")
+    js = (ui / "app.js").read_text(encoding="utf-8")
+    css = (ui / "style.css").read_text(encoding="utf-8")
+
+    # every $('id') in the script must exist as an id in the markup
+    ids_in_html = set(re.findall(r'id="([A-Za-z0-9_-]+)"', html))
+    ids_in_js = set(re.findall(r"\$\('([A-Za-z0-9_-]+)'\)", js))
+    missing = sorted(ids_in_js - ids_in_html)
+    check("every $('id') used by app.js exists in index.html",
+          not missing, f"missing: {missing}")
+
+    check("preview pane is outside the scrolling area",
+          html.index('previewViewport') < html.index('class="scroll"'),
+          "preview should stay visible while editing")
+    check("zoom controls present",
+          all(k in html for k in ("zoomInBtn", "zoomOutBtn", "zoomFitBtn",
+                                  "zoomLabel")))
+    check("zoom/pan implemented",
+          all(k in js for k in ("function zoomBy", "function fitView",
+                                "function applyView", "pointerdown", "wheel")))
+    check("preview is bounded by the viewport, not the fit box",
+          ".preview-viewport" in css and "overflow: hidden" in css
+          and "clamp(" in css)
+    check("pan cursor + transform-origin",
+          "cursor: grab" in css and "transform-origin: 0 0" in css)
+    check("animation help box present",
+          '<details class="help">' in html and "How animation works" in html
+          and "</summary>" in html)
+    check("one-click animation presets",
+          all(f'data-preset="{k}"' in html
+              for k in ("auto", "wave", "sway", "freeze"))
+          and "function applyPreset" in js)
+    check("animation rows stay compact (name/channel/phase/amplitude)",
+          "by-name" not in js and "animName" not in js)
+    # regression: the app toggles .hidden all over; without a global rule the
+    # class is inert and "hidden" panels stay on screen
+    check("global .hidden rule exists",
+          re.search(r"^\.hidden\s*\{[^}]*display:\s*none", css, re.M) is not None,
+          "classList.add('hidden') is a no-op without it")
+    check("toast keeps its fade despite the global rule",
+          ".toast.hidden" in css and "display: block !important" in css)
+    check("no stale 'not wired into Renderer' claim",
+          "not yet wired into Renderer" not in html)
+    check("weapons get the artwork block (no blanket hide)",
+          ".art-block').classList.add('hidden')" not in js)
+    check("weapon stats edits target weapons[i] in state.stats",
+          "weapons[${entity.index}]" in js and "e.kind === 'weapon'" in js)
+    check("weapon name rows reuse the generic list/idx inputs",
+          'data-list="${list}"' in js and "input[data-list]" in js)
+    check("weapon icons skip the animation panel",
+          "isWeapon" in js and "$('animBlock').classList.add('hidden')" in js)
+
+    test_ui_math(tmp)
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
@@ -575,6 +858,7 @@ def main(argv=None) -> int:
     with tempfile.TemporaryDirectory(prefix="designer-selftest-") as tmpdir:
         tmp = Path(tmpdir)
         test_model(tmp)
+        test_ui(tmp)
         test_build(tmp)
         test_server(tmp)
     print()

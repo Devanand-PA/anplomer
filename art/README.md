@@ -36,46 +36,48 @@ Full detail (and the complete list of what is and is not supported) is in
   filters, masks, clip paths or patterns.
 * One `<g id="...">` per part that Java will animate separately (run cycle,
   scarf, squash/stretch, weapon swing). The `id` becomes the `Part` name.
+* A **weapon icon** binds in the designer's Weapons tab and is drawn centred
+  on the secondary disc, the HUD chip and the loadout rows — design it in a
+  square-ish frame and keep the manifest `anchor` at `center`.
 
-## Animation: name your layers, the game does the rest
+## Animation: you author it, the game drives it
 
-`Renderer` animates baked artwork from the **layer ids** — no keyframes, no
-timeline. Draw the player in a neutral pose, name the moving parts, and the
-game swings them around pivots it computes itself (top-centre of each part, so
-a leg rotates at the hip, an arm at the shoulder):
+The game supplies a handful of **motion channels** — `limb` (walk cycle),
+`arm` (also walk-driven; use phases to counter-swing), `wing` (flap) and
+`flutter` (a continuous sway that runs even when standing) — plus the game
+state that drives them (walking, airborne, dead). For each part of your SVG
+you decide the channel, the **phase** (where in the cycle it sits, degrees)
+and the **amplitude** (how far it swings). Nothing is assumed about the
+shape of your character:
 
-| the id contains…                | what the game does                                   |
-|---------------------------------|------------------------------------------------------|
-| `leg`, `foot`, `shoe`, `boot`   | walk swing, in phase with the run cycle              |
-| `arm`, `hand`                   | counter-swing against the legs                       |
-| `wing`                          | flap (for flying mobs)                               |
-| anything else (`head`, `body`…) | static                                               |
+* humanoid walk: `leg-left` limb@0, `leg-right` limb@180, shoes on the same
+  phases (they then ride the legs' pivots as one rigid group), arms at
+  180/0 to counter-swing
+* a snake: every body segment on `limb`, phases 0, 60, 120, 180, ... — a
+  travelling wave
+* a ghost or slime: everything on `flutter`, phases spread across the body
+* capes, tails, antennae: `flutter` with a phase offset and a small amplitude
 
-Sides pick phases: `leg-left` swings forward while `leg-right` swings back.
-`left`/`front` are one phase, `right`/`back` the opposite — so
-`leg-left`+`leg-right` and `arm-front`+`arm-back` both work.
+**How do you know the layer names?** They are the Inkscape layer/group ids
+(rename them in the Layers panel; `Object ▸ Properties` also sets ids).
+Bind even a rough sketch, then open the designer's **Animation** panel:
+it lists every part the generator sees — hovering a row dims the rest of the
+artwork and makes that part glow, so you always know which vector you are
+assigning. The listed names are exactly what the generator bakes.
 
-Everything else — squash and stretch on landing, the mirror when facing left,
-the death tumble, the hover wobble on flyers — is applied by the game around
-the whole sprite. Extra parts in the SVG (a scarf, a belt) just sit still; a
-`scarf` id is not special (yet).
+Without any explicit mapping the layer names still infer a sensible default
+(the table below), and the panel prefills its dropdowns with it.
 
-`art/player.svg` follows this convention: `leg-left`, `leg-right`, `shoe-left`,
-`arm-front`, and so on. Copy those names when drawing a new mob and it will
-walk the moment you bind it.
+| the id contains… | default channel |
+|------------------|-----------------|
+| `leg`, `foot`, `shoe`, `boot` | `limb` (`left`/`front` at phase 0, `right`/`back` at 180) |
+| `arm`, `hand` | `arm` (same sides, opposite phase to the limbs) |
+| `wing` | `wing` (mirrored by side) |
+| anything else | `none` (static) |
 
-The name convention is only the **default**. The designer's **Animation**
-panel lists every part of the bound SVG with a role dropdown (prefilled with
-the by-name role), so you can override anything: map `cape` to `flutter`, a
-hat to `static`, or give a character two left legs the same phase. Saving
-writes an explicit `anim` map into `art/art.json` — from then on it is
-authoritative (unlisted parts stay still). "Use layer names" clears the map
-and returns to the table above. Parts that share a role swing as one rigid
-group around a shared pivot, which is why a shoe belongs on its leg's role.
-* Flatten gradients to solid fills, or accept the middle-stop approximation
-  that the converter reports as a warning.
-* Compound paths with holes need `fill-rule: evenodd`.
-* Stroke caps/joins are not baked; strokes are drawn with the round default.
+Everything else — squash and stretch on landing, the mirror when facing
+left, the death tumble, the hover wobble on flyers — is applied by the game
+around the whole sprite.
 
 ## Why not VectorDrawable
 

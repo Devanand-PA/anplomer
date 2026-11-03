@@ -120,31 +120,47 @@ Per-asset keys: `src` (required), `class`, `package`, `fit`, `anchor`,
 against the repository root, so the same manifest works from any working
 directory — and from a GUI process that shells out.
 
-#### `anim`: explicit animation roles
+#### `anim`: explicit animation
 
 ```json
-{ "entity": "player", "anim": { "leg-left": "limb-a", "shoe-left": "limb-a",
-  "cape": "flutter" } }
+{ "entity": "player", "anim": {
+    "leg-left": "limb-a",
+    "shoe-left": "limb-a",
+    "scarf": {"channel": "flutter", "phase": 90, "amplitude": 12} } }
 ```
 
-`anim` maps **part (layer) names to animation roles**. It is authoritative:
-parts it does not list are `static`, and role groups share one pivot — the
-top-centre of the group's largest part — so a shoe rides its leg's hip and a
-hand its arm's shoulder instead of peeling off. Without an `anim` key, roles
-are inferred from layer names (the table in [`art/README.md`](../../art/README.md)).
+The game supplies generic **motion channels** driven by its state; the
+artwork's author decides per part which channel it rides, where in the
+cycle it sits (**phase**, degrees) and how far it moves (**amplitude**,
+degrees). Nothing about the shape of the character is assumed:
 
-| role | motion |
-|------|--------|
-| `static` | never moves |
-| `limb-a` / `limb-b` | leg/foot/shoe swing, opposite phases (left+front / right+back) |
-| `arm-a` / `arm-b` | arm/hand counter-swing against the limbs |
-| `wing-a` / `wing-b` | flap, mirrored |
-| `flutter` | capes/scarves: gentle sway around the attachment point |
+| channel | drive signal | default amplitude |
+|---------|--------------|--------------------|
+| `none` | never moves | 0 |
+| `limb` | the walk cycle | 26° |
+| `arm` | the walk cycle (map phases to counter-swing) | 16° |
+| `wing` | the flap clock | 24° |
+| `flutter` | a continuous sway clock (runs while idle) | 7° |
+
+Examples: a humanoid walk is `leg-left` at phase 0 and `leg-right` at 180
+with the shoes on the same phases; a snake is every segment on `limb` with
+phases 0, 60, 120, 180... (a travelling wave); a ghost is everything on
+`flutter` with spread phases; wings mirror at phases 0 and 180.
+
+Values may be the legacy preset strings (`limb-a`, `arm-b`, `wing-a`,
+`flutter`, `static`, ...) — shorthand for `{channel, phase}` — or the
+explicit object `{"channel": ..., "phase": deg, "amplitude": deg}` where
+`amplitude` may be omitted for the channel default. Parts sharing channel
+**and** phase swing as one rigid group around a shared pivot (the group's
+largest part's top-centre): a shoe rides its leg's hip, a hand its arm's
+shoulder. An explicit `anim` map is authoritative — parts it does not list
+never move; without one, roles are inferred from layer names.
 
 A part name in `anim` that the SVG does not contain warns (the SVG changed
-under the manifest); an unknown role name fails the asset. The registry
-(`ArtBindings.partRole` / `rolePivotX` / `rolePivotY`) bakes the resolved
-roles and pivots, so the renderer does no name matching at runtime.
+under the manifest); an unknown preset/channel or out-of-range amplitude
+fails the asset. The registry bakes the resolved motion (`partChannel`,
+`partPhase`, `partAmplitude`, `partPivotX/Y`) so the renderer does no name
+matching and no inference at runtime.
 
 Every manifest run also writes **`ArtBindings.java`** into `outDir`: the
 entity → artwork registry the game reads. `Renderer` calls

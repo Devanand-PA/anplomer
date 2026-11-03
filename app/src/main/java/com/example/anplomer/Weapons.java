@@ -73,8 +73,12 @@ public final class Weapons {
         return w != null ? w.damage : Stats.Hero.ATTACK;
     }
 
-    /** The stats.json id for a catalogue weapon, or null for the sword/NONE. */
-    private static String statsId(int id) {
+    /**
+     * The stats.json id for a catalogue weapon, or null for the sword/NONE.
+     * Public so the renderer can look up a bound icon (ArtBindings) for the
+     * weapon glyphs it draws.
+     */
+    public static String statsId(int id) {
         switch (id) {
             case BOW:
                 return "bow";
