@@ -19,7 +19,11 @@
       "fit": "52x72",
       "anchor": "bottom-center",
       "precision": 2,
-      "entity": "player"
+      "entity": "player",
+      "anim": {
+        "scarf": "flutter",
+        "plume": "flutter"
+      }
     }
   ]
 }

@@ -25,6 +25,8 @@ PURE_SOURCES=(
   "$SRC/Coin.java"
   "$SRC/PowerUp.java"
   "$SRC/Camera.java"
+  "$SRC/MapCamera.java"
+  "$SRC/LevelNode.java"
   "$SRC/Particles.java"
   "$SRC/SoundSink.java"
   "$SRC/SaveState.java"

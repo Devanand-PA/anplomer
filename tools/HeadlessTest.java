@@ -89,6 +89,9 @@ public final class HeadlessTest {
             if (!levelSelectFlow()) {
                 failures = true;
             }
+            if (!mapGestureFlow()) {
+                failures = true;
+            }
             if (!loadoutFlow()) {
                 failures = true;
             }
@@ -446,15 +449,15 @@ public final class HeadlessTest {
         if (g.levelRowCount() != Levels.TEXT.length) {
             return fail("levelselect", "level rows != level count");
         }
-        // locked rows refuse
-        tapButton(g, findButton(g.levelButtons, Game.BTN_LEVEL_ROW + 3));
+        // locked nodes refuse
+        tapLevelNode(g, 3);
         if (g.state != Game.State.LEVEL_SELECT) {
-            return fail("levelselect", "a locked row started a level");
+            return fail("levelselect", "a locked node started a level");
         }
         // level 1 opens the loadout, START plays it
-        tapButton(g, findButton(g.levelButtons, Game.BTN_LEVEL_ROW));
+        tapLevelNode(g, 0);
         if (g.state != Game.State.LOADOUT) {
-            return fail("levelselect", "level 1 row did not open the loadout");
+            return fail("levelselect", "level 1 node did not open the loadout");
         }
         tapButton(g, findButton(g.loadoutButtons, Game.BTN_START_LEVEL));
         if (g.state != Game.State.PLAYING || g.levelIndex != 0) {
@@ -473,9 +476,9 @@ public final class HeadlessTest {
             return fail("levelselect", "clearing level 1 did not unlock level 2");
         }
         g2.openLevelSelect();
-        tapButton(g2, findButton(g2.levelButtons, Game.BTN_LEVEL_ROW + 1));
+        tapLevelNode(g2, 1);
         if (g2.state != Game.State.LOADOUT || g2.pendingLevel != 1) {
-            return fail("levelselect", "level 2 row did not open the loadout");
+            return fail("levelselect", "level 2 node did not open the loadout");
         }
         tapButton(g2, findButton(g2.loadoutButtons, Game.BTN_START_LEVEL));
         if (g2.state != Game.State.PLAYING || g2.levelIndex != 1) {
@@ -501,7 +504,7 @@ public final class HeadlessTest {
         Game g = new Game(new Silent(), store);
         g.resize(1920, 1080);
         g.openLevelSelect();
-        tapButton(g, findButton(g.levelButtons, Game.BTN_LEVEL_ROW));
+        tapLevelNode(g, 0);
         if (g.state != Game.State.LOADOUT) {
             return fail("loadout", "could not reach the loadout");
         }
@@ -537,7 +540,7 @@ public final class HeadlessTest {
         }
         tapButton(g2, findButton(g2.careerButtons, Game.BTN_BACK));
         tapButton(g2, findButton(g2.menuButtons, Game.BTN_START));
-        tapButton(g2, findButton(g2.levelButtons, Game.BTN_LEVEL_ROW));
+        tapLevelNode(g2, 0);
         tapButton(g2, findButton(g2.loadoutButtons, Game.BTN_WEAPON_ROW + Weapons.BOW));
         if (g2.secondaryWeaponId() != Weapons.BOW) {
             return fail("loadout", "the new career did not equip BOW");
@@ -821,7 +824,7 @@ public final class HeadlessTest {
         if (game.state != Game.State.LEVEL_SELECT) {
             return;
         }
-        tapButton(game, findButton(game.levelButtons, Game.BTN_LEVEL_ROW + levelIndex));
+        tapLevelNode(game, levelIndex);
         if (game.state != Game.State.LOADOUT) {
             return;
         }
@@ -830,6 +833,21 @@ public final class HeadlessTest {
 
     private static void tapButton(Game game, Game.UiButton b) {
         game.input.pointerDown(1, b.x + b.w / 2f, b.y + b.h / 2f);
+        game.update(DT);
+        game.input.pointerUp(1);
+        game.update(DT);
+    }
+
+    /** Taps the world-map node for a level (pans the map there first). */
+    private static void tapLevelNode(Game game, int levelIndex) {
+        LevelNode node = game.levelNode(levelIndex);
+        if (node == null) {
+            throw new IllegalStateException("no map node for level " + levelIndex);
+        }
+        game.mapCamera.focusOn(node.worldX, node.worldY, 1.15f);
+        float x = game.mapCamera.worldToScreenX(node.worldX);
+        float y = game.mapCamera.worldToScreenY(node.worldY);
+        game.input.pointerDown(1, x, y);
         game.update(DT);
         game.input.pointerUp(1);
         game.update(DT);
@@ -1046,6 +1064,85 @@ public final class HeadlessTest {
     }
 
     // ------------------------------------------------------------------
+    // world map: focus, pan drag, pinch zoom, coordinate round trip
+    // ------------------------------------------------------------------
+
+    private static boolean mapGestureFlow() {
+        Game g = new Game(new Silent());
+        g.resize(1080, 480);
+        g.openLevelSelect();
+        if (g.state != Game.State.LEVEL_SELECT) {
+            return fail("mapgesture", "level select did not open");
+        }
+        LevelNode n0 = g.levelNode(0);
+        if (n0 == null) {
+            return fail("mapgesture", "no map node for level 0");
+        }
+        float sx = g.mapCamera.worldToScreenX(n0.worldX);
+        float sy = g.mapCamera.worldToScreenY(n0.worldY);
+        if (Math.abs(sx - g.screenWidth / 2f) > 1f || Math.abs(sy - g.screenHeight / 2f) > 1f) {
+            return fail("mapgesture", "camera did not centre on the current node");
+        }
+        float camX = g.mapCamera.x;
+        float zoom = g.mapCamera.zoom;
+        // drag left by 100 px: the camera follows the content, so cam.x rises
+        g.input.pointerDown(1, 400, 240);
+        g.update(DT);
+        g.input.pointerMove(1, 300, 240);
+        g.update(DT);
+        g.input.pointerUp(1);
+        g.update(DT);
+        if (Math.abs(g.mapCamera.x - (camX + 100f / zoom)) > 2f) {
+            return fail("mapgesture", "pan did not move the camera by the drag delta");
+        }
+        // pinch out: two fingers spread from 80 px to 200 px apart
+        float z0 = g.mapCamera.zoom;
+        g.input.pointerDown(1, 500, 240);
+        g.update(DT);
+        g.input.pointerDown(2, 580, 240);
+        g.update(DT);
+        g.input.pointerMove(1, 440, 240);
+        g.input.pointerMove(2, 640, 240);
+        g.update(DT);
+        g.input.pointerUp(1);
+        g.input.pointerUp(2);
+        g.update(DT);
+        if (!(g.mapCamera.zoom > z0 + 0.05f)) {
+            return fail("mapgesture", "pinch did not zoom in");
+        }
+        // pinch in: fingers come back together
+        float z1 = g.mapCamera.zoom;
+        g.input.pointerDown(1, 440, 240);
+        g.update(DT);
+        g.input.pointerDown(2, 640, 240);
+        g.update(DT);
+        g.input.pointerMove(1, 500, 240);
+        g.input.pointerMove(2, 580, 240);
+        g.update(DT);
+        g.input.pointerUp(1);
+        g.input.pointerUp(2);
+        g.update(DT);
+        if (!(g.mapCamera.zoom < z1 - 0.05f)) {
+            return fail("mapgesture", "pinch-in did not zoom out");
+        }
+        // zoom stays within its clamps
+        if (g.mapCamera.zoom < MapCamera.MIN_ZOOM - 0.001f
+                || g.mapCamera.zoom > MapCamera.MAX_ZOOM + 0.001f) {
+            return fail("mapgesture", "zoom escaped its clamps");
+        }
+        // screen <-> world round trip
+        float wx = 123f, wy = -45f;
+        float rx = g.mapCamera.worldToScreenX(wx);
+        float ry = g.mapCamera.worldToScreenY(wy);
+        if (Math.abs(g.mapCamera.screenToWorldX(rx) - wx) > 0.01f
+                || Math.abs(g.mapCamera.screenToWorldY(ry) - wy) > 0.01f) {
+            return fail("mapgesture", "screen/world round trip mismatch");
+        }
+        System.out.println("mapgesture OK: focus, pan drag, pinch in/out, clamps, round trip");
+        return true;
+    }
+
+    // ------------------------------------------------------------------
     // smoke: menu -> play -> pause -> resume -> resize
     // ------------------------------------------------------------------
 
@@ -1065,9 +1162,9 @@ public final class HeadlessTest {
         if (game.state != Game.State.LEVEL_SELECT) {
             return fail("smoke", "tapping PLAY did not open level select (" + game.state + ")");
         }
-        tapButton(game, findButton(game.levelButtons, Game.BTN_LEVEL_ROW));
+        tapLevelNode(game, 0);
         if (game.state != Game.State.LOADOUT) {
-            return fail("smoke", "level row did not open the loadout (" + game.state + ")");
+            return fail("smoke", "level node did not open the loadout (" + game.state + ")");
         }
         tapButton(game, findButton(game.loadoutButtons, Game.BTN_START_LEVEL));
         if (game.state != Game.State.PLAYING) {

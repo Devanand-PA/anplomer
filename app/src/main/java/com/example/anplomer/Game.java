@@ -115,6 +115,10 @@ public final class Game implements Player.Listener {
     public final Camera camera = new Camera();
     public final Particles particles = new Particles();
     public final Player player = new Player();
+    /** Pan/zoom camera for the world-map level picker. */
+    public final MapCamera mapCamera = new MapCamera();
+    /** Levels as nodes on the world map (index order = trail order). */
+    public final List<LevelNode> levelNodes = new ArrayList<>();
 
     public final List<Enemy> enemies = new ArrayList<>();
     public final List<MovingPlatform> platforms = new ArrayList<>();
@@ -239,6 +243,18 @@ public final class Game implements Player.Listener {
     private float checkpointX, checkpointY;
     private final float[] tap = new float[2];
 
+    // ---- world-map gesture state (LEVEL_SELECT) -----------------------
+    /** Screen px of travel beyond which a touch is a pan, not a tap. */
+    private static final float MAP_TAP_SLOP = 26f;
+    /** Screen px radius around a node that counts as a tap on it. */
+    private static final float MAP_NODE_TAP_R = 54f;
+    private boolean mapPanning;
+    private float mapPanLastX, mapPanLastY, mapPanMoved;
+    private boolean mapTapArmed;
+    private float mapTapX, mapTapY;
+    private boolean mapPinching;
+    private float mapPinchDist;
+
     // cached HUD strings (the renderer asks every frame; do not allocate)
     private int timeLabelSecond = -1;
     private String timeLabelCache = "0:00";
@@ -283,6 +299,33 @@ public final class Game implements Player.Listener {
         lives = profile.startLives();
         pendingLevel = profile.levelIndex;
         loadLevel(profile.levelIndex);
+        initLevelNodes();
+    }
+
+    /** Places every level as a node on the world map, in unlock order. */
+    private void initLevelNodes() {
+        levelNodes.clear();
+        float[][] pos = {
+                {-900f, 700f}, {-600f, 780f}, {-300f, 720f}, {0f, 600f},
+                {300f, 480f}, {580f, 300f}, {850f, 80f}, {1100f, -180f},
+                {850f, -420f}, {550f, -560f}, {250f, -440f}, {-50f, -580f},
+                {-350f, -440f}, {-650f, -560f}, {-950f, -380f},
+        };
+        int n = Math.min(Levels.TEXT.length, pos.length);
+        for (int i = 0; i < n; i++) {
+            levelNodes.add(new LevelNode(i, pos[i][0], pos[i][1],
+                    levelName(i), Levels.PAR[i]));
+        }
+    }
+
+    /** The map node for a level index, or null when out of range. */
+    public LevelNode levelNode(int index) {
+        for (LevelNode node : levelNodes) {
+            if (node.levelIndex == index) {
+                return node;
+            }
+        }
+        return null;
     }
 
     // ---- careers -------------------------------------------------------
@@ -412,6 +455,8 @@ public final class Game implements Player.Listener {
         layoutLevelButtons();
         layoutLoadoutButtons();
         layoutHelp();
+        mapCamera.setScreenSize(w, h);
+        layoutLevelMapBack();
     }
 
     private void layoutPauseButtons() {
@@ -1359,6 +1404,13 @@ public final class Game implements Player.Listener {
             "WINDY BLUFFS",
             "FROZEN SPIRE",
             "STARFALL SUMMIT",
+            "VOLCANIC DEPTHS",
+            "MAGMA CORE",
+            "SKY TEMPLE",
+            "CELESTIAL SANCTUM",
+            "SHADOW REALM",
+            "DUSK FORTRESS",
+            "ABYSSAL THRONE",
     };
 
     /** Name of a level, e.g. "EMERALD MEADOW"; never null. */
@@ -1525,6 +1577,18 @@ public final class Game implements Player.Listener {
         levelMsg = "";
         levelMsgTimer = 0f;
         rebuildLevelButtons();
+        layoutLevelMapBack();
+        // open the map centred on the career's current level
+        LevelNode cur = levelNode(pendingLevel);
+        if (cur != null) {
+            mapCamera.focusOn(cur.worldX, cur.worldY, 1.15f);
+        } else {
+            mapCamera.reset();
+        }
+        mapPanning = false;
+        mapPinching = false;
+        mapTapArmed = false;
+        mapPinchDist = 0f;
         setState(State.LEVEL_SELECT);
         sound.play(SoundSink.SELECT);
     }
@@ -1561,20 +1625,107 @@ public final class Game implements Player.Listener {
             closeLevelSelect();
             return;
         }
-        if (!input.consumeTap(tap)) {
+        int n = input.pointerPositions(pointerBuf);
+        if (n >= 2) {
+            // two fingers: pinch-zoom around their midpoint
+            float dx = pointerBuf[2] - pointerBuf[0];
+            float dy = pointerBuf[3] - pointerBuf[1];
+            float dist = (float) Math.sqrt(dx * dx + dy * dy);
+            float midX = (pointerBuf[0] + pointerBuf[2]) / 2f;
+            float midY = (pointerBuf[1] + pointerBuf[3]) / 2f;
+            if (!mapPinching) {
+                mapPinching = true;
+                mapPanning = false;
+                mapTapArmed = false;
+                mapCamera.beginPinch(dist, midX, midY);
+                mapPinchDist = dist;
+            } else {
+                mapCamera.updatePinch(dist, mapPinchDist, midX, midY);
+                mapPinchDist = dist;
+            }
+            input.consumeTap(tap);   // a multi-touch gesture is never a tap
             return;
         }
+        mapPinching = false;
+        mapCamera.endPinch();
+        mapPinchDist = 0f;
+        if (n == 1) {
+            // one finger: pan the map; remember the tap in case it lifts
+            // without moving (a tap, not a drag)
+            float px = pointerBuf[0];
+            float py = pointerBuf[1];
+            if (!mapPanning) {
+                mapPanning = true;
+                mapPanLastX = px;
+                mapPanLastY = py;
+                mapPanMoved = 0f;
+                if (input.consumeTap(tap)) {
+                    mapTapArmed = true;
+                    mapTapX = tap[0];
+                    mapTapY = tap[1];
+                }
+            } else {
+                float ddx = px - mapPanLastX;
+                float ddy = py - mapPanLastY;
+                mapPanMoved += Math.abs(ddx) + Math.abs(ddy);
+                if (mapPanMoved > MAP_TAP_SLOP) {
+                    mapTapArmed = false;
+                }
+                if (ddx != 0f || ddy != 0f) {
+                    mapCamera.panBy(ddx, ddy);
+                }
+                mapPanLastX = px;
+                mapPanLastY = py;
+            }
+            return;
+        }
+        // no fingers down: a tap fires only if the finger barely moved
+        boolean hadTap = input.consumeTap(tap);
+        if (mapPanning) {
+            mapPanning = false;
+            if (mapTapArmed && mapPanMoved <= MAP_TAP_SLOP) {
+                handleLevelMapTap(mapTapX, mapTapY);
+            }
+            mapTapArmed = false;
+        } else if (hadTap) {
+            handleLevelMapTap(tap[0], tap[1]);
+        }
+    }
+
+    /** A tap on the map: the BACK button first, then any level node. */
+    private void handleLevelMapTap(float x, float y) {
         for (UiButton b : levelButtons) {
-            if (!b.contains(tap[0], tap[1])) {
-                continue;
-            }
-            if (b.id >= BTN_LEVEL_ROW) {
-                openLoadout(b.id - BTN_LEVEL_ROW);
-            } else if (b.id == BTN_BACK) {
+            if (b.id == BTN_BACK && b.contains(x, y)) {
                 closeLevelSelect();
+                return;
             }
+        }
+        for (LevelNode node : levelNodes) {
+            float sx = mapCamera.worldToScreenX(node.worldX);
+            float sy = mapCamera.worldToScreenY(node.worldY);
+            float dx = x - sx;
+            float dy = y - sy;
+            if (dx * dx + dy * dy <= MAP_NODE_TAP_R * MAP_NODE_TAP_R) {
+                openLoadout(node.levelIndex);
+                return;
+            }
+        }
+    }
+
+    /** In map mode the BACK button floats at the bottom centre of the screen. */
+    private void layoutLevelMapBack() {
+        if (screenWidth <= 0f || screenHeight <= 0f) {
             return;
         }
+        float scale = Math.min(screenWidth, screenHeight) / 480f;
+        UiButton back = findButton(levelButtons, BTN_BACK);
+        if (back == null) {
+            return;
+        }
+        back.w = Math.min(screenWidth * 0.34f, 300f * scale);
+        back.h = Math.max(40f, Math.min(64f * scale, screenHeight * 0.11f));
+        back.x = (screenWidth - back.w) / 2f;
+        back.y = screenHeight - back.h - Math.max(8f, 16f * scale);
     }
 
     private void updateLoadout() {

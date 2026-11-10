@@ -288,10 +288,15 @@ public final class SaveState {
         return rest.toString();
     }
 
-    /** v4 record: head, upgrades, equipped, clearedBits, one best per level. */
+    /**
+     * v4 record: head, upgrades, equipped, clearedBits, one best per level.
+     * Tolerant of older blobs written when the game had fewer levels: missing
+     * best-score fields decode as 0, extra fields are ignored.
+     */
     private static Profile decodeProfileV4(String record) {
         String[] parts = record.split(",", -1);
-        if (parts.length != RECORD_V4_FIELDS) {
+        int minFields = RECORD_HEAD + Upgrades.COUNT + 2;   // through clearedBits
+        if (parts.length < minFields) {
             return null;
         }
         try {
@@ -301,8 +306,9 @@ public final class SaveState {
                     0, Weapons.SECONDARY_COUNT - 1);
             p.clearedBits = Integer.parseInt(parts[tail + 1].trim()) & CLEARED_MASK;
             for (int level = 0; level < Levels.TEXT.length; level++) {
-                p.levelBest[level] = Math.max(0,
-                        Integer.parseInt(parts[tail + 2 + level].trim()));
+                int idx = tail + 2 + level;
+                p.levelBest[level] = idx < parts.length
+                        ? Math.max(0, Integer.parseInt(parts[idx].trim())) : 0;
             }
             return p;
         } catch (RuntimeException malformed) {

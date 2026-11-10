@@ -5,7 +5,7 @@
 //
 // Entity -> baked-artwork registry. Renderer asks has()/draw() whether
 // an entity has generated art and falls back to its hand-drawn vector
-// code when it does. The animation arrays (partChannel, partPhase,
+// code when it does not. The animation arrays (partChannel, partPhase,
 // partAmplitude, partPivot*) drive the channel-based limb animation:
 // angle = amplitude * sin(drive + phase) around the part's pivot.
 package com.example.anplomer;
@@ -25,10 +25,10 @@ public final class ArtBindings {
     public static final int CHANNEL_WING = 3;
     public static final int CHANNEL_FLUTTER = 4;
 
-    private static final int[] PLAYER_CHANNELS = {1, 1, 1, 1, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    private static final float[] PLAYER_PHASES = {0.00f, 180.00f, 0.00f, 180.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 180.00f, 0.00f, 180.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
-    private static final float[] PLAYER_AMPS = {26.00f, 26.00f, 26.00f, 26.00f, 0.00f, 0.00f, 0.00f, 0.00f, 16.00f, 16.00f, 16.00f, 16.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
-    private static final float[] PLAYER_PIVOTS = {-3.717f, -19.713f, 3.151f, -19.713f, -3.717f, -19.713f, 3.151f, -19.713f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, -11.721f, -41.403f, 11.721f, -41.403f, -11.721f, -41.403f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f};
+    private static final int[] PLAYER_CHANNELS = {4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0};
+    private static final float[] PLAYER_PHASES = {0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
+    private static final float[] PLAYER_AMPS = {7.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 7.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
+    private static final float[] PLAYER_PIVOTS = {-9.818f, -38.455f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, -9.818f, -38.455f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f};
 
     public static String partName(String entity, int i) {
         switch (entity) {
@@ -58,8 +58,8 @@ public final class ArtBindings {
      * the canvas for animated parts, then calls this.
      */
     public static void drawPart(String entity, int i, Canvas c,
-                                Paint fill, Paint stroke,
-                                float x, float y, float scale) {
+                               Paint fill, Paint stroke,
+                               float x, float y, float scale) {
         switch (entity) {
             case "player":
                 ArtPlayer.drawPart(i, c, fill, stroke, x, y, scale);

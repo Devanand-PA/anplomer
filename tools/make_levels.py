@@ -7,6 +7,7 @@ Run:  python3 tools/make_levels.py            # regenerate + validate
 from __future__ import annotations
 
 import os
+import random
 import sys
 
 H = 15
@@ -732,6 +733,116 @@ def level8() -> Level:
     return L
 
 # ----------------------------------------------------------------------
+# levels 9..15 — procedural but fully validated: seeded seg / gap /
+# lava-ferry pattern with the same feature vocabulary as the hand-made
+# levels above
+# ----------------------------------------------------------------------
+def _gen_level(w: int, par: int, name: str, seed: int) -> Level:
+    rng = random.Random(seed)
+    L = Level(w, par, name)
+    L.seg(0, 17, 12)
+    L.start(2, 12)
+    L.coins(range(6, 11), 10)
+    if rng.random() < 0.8:
+        L.walker(rng.randint(12, 15), 12)
+    x = 18
+    checks = 0
+    while x < w - 26:
+        gap = rng.choice([3, 3, 3, 4, 4, 4, 8])
+        if gap >= 6:
+            # wide hazard: lava pit bridged by a horizontal ferry
+            L.lava(x, x + gap - 1, 13)
+            mid = x + gap // 2
+            L.mover_h(mid, 10)
+            L.coins([x + 1, mid, x + gap - 2], 9)
+        else:
+            # narrow pit: jumpable, coin arc marks the jump
+            L.arc(x, x + gap - 1, 10)
+        x += gap
+        segw = rng.randint(14, 18)
+        s = rng.choice([12, 12, 12, 11])
+        b = min(x + segw, w - 20)
+        L.seg(x, b, s)
+        top_used = set()          # columns already occupied at row s-1
+        if b - x >= 8 and rng.random() < 0.25:
+            sx = rng.randint(x + 3, b - 3)
+            L.spikes([sx], s)
+            top_used.add(sx)
+        if rng.random() < 0.4 and b - x >= 10:
+            # keep the first 6 columns clear: that is where a jump over the
+            # preceding gap lands
+            choices = [wx for wx in range(x + 6, b - 1) if wx not in top_used]
+            if choices:
+                wx = rng.choice(choices)
+                L.walker(wx, s)
+                top_used.add(wx)
+        if b - x >= 12 and rng.random() < 0.6:
+            c0 = rng.randint(x + 3, x + 6)
+            L.stone(c0, c0 + 3, s - 3)
+            L.coins(range(c0, c0 + 4), s - 4)
+        if rng.random() < 0.75:
+            L.coins(range(x + 1, min(x + 4, b)), s - 2)
+        if b - x >= 10 and rng.random() < 0.5:
+            L.arc(b - 3, b - 1, s - 2)
+        elif b - x >= 8 and rng.random() < 0.35:
+            L.power(b - 2, s - 3, rng.choice(POWER))
+        if rng.random() < 0.3 and b - x >= 8:
+            # rows 4..6 stay clear of the coin rows (s-4 .. s-2 >= 7)
+            L.flyer(rng.randint(x + 2, b - 2), rng.randint(4, 6))
+        if checks < 2 and b - x >= 8 and rng.random() < 0.3:
+            cx = x + (b - x) // 2
+            if cx not in top_used:
+                L.checkpoint(cx, s)
+                top_used.add(cx)
+                checks += 1
+        x = b + 1
+    # close any leftover gap before the final plateau
+    if x < w - 20:
+        tail = w - 20 - x
+        if tail > 4:
+            L.lava(x, w - 21, 13)
+            mid = x + tail // 2
+            L.mover_h(mid, 10)
+            L.coins([x + 1, mid, w - 22], 9)
+        else:
+            L.arc(x, w - 21, 10)
+    # final plateau with the goal (kept clear of enemies: safe finish)
+    L.seg(w - 20, w - 1, 12)
+    L.power(w - 17, 9, rng.choice(POWER))
+    L.coins(range(w - 12, w - 4), 10)
+    L.goal(w - 3, 12)
+    return L
+
+
+def level9() -> Level:
+    return _gen_level(260, 140, "Volcanic Depths", 9)
+
+
+def level10() -> Level:
+    return _gen_level(280, 150, "Magma Core", 10)
+
+
+def level11() -> Level:
+    return _gen_level(290, 155, "Sky Temple", 11)
+
+
+def level12() -> Level:
+    return _gen_level(305, 165, "Celestial Sanctum", 12)
+
+
+def level13() -> Level:
+    return _gen_level(315, 170, "Shadow Realm", 13)
+
+
+def level14() -> Level:
+    return _gen_level(330, 180, "Dusk Fortress", 14)
+
+
+def level15() -> Level:
+    return _gen_level(345, 200, "Abyssal Throne", 15)
+
+
+# ----------------------------------------------------------------------
 # validation
 # ----------------------------------------------------------------------
 def validate(L: Level) -> list[str]:
@@ -909,7 +1020,8 @@ def emit(levels: list[Level]) -> str:
 def main():
     check_only = "--check" in sys.argv
     levels = [level1(), level2(), level3(), level4(), level5(),
-              level6(), level7(), level8()]
+              level6(), level7(), level8(), level9(), level10(),
+              level11(), level12(), level13(), level14(), level15()]
     ok = True
     for L in levels:
         errs = validate(L)

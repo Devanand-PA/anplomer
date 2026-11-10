@@ -89,6 +89,41 @@ public final class Renderer {
                     0xFF3A2A5C, 0xFF2A1E46, 0xFF1A1230,
                     0xFF54E0B0, 0xFF34A884, 0xFF4A3A62, 0xFF342848,
                     0xFF8E7EC4, 0xFF665A96, true),
+            // 9 — Volcanic Depths: maroon magma caves
+            new Pal(0xFF1A0505, 0xFF4A0E0A, 0xFF8C2E12, 0xFFFFB090,
+                    0xFF3A0F0C, 0xFF571A10, 0xFF2A0808,
+                    0xFFC4552A, 0xFF8E3418, 0xFF4A1E14, 0xFF331410,
+                    0xFF7A4A3C, 0xFF54301F, false),
+            // 10 — Magma Core: near-black with molten orange
+            new Pal(0xFF0D0302, 0xFF2E0A04, 0xFF6B1E08, 0xFFFFC890,
+                    0xFF240806, 0xFF3E0F06, 0xFF180402,
+                    0xFFE06A2A, 0xFFB04A18, 0xFF3E140C, 0xFF2A0E08,
+                    0xFF6E4030, 0xFF4A2A1C, false),
+            // 11 — Sky Temple: golden high-altitude dawn
+            new Pal(0xFF3E6BD6, 0xFF8FC4F0, 0xFFFFF3C8, 0xFFFFFFFF,
+                    0xFFB8A86A, 0xFFD8C48A, 0xFF8A7648,
+                    0xFFF0E0A0, 0xFFD0B878, 0xFFB09458, 0xFF8A6E3E,
+                    0xFFE8DCC0, 0xFFB8A880, false),
+            // 12 — Celestial Sanctum: violet-white starlight
+            new Pal(0xFF241048, 0xFF5A3A9E, 0xFFC8B0F0, 0xFFFFFFFF,
+                    0xFF4A3A7E, 0xFF6A5AAE, 0xFF38286A,
+                    0xFFD8C8FF, 0xFFB098E0, 0xFF7A5AB0, 0xFF5A3E8A,
+                    0xFFB8A8E0, 0xFF8A78B8, true),
+            // 13 — Shadow Realm: deep purple-black
+            new Pal(0xFF0A0616, 0xFF1E1038, 0xFF3A2060, 0xFF9A7AD0,
+                    0xFF1A0E30, 0xFF2A1848, 0xFF120A24,
+                    0xFF6A4AA0, 0xFF4A2E78, 0xFF2E1A4A, 0xFF1E1030,
+                    0xFF5A4A80, 0xFF3E3060, true),
+            // 14 — Dusk Fortress: teal twilight
+            new Pal(0xFF0A2A3A, 0xFF1E5A6E, 0xFF4A9AAA, 0xFFC8E8E0,
+                    0xFF1E4A5A, 0xFF2E6A7A, 0xFF143A48,
+                    0xFF5AB8B0, 0xFF3E8A84, 0xFF2E5A5E, 0xFF1E3E42,
+                    0xFF6A8A8E, 0xFF4A6A6E, false),
+            // 15 — Abyssal Throne: sunken green-black depths
+            new Pal(0xFF020A08, 0xFF0A2A1E, 0xFF1E5A3E, 0xFF9AD8B8,
+                    0xFF0E2A22, 0xFF1A3E32, 0xFF061A14,
+                    0xFF2A9E6A, 0xFF1E7A4E, 0xFF123228, 0xFF0C2018,
+                    0xFF3E7A5E, 0xFF2A5A42, true),
     };
 
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1089,73 +1124,8 @@ public final class Renderer {
         c.translate(e.x + e.w / 2f, e.y + e.h);
         float wide = Math.min(1.7f, 0.7f / Math.max(squashY, 0.3f) + 0.3f);
         c.scale(wide, squashY);
-
-        // shadow
-        fill.setColor(0x30000000);
-        c.drawOval(rect(-e.w * 0.45f, -6f, e.w * 0.45f, 6f), fill);
-
-        // feet
-        if (!e.dead) {
-            float step = sinf(e.animTime * 12f) * 6f;
-            fill.setColor(0xFF7E2C22);
-            c.drawRoundRect(rect(-e.w * 0.34f, -8f + step, -e.w * 0.04f, 0f), 5f, 5f, fill);
-            c.drawRoundRect(rect(e.w * 0.04f, -8f - step, e.w * 0.34f, 0f), 5f, 5f, fill);
-        }
-
-        // body
-        fill.setColor(0xFFC74B3E);
-        c.drawRoundRect(rect(-e.w / 2f, -e.h, e.w / 2f, -4f), 18f, 18f, fill);
-        fill.setColor(0xFFE0665A);
-        c.drawRoundRect(rect(-e.w / 2f + 4f, -e.h + 4f, e.w / 2f - 4f, -e.h * 0.55f), 14f, 14f, fill);
-        fill.setColor(0xFF9E3227);
-        c.drawRoundRect(rect(-e.w / 2f + 3f, -e.h * 0.42f, e.w / 2f - 3f, -5f), 14f, 14f, fill);
-
-        // horns
-        fill.setColor(0xFFF2E2C2);
-        path.reset();
-        path.moveTo(-e.w * 0.34f, -e.h + 6f);
-        path.lineTo(-e.w * 0.46f, -e.h - 14f);
-        path.lineTo(-e.w * 0.18f, -e.h + 2f);
-        path.close();
-        c.drawPath(path, fill);
-        path.reset();
-        path.moveTo(e.w * 0.34f, -e.h + 6f);
-        path.lineTo(e.w * 0.46f, -e.h - 14f);
-        path.lineTo(e.w * 0.18f, -e.h + 2f);
-        path.close();
-        c.drawPath(path, fill);
-
-        // face (looking toward movement)
-        if (e.dead) {
-            stroke.setColor(0xFF3A1512);
-            stroke.setStrokeWidth(4f);
-            float ex = 0f;
-            c.drawLine(ex - 14f, -e.h * 0.62f, ex - 4f, -e.h * 0.46f, stroke);
-            c.drawLine(ex - 14f, -e.h * 0.46f, ex - 4f, -e.h * 0.62f, stroke);
-            c.drawLine(ex + 4f, -e.h * 0.62f, ex + 14f, -e.h * 0.46f, stroke);
-            c.drawLine(ex + 4f, -e.h * 0.46f, ex + 14f, -e.h * 0.62f, stroke);
-        } else {
-            float eye = 7f;
-            float off = sx * 4f;
-            fill.setColor(0xFFFFFFFF);
-            c.drawOval(rect(-e.w * 0.26f + off, -e.h * 0.78f, -e.w * 0.26f + off + eye * 1.5f, -e.h * 0.78f + eye * 1.7f), fill);
-            c.drawOval(rect(e.w * 0.04f + off, -e.h * 0.78f, e.w * 0.04f + off + eye * 1.5f, -e.h * 0.78f + eye * 1.7f), fill);
-            fill.setColor(0xFF2A1210);
-            c.drawCircle(-e.w * 0.20f + off + eye * 0.3f, -e.h * 0.78f + eye * 0.9f, 3.4f, fill);
-            c.drawCircle(e.w * 0.10f + off + eye * 0.3f, -e.h * 0.78f + eye * 0.9f, 3.4f, fill);
-            // angry brows
-            stroke.setColor(0xFF3A1512);
-            stroke.setStrokeWidth(4.5f);
-            c.drawLine(-e.w * 0.30f + off, -e.h * 0.86f, -e.w * 0.06f + off, -e.h * 0.74f, stroke);
-            c.drawLine(e.w * 0.02f + off, -e.h * 0.74f, e.w * 0.24f + off, -e.h * 0.86f, stroke);
-            // frown
-            stroke.setStrokeWidth(4f);
-            float mouth = -e.h * 0.30f;
-            path.reset();
-            path.moveTo(-e.w * 0.14f, mouth + 5f);
-            path.quadTo(0f, mouth - 5f, e.w * 0.14f, mouth + 5f);
-            c.drawPath(path, stroke);
-        }
+        c.scale(sx, 1f);
+        drawImpFigure(c, e.animTime, e.dead, sx);
         c.restore();
     }
 
@@ -1180,87 +1150,271 @@ public final class Renderer {
             c.restore();
             return;
         }
-        float flap = sinf(g.worldTime * 14f + e.animTime * 2f);
         c.save();
         c.translate(e.x + e.w / 2f, e.y + e.h / 2f);
-
-        // wings
-        fill.setColor(0xFF7B4FBF);
-        float wy = flap * 14f;
-        path.reset();
-        path.moveTo(-6f, 0f);
-        path.lineTo(-e.w * 0.95f, -16f - wy);
-        path.lineTo(-e.w * 0.7f, 10f - wy);
-        path.close();
-        c.drawPath(path, fill);
-        path.reset();
-        path.moveTo(6f, 0f);
-        path.lineTo(e.w * 0.95f, -16f - wy);
-        path.lineTo(e.w * 0.7f, 10f - wy);
-        path.close();
-        c.drawPath(path, fill);
-
-        if (e.dead) {
-            fill.setColor(0xFF6A43A6);
-            c.drawOval(rect(-e.w / 2f, -e.h / 2f, e.w / 2f, e.h / 2f), fill);
-            stroke.setColor(0xFF2C1A4A);
-            stroke.setStrokeWidth(4f);
-            c.drawLine(-14f, -6f, -5f, 4f, stroke);
-            c.drawLine(-14f, 4f, -5f, -6f, stroke);
-            c.drawLine(5f, -6f, 14f, 4f, stroke);
-            c.drawLine(5f, 4f, 14f, -6f, stroke);
-            c.restore();
-            return;
+        if (!e.dead) {
+            c.scale(e.facing < 0f ? -1f : 1f, 1f);
         }
-
-        // body
-        fill.setColor(0xFF8B5BD6);
-        c.drawOval(rect(-e.w / 2f, -e.h / 2f, e.w / 2f, e.h / 2f), fill);
-        fill.setColor(0xFFA87BEA);
-        c.drawOval(rect(-e.w / 2f + 4f, -e.h / 2f + 3f, e.w / 2f - 6f, 0f), fill);
-        // ears
-        fill.setColor(0xFF6A43A6);
-        path.reset();
-        path.moveTo(-e.w * 0.30f, -e.h * 0.42f);
-        path.lineTo(-e.w * 0.42f, -e.h * 0.78f);
-        path.lineTo(-e.w * 0.08f, -e.h * 0.5f);
-        path.close();
-        c.drawPath(path, fill);
-        path.reset();
-        path.moveTo(e.w * 0.30f, -e.h * 0.42f);
-        path.lineTo(e.w * 0.42f, -e.h * 0.78f);
-        path.lineTo(e.w * 0.08f, -e.h * 0.5f);
-        path.close();
-        c.drawPath(path, fill);
-
-        // eyes
-        float off = e.facing * 3f;
-        fill.setColor(0xFFFFE27A);
-        c.drawCircle(-e.w * 0.16f + off, -2f, 7.5f, fill);
-        c.drawCircle(e.w * 0.16f + off, -2f, 7.5f, fill);
-        fill.setColor(0xFF241238);
-        c.drawCircle(-e.w * 0.16f + off + e.facing * 2f, -2f, 4f, fill);
-        c.drawCircle(e.w * 0.16f + off + e.facing * 2f, -2f, 4f, fill);
-        // tiny fangs
-        fill.setColor(0xFFFFFFFF);
-        path.reset();
-        path.moveTo(-7f, e.h * 0.18f);
-        path.lineTo(-3f, e.h * 0.36f);
-        path.lineTo(-1f, e.h * 0.18f);
-        path.close();
-        c.drawPath(path, fill);
-        path.reset();
-        path.moveTo(3f, e.h * 0.18f);
-        path.lineTo(7f, e.h * 0.36f);
-        path.lineTo(9f, e.h * 0.18f);
-        path.close();
-        c.drawPath(path, fill);
+        drawBatFigure(c, g.worldTime * 14f + e.animTime * 2f, e.dead, 1f);
         c.restore();
     }
 
     // ------------------------------------------------------------------
     // world: player, goal, checkpoints, particles
     // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // shared character figures (hand-drawn fallbacks + menu art)
+    // ------------------------------------------------------------------
+
+    /**
+     * Hand-drawn knight, used as the no-baked-art fallback and the menu hero.
+     * Local space: origin at the feet centre, facing right, about 40x56.
+     */
+    private void drawKnightFigure(Canvas c, float run, boolean moving, boolean air,
+                                  boolean dead, float time) {
+        float w = Constants.PLAYER_W;
+        float h = Constants.PLAYER_H;
+
+        // scarf, trailing behind with a flutter
+        float flutter = sinf(time * 16f) * 4f;
+        float tail = 8f + (moving ? 10f : 0f);
+        fill.setColor(0xFFE14A4A);
+        path.reset();
+        path.moveTo(-w * 0.10f, -h * 0.62f);
+        path.quadTo(-w * 0.10f - tail * 0.6f, -h * 0.58f + flutter,
+                -w * 0.10f - tail, -h * 0.50f + flutter);
+        path.quadTo(-w * 0.10f - tail * 0.5f, -h * 0.44f + flutter * 0.5f,
+                -w * 0.10f, -h * 0.42f);
+        path.close();
+        c.drawPath(path, fill);
+
+        // legs + boots
+        float swing = moving ? sinf(run) * 8f : 0f;
+        fill.setColor(0xFF2A3F7A);
+        if (air) {
+            c.drawRoundRect(rect(-w * 0.34f, -15f, -w * 0.04f, -3f), 4f, 4f, fill);
+            c.drawRoundRect(rect(w * 0.06f, -19f, w * 0.36f, -7f), 4f, 4f, fill);
+            fill.setColor(0xFF1B243F);
+            c.drawRoundRect(rect(-w * 0.38f, -6f, w * 0.02f, -1f), 3f, 3f, fill);
+            c.drawRoundRect(rect(w * 0.04f, -10f, w * 0.40f, -4f), 3f, 3f, fill);
+        } else {
+            c.drawRoundRect(rect(-w * 0.32f + swing, -17f, -w * 0.04f + swing, -2f), 4f, 4f, fill);
+            c.drawRoundRect(rect(w * 0.04f - swing, -17f, w * 0.32f - swing, -2f), 4f, 4f, fill);
+            fill.setColor(0xFF1B243F);
+            c.drawRoundRect(rect(-w * 0.38f + swing, -6f, w * 0.02f + swing, -1f), 3f, 3f, fill);
+            c.drawRoundRect(rect(w * 0.02f - swing, -6f, w * 0.38f - swing, -1f), 3f, 3f, fill);
+        }
+
+        // tunic: body, lit chest, shaded flank, belt + buckle
+        fill.setColor(0xFF3F6BE0);
+        c.drawRoundRect(rect(-w * 0.45f, -h * 0.68f, w * 0.45f, -h * 0.22f), 10f, 10f, fill);
+        fill.setColor(0xFF5A85F5);
+        c.drawRoundRect(rect(-w * 0.38f, -h * 0.64f, w * 0.30f, -h * 0.46f), 8f, 8f, fill);
+        fill.setColor(0xFF2F55C0);
+        c.drawRoundRect(rect(w * 0.16f, -h * 0.64f, w * 0.45f, -h * 0.24f), 8f, 8f, fill);
+        fill.setColor(0xFF243458);
+        c.drawRoundRect(rect(-w * 0.45f, -h * 0.32f, w * 0.45f, -h * 0.24f), 4f, 4f, fill);
+        fill.setColor(0xFFFFCB3D);
+        c.drawRect(rect(-w * 0.07f, -h * 0.32f, w * 0.07f, -h * 0.24f), fill);
+
+        // arms + hands (counter-swing while running)
+        float armSwing = moving ? sinf(run + 3.1415927f) * 7f : (air ? -7f : 0f);
+        fill.setColor(0xFF3560D2);
+        c.drawRoundRect(rect(-w * 0.56f, -h * 0.62f + armSwing, -w * 0.40f, -h * 0.36f + armSwing), 6f, 6f, fill);
+        fill.setColor(0xFF3F6BE0);
+        c.drawRoundRect(rect(w * 0.40f, -h * 0.62f - armSwing, w * 0.56f, -h * 0.36f - armSwing), 6f, 6f, fill);
+        fill.setColor(0xFFF0BE92);
+        c.drawCircle(-w * 0.48f, -h * 0.33f + armSwing, 5.5f, fill);
+        c.drawCircle(w * 0.48f, -h * 0.33f - armSwing, 5.5f, fill);
+
+        // head + steel helmet + red plume
+        fill.setColor(0xFFF3C79A);
+        c.drawCircle(0f, -h * 0.82f, w * 0.40f, fill);
+        fill.setColor(0xFFAAB6C6);
+        path.reset();
+        path.moveTo(-w * 0.40f, -h * 0.82f);
+        path.quadTo(0f, -h * 1.16f, w * 0.40f, -h * 0.82f);
+        path.lineTo(w * 0.40f, -h * 0.75f);
+        path.lineTo(-w * 0.40f, -h * 0.75f);
+        path.close();
+        c.drawPath(path, fill);
+        fill.setColor(0xFF7C8A9C);
+        c.drawRoundRect(rect(-w * 0.44f, -h * 0.79f, w * 0.44f, -h * 0.73f), 3f, 3f, fill);
+        fill.setColor(0xFFE14A4A);
+        float pw = sinf(time * 9f) * 3f;
+        path.reset();
+        path.moveTo(0f, -h * 1.08f);
+        path.quadTo(-w * 0.26f, -h * 1.18f + pw, -w * 0.42f, -h * 1.05f + pw);
+        path.quadTo(-w * 0.20f, -h * 1.00f, 0f, -h * 0.97f);
+        path.close();
+        c.drawPath(path, fill);
+
+        // face
+        if (dead) {
+            stroke.setColor(0xFF3A2418);
+            stroke.setStrokeWidth(3f);
+            float ey = -h * 0.84f;
+            c.drawLine(-w * 0.20f, ey - 5f, -w * 0.08f, ey + 5f, stroke);
+            c.drawLine(-w * 0.20f, ey + 5f, -w * 0.08f, ey - 5f, stroke);
+            c.drawLine(w * 0.08f, ey - 5f, w * 0.20f, ey + 5f, stroke);
+            c.drawLine(w * 0.08f, ey + 5f, w * 0.20f, ey - 5f, stroke);
+        } else {
+            fill.setColor(0xFFFFFFFF);
+            c.drawCircle(-w * 0.13f, -h * 0.85f, w * 0.14f, fill);
+            c.drawCircle(w * 0.16f, -h * 0.85f, w * 0.14f, fill);
+            fill.setColor(0xFF2A2118);
+            c.drawCircle(-w * 0.10f, -h * 0.84f, w * 0.07f, fill);
+            c.drawCircle(w * 0.19f, -h * 0.84f, w * 0.07f, fill);
+            fill.setColor(0xFFFFFFFF);
+            c.drawCircle(-w * 0.08f, -h * 0.87f, w * 0.035f, fill);
+            c.drawCircle(w * 0.22f, -h * 0.87f, w * 0.035f, fill);
+            stroke.setColor(0xFFB3754B);
+            stroke.setStrokeWidth(2.6f);
+            path.reset();
+            path.moveTo(-w * 0.10f, -h * 0.71f);
+            path.quadTo(0f, -h * 0.65f, w * 0.22f, -h * 0.72f);
+            c.drawPath(path, stroke);
+        }
+    }
+
+    /** Hand-drawn walker imp, origin at the feet centre, facing via caller. */
+    private void drawImpFigure(Canvas c, float animTime, boolean dead, float facing) {
+        float w = 48f;
+        float h = 42f;
+        fill.setColor(0x30000000);
+        c.drawOval(rect(-w * 0.45f, -5f, w * 0.45f, 5f), fill);
+        if (!dead) {
+            float step = sinf(animTime * 12f) * 5f;
+            fill.setColor(0xFF7E2C22);
+            c.drawRoundRect(rect(-w * 0.32f, -7f + step, -w * 0.05f, 0f), 4f, 4f, fill);
+            c.drawRoundRect(rect(w * 0.05f, -7f - step, w * 0.32f, 0f), 4f, 4f, fill);
+        }
+        // body blob with lit belly and dark base
+        fill.setColor(0xFFC74B3E);
+        c.drawRoundRect(rect(-w / 2f, -h, w / 2f, -4f), 16f, 16f, fill);
+        fill.setColor(0xFFE0665A);
+        c.drawOval(rect(-w * 0.30f, -h + 5f, w * 0.28f, -h * 0.42f), fill);
+        fill.setColor(0xFF9E3227);
+        c.drawRoundRect(rect(-w / 2f + 3f, -h * 0.38f, w / 2f - 3f, -5f), 12f, 12f, fill);
+        // horns
+        fill.setColor(0xFFF2E2C2);
+        path.reset();
+        path.moveTo(-w * 0.28f, -h + 9f);
+        path.quadTo(-w * 0.50f, -h - 6f, -w * 0.44f, -h - 15f);
+        path.quadTo(-w * 0.28f, -h - 3f, -w * 0.14f, -h + 3f);
+        path.close();
+        c.drawPath(path, fill);
+        path.reset();
+        path.moveTo(w * 0.28f, -h + 9f);
+        path.quadTo(w * 0.50f, -h - 6f, w * 0.44f, -h - 15f);
+        path.quadTo(w * 0.28f, -h - 3f, w * 0.14f, -h + 3f);
+        path.close();
+        c.drawPath(path, fill);
+        // face
+        float off = facing * 4f;
+        if (dead) {
+            stroke.setColor(0xFF3A1512);
+            stroke.setStrokeWidth(4f);
+            c.drawLine(-14f, -h * 0.62f, -4f, -h * 0.46f, stroke);
+            c.drawLine(-14f, -h * 0.46f, -4f, -h * 0.62f, stroke);
+            c.drawLine(4f, -h * 0.62f, 14f, -h * 0.46f, stroke);
+            c.drawLine(4f, -h * 0.46f, 14f, -h * 0.62f, stroke);
+        } else {
+            fill.setColor(0xFFFFFFFF);
+            c.drawOval(rect(-w * 0.28f + off, -h * 0.80f, -w * 0.28f + off + 11f, -h * 0.58f), fill);
+            c.drawOval(rect(w * 0.02f + off, -h * 0.80f, w * 0.02f + off + 11f, -h * 0.58f), fill);
+            fill.setColor(0xFF2A1210);
+            c.drawCircle(-w * 0.21f + off, -h * 0.68f, 3.4f, fill);
+            c.drawCircle(w * 0.09f + off, -h * 0.68f, 3.4f, fill);
+            stroke.setColor(0xFF3A1512);
+            stroke.setStrokeWidth(4.5f);
+            c.drawLine(-w * 0.30f + off, -h * 0.88f, -w * 0.08f + off, -h * 0.74f, stroke);
+            c.drawLine(w * 0.04f + off, -h * 0.74f, w * 0.26f + off, -h * 0.88f, stroke);
+            stroke.setStrokeWidth(4f);
+            float mouth = -h * 0.32f;
+            path.reset();
+            path.moveTo(-w * 0.14f, mouth + 5f);
+            path.quadTo(0f, mouth - 5f, w * 0.14f, mouth + 5f);
+            c.drawPath(path, stroke);
+        }
+    }
+
+    /** Hand-drawn flyer bat, origin at the body centre. */
+    private void drawBatFigure(Canvas c, float time, boolean dead, float facing) {
+        float w = 46f;
+        float h = 38f;
+        float flap = dead ? 0f : sinf(time * 14f) * 12f;
+        // wings with scalloped trailing edges
+        fill.setColor(dead ? 0xFF6A43A6 : 0xFF7B4FBF);
+        path.reset();
+        path.moveTo(-6f, -2f);
+        path.quadTo(-w * 0.55f, -18f - flap, -w * 0.95f, -12f - flap);
+        path.quadTo(-w * 0.80f, -2f - flap * 0.6f, -w * 0.72f, 2f - flap * 0.4f);
+        path.quadTo(-w * 0.62f, 8f - flap * 0.3f, -w * 0.45f, 6f);
+        path.quadTo(-w * 0.28f, 12f, -6f, 6f);
+        path.close();
+        c.drawPath(path, fill);
+        path.reset();
+        path.moveTo(6f, -2f);
+        path.quadTo(w * 0.55f, -18f - flap, w * 0.95f, -12f - flap);
+        path.quadTo(w * 0.80f, -2f - flap * 0.6f, w * 0.72f, 2f - flap * 0.4f);
+        path.quadTo(w * 0.62f, 8f - flap * 0.3f, w * 0.45f, 6f);
+        path.quadTo(w * 0.28f, 12f, 6f, 6f);
+        path.close();
+        c.drawPath(path, fill);
+        if (dead) {
+            fill.setColor(0xFF6A43A6);
+            c.drawOval(rect(-w / 2f, -h / 2f, w / 2f, h / 2f), fill);
+            stroke.setColor(0xFF2C1A4A);
+            stroke.setStrokeWidth(4f);
+            c.drawLine(-14f, -6f, -5f, 4f, stroke);
+            c.drawLine(-14f, 4f, -5f, -6f, stroke);
+            c.drawLine(5f, -6f, 14f, 4f, stroke);
+            c.drawLine(5f, 4f, 14f, -6f, stroke);
+            return;
+        }
+        // body + ears
+        fill.setColor(0xFF8B5BD6);
+        c.drawOval(rect(-w / 2f, -h / 2f, w / 2f, h / 2f), fill);
+        fill.setColor(0xFFA87BEA);
+        c.drawOval(rect(-w / 2f + 4f, -h / 2f + 3f, w / 2f - 6f, 2f), fill);
+        fill.setColor(0xFF6A43A6);
+        path.reset();
+        path.moveTo(-w * 0.28f, -h * 0.40f);
+        path.lineTo(-w * 0.42f, -h * 0.80f);
+        path.lineTo(-w * 0.08f, -h * 0.48f);
+        path.close();
+        c.drawPath(path, fill);
+        path.reset();
+        path.moveTo(w * 0.28f, -h * 0.40f);
+        path.lineTo(w * 0.42f, -h * 0.80f);
+        path.lineTo(w * 0.08f, -h * 0.48f);
+        path.close();
+        c.drawPath(path, fill);
+        // big eyes + fangs
+        float off = facing * 3f;
+        fill.setColor(0xFFFFE27A);
+        c.drawCircle(-w * 0.16f + off, -2f, 7.5f, fill);
+        c.drawCircle(w * 0.16f + off, -2f, 7.5f, fill);
+        fill.setColor(0xFF241238);
+        c.drawCircle(-w * 0.16f + off + facing * 2f, -2f, 4f, fill);
+        c.drawCircle(w * 0.16f + off + facing * 2f, -2f, 4f, fill);
+        fill.setColor(0xFFFFFFFF);
+        path.reset();
+        path.moveTo(-7f, h * 0.16f);
+        path.lineTo(-3f, h * 0.36f);
+        path.lineTo(-1f, h * 0.16f);
+        path.close();
+        c.drawPath(path, fill);
+        path.reset();
+        path.moveTo(3f, h * 0.16f);
+        path.lineTo(7f, h * 0.36f);
+        path.lineTo(9f, h * 0.16f);
+        path.close();
+        c.drawPath(path, fill);
+    }
+
 
     private void drawPlayer(Canvas c, Game g) {
         Player p = g.player;
@@ -1297,122 +1451,18 @@ public final class Renderer {
                     !p.onGround && !p.dead, artScale);
             c.restore();
         } else {
+        c.save();
+        c.translate(p.x + w / 2f, p.y + h);
+        c.scale(sx, 1f);
         float sy = p.squash;
         float sxw = 1f / Math.max(sy, 0.5f) * 0.6f + 0.4f;
         c.scale(sxw, sy);
         if (p.dead) {
             c.rotate(-90f * Math.min(1f, (Constants.RESPAWN_DELAY - p.deadTimer) * 2.2f));
         }
-
-        float run = p.onGround ? p.runCycle : 0f;
-        boolean moving = Math.abs(p.vx) > 40f && p.onGround;
-
-        // legs
-        fill.setColor(0xFF2A3F7A);
-        if (!p.onGround) {
-            c.drawRoundRect(rect(-w * 0.36f, -16f, -w * 0.02f, -2f), 5f, 5f, fill);
-            c.drawRoundRect(rect(w * 0.04f, -20f, w * 0.34f, -8f), 5f, 5f, fill);
-        } else if (moving) {
-            float swing = sinf(run) * 9f;
-            c.drawRoundRect(rect(-w * 0.34f + swing, -17f, -w * 0.02f + swing, -1f), 5f, 5f, fill);
-            c.drawRoundRect(rect(w * 0.02f - swing, -17f, w * 0.34f - swing, -1f), 5f, 5f, fill);
-        } else {
-            c.drawRoundRect(rect(-w * 0.34f, -17f, -w * 0.03f, -1f), 5f, 5f, fill);
-            c.drawRoundRect(rect(w * 0.03f, -17f, w * 0.34f, -1f), 5f, 5f, fill);
-        }
-        // shoes
-        fill.setColor(0xFF1B243F);
-        if (!p.onGround) {
-            c.drawRoundRect(rect(-w * 0.40f, -7f, w * 0.0f, -1f), 4f, 4f, fill);
-            c.drawRoundRect(rect(w * 0.02f, -11f, w * 0.40f, -5f), 4f, 4f, fill);
-        } else if (moving) {
-            float swing = sinf(run) * 9f;
-            c.drawRoundRect(rect(-w * 0.40f + swing, -7f, w * 0.0f + swing, -1f), 4f, 4f, fill);
-            c.drawRoundRect(rect(w * 0.0f - swing, -7f, w * 0.40f - swing, -1f), 4f, 4f, fill);
-        } else {
-            c.drawRoundRect(rect(-w * 0.40f, -7f, -w * 0.02f, -1f), 4f, 4f, fill);
-            c.drawRoundRect(rect(w * 0.02f, -7f, w * 0.40f, -1f), 4f, 4f, fill);
-        }
-
-        // scarf tail (behind body, flutters with speed)
-        float flutter = sinf(g.worldTime * 16f) * 5f;
-        float tail = 6f + Math.min(20f, Math.abs(p.vx) * 0.04f);
-        fill.setColor(0xFFE14A4A);
-        path.reset();
-        path.moveTo(-w * 0.10f, -h * 0.60f);
-        path.lineTo(-w * 0.10f - tail - flutter, -h * 0.50f);
-        path.lineTo(-w * 0.10f, -h * 0.42f);
-        path.close();
-        c.drawPath(path, fill);
-
-        // body
-        fill.setColor(0xFF3F6BE0);
-        c.drawRoundRect(rect(-w * 0.44f, -h * 0.66f, w * 0.44f, -h * 0.20f), 12f, 12f, fill);
-        fill.setColor(0xFF5A85F5);
-        c.drawRoundRect(rect(-w * 0.40f, -h * 0.63f, w * 0.40f, -h * 0.44f), 10f, 10f, fill);
-        // belt
-        fill.setColor(0xFF243458);
-        c.drawRoundRect(rect(-w * 0.44f, -h * 0.30f, w * 0.44f, -h * 0.22f), 5f, 5f, fill);
-        fill.setColor(0xFFFFCB3D);
-        c.drawRect(rect(-w * 0.08f, -h * 0.30f, w * 0.08f, -h * 0.22f), fill);
-
-        // arms
-        float armSwing = moving ? sinf(run + 3.1415927f) * 8f : (p.onGround ? 0f : -6f);
-        fill.setColor(0xFF3560D2);
-        c.drawRoundRect(rect(-w * 0.56f, -h * 0.62f + armSwing, -w * 0.38f, -h * 0.34f + armSwing), 7f, 7f, fill);
-        c.drawRoundRect(rect(w * 0.38f, -h * 0.62f - armSwing, w * 0.56f, -h * 0.34f - armSwing), 7f, 7f, fill);
-        // hands
-        fill.setColor(0xFFF0BE92);
-        c.drawCircle(-w * 0.47f, -h * 0.32f + armSwing, 6.5f, fill);
-        c.drawCircle(w * 0.47f, -h * 0.32f - armSwing, 6.5f, fill);
-
-        // head
-        fill.setColor(0xFFF3C79A);
-        c.drawRoundRect(rect(-w * 0.46f, -h * 1.02f, w * 0.46f, -h * 0.60f), 15f, 15f, fill);
-        // hair
-        fill.setColor(0xFF4A2E1D);
-        path.reset();
-        path.moveTo(-w * 0.46f, -h * 0.84f);
-        path.lineTo(-w * 0.46f, -h * 1.00f);
-        path.quadTo(0f, -h * 1.12f, w * 0.46f, -h * 1.00f);
-        path.lineTo(w * 0.46f, -h * 0.88f);
-        path.lineTo(w * 0.28f, -h * 0.94f);
-        path.lineTo(w * 0.10f, -h * 0.86f);
-        path.lineTo(-w * 0.08f, -h * 0.95f);
-        path.lineTo(-w * 0.26f, -h * 0.87f);
-        path.close();
-        c.drawPath(path, fill);
-
-        if (p.dead) {
-            // X eyes
-            stroke.setColor(0xFF3A2418);
-            stroke.setStrokeWidth(3.6f);
-            float ey = -h * 0.78f;
-            c.drawLine(-16f, ey - 6f, -6f, ey + 6f, stroke);
-            c.drawLine(-16f, ey + 6f, -6f, ey - 6f, stroke);
-            c.drawLine(4f, ey - 6f, 14f, ey + 6f, stroke);
-            c.drawLine(4f, ey + 6f, 14f, ey - 6f, stroke);
-        } else {
-            // eye
-            fill.setColor(0xFFFFFFFF);
-            c.drawOval(rect(2f, -h * 0.85f, 20f, -h * 0.71f), fill);
-            fill.setColor(0xFF2A2118);
-            float look = Math.max(-3f, Math.min(3f, p.vx * 0.012f));
-            c.drawCircle(13f + look, -h * 0.78f, 5.2f, fill);
-            fill.setColor(0xFFFFFFFF);
-            c.drawCircle(14.5f + look, -h * 0.80f, 1.8f, fill);
-            // brow
-            stroke.setColor(0xFF4A2E1D);
-            stroke.setStrokeWidth(3.4f);
-            c.drawLine(1f, -h * 0.89f, 20f, -h * 0.92f, stroke);
-            // smile
-            stroke.setColor(0xFFB3754B);
-            stroke.setStrokeWidth(3f);
-            path.reset();
-            path.moveTo(6f, -h * 0.68f);
-            path.quadTo(13f, -h * 0.63f, 20f, -h * 0.69f);
-            c.drawPath(path, stroke);
-        }
+        drawKnightFigure(c, p.onGround ? p.runCycle : 0f,
+                Math.abs(p.vx) > 40f && p.onGround, !p.onGround && !p.dead, p.dead, g.worldTime);
+        c.restore();
         }
 
         // invulnerable/landing sparkle
@@ -1505,7 +1555,8 @@ public final class Renderer {
         c.drawArc(rect(ax - arcR * 0.80f, ay - arcR * 0.80f, ax + arcR * 0.80f, ay + arcR * 0.80f),
                 Math.min(start, cur), span * 0.86f, true, fill);
 
-        // blade: a tapered quad from the hand through the arc edge
+        // a proper sword riding the sweep angle: bright tapered blade with a
+        // fuller, gold crossguard, brown grip and pommel
         float nx = (tipX - ax);
         float ny = (tipY - ay);
         float len = (float) Math.sqrt(nx * nx + ny * ny);
@@ -1513,13 +1564,38 @@ public final class Renderer {
             nx /= len;
             ny /= len;
         }
-        float px = -ny * 4.5f;
-        float py = nx * 4.5f;
+        float px = -ny;
+        float py = nx;
+        float gripX = ax - nx * 16f;
+        float gripY = ay - ny * 16f;
+        float guardX = ax - nx * 5f;
+        float guardY = ay - ny * 5f;
+        float baseX = ax + nx * 10f;
+        float baseY = ay + ny * 10f;
+        // grip + pommel behind the guard
+        stroke.setColor(0xFF6B4326);
+        stroke.setStrokeWidth(7f);
+        c.drawLine(gripX, gripY, guardX, guardY, stroke);
+        fill.setColor(0xFFFFCB3D);
+        c.drawCircle(gripX, gripY, 5f, fill);
+        // crossguard
+        stroke.setColor(0xFFFFCB3D);
+        stroke.setStrokeWidth(6f);
+        c.drawLine(guardX - px * 12f, guardY - py * 12f,
+                guardX + px * 12f, guardY + py * 12f, stroke);
+        // blade: bright edge, darker fuller
         fill.setColor(0xFFF4F7FF);
         path.reset();
-        path.moveTo(midX - px, midY - py);
+        path.moveTo(baseX - px * 5f, baseY - py * 5f);
         path.lineTo(tipX, tipY);
-        path.lineTo(midX + px, midY + py);
+        path.lineTo(baseX + px * 5f, baseY + py * 5f);
+        path.close();
+        c.drawPath(path, fill);
+        fill.setColor(0xFFB9C8E8);
+        path.reset();
+        path.moveTo(baseX - px * 1.6f, baseY - py * 1.6f);
+        path.lineTo(tipX - nx * 7f, tipY - ny * 7f);
+        path.lineTo(baseX + px * 1.6f, baseY + py * 1.6f);
         path.close();
         c.drawPath(path, fill);
         // faint streak behind the blade
@@ -1527,6 +1603,27 @@ public final class Renderer {
         stroke.setStrokeWidth(3f);
         c.drawLine(midX, midY,
                 ax + (tipX - ax) * 0.85f, ay + (tipY - ay) * 0.85f, stroke);
+    }
+
+    /** Small decorative sword used behind the title logo. */
+    private void drawSwordIcon(Canvas c, float x, float y, float len, float deg) {
+        c.save();
+        c.translate(x, y);
+        c.rotate(deg);
+        fill.setColor(0xFFEFF4FF);
+        path.reset();
+        path.moveTo(0f, -len);
+        path.lineTo(4f, -len * 0.22f);
+        path.lineTo(-4f, -len * 0.22f);
+        path.close();
+        c.drawPath(path, fill);
+        fill.setColor(0xFFFFCB3D);
+        c.drawRoundRect(rect(-9f, -len * 0.22f, 9f, -len * 0.22f + 4f), 2f, 2f, fill);
+        fill.setColor(0xFF6B4326);
+        c.drawRoundRect(rect(-2.5f, -len * 0.22f + 4f, 2.5f, len * 0.26f), 2f, 2f, fill);
+        fill.setColor(0xFFFFCB3D);
+        c.drawCircle(0f, len * 0.26f, 3.5f, fill);
+        c.restore();
     }
 
     /** Arrows and boomerangs, culled with the standard visibility helper. */
@@ -1548,31 +1645,41 @@ public final class Renderer {
     }
 
     private void drawArrow(Canvas c, Projectile pr) {
-        float vx = pr.vx;
-        float vy = pr.vy;
-        float ang = (float) Math.toDegrees(Math.atan2(vy, vx));
+        float ang = (float) Math.toDegrees(Math.atan2(pr.vy, pr.vx));
         c.save();
         c.translate(pr.x, pr.y);
         c.rotate(ang);
         float half = pr.w / 2f;
         // shaft
         fill.setColor(0xFFD8C08A);
-        c.drawRoundRect(rect(-half, -2f, half * 0.35f, 2f), 2f, 2f, fill);
-        // head
+        c.drawRoundRect(rect(-half, -1.6f, half * 0.45f, 1.6f), 1.6f, 1.6f, fill);
+        // steel head: bright diamond with a shaded half
         fill.setColor(0xFFEFF4FF);
         path.reset();
-        path.moveTo(half * 0.3f, -4f);
-        path.lineTo(half, 0f);
-        path.lineTo(half * 0.3f, 4f);
+        path.moveTo(half * 0.45f, -5.5f);
+        path.lineTo(half + 8f, 0f);
+        path.lineTo(half * 0.45f, 5.5f);
         path.close();
         c.drawPath(path, fill);
-        // fletching
+        fill.setColor(0xFFB9C8E8);
+        path.reset();
+        path.moveTo(half * 0.45f, 0f);
+        path.lineTo(half + 8f, 0f);
+        path.lineTo(half * 0.45f, 5.5f);
+        path.close();
+        c.drawPath(path, fill);
+        // twin red feathers
         fill.setColor(0xFFE86A5A);
         path.reset();
-        path.moveTo(-half, 0f);
-        path.lineTo(-half - 8f, -5f);
-        path.lineTo(-half * 0.62f, 0f);
-        path.lineTo(-half - 8f, 5f);
+        path.moveTo(-half * 0.9f, 0f);
+        path.lineTo(-half - 9f, -6.5f);
+        path.lineTo(-half * 0.5f, -1.8f);
+        path.close();
+        c.drawPath(path, fill);
+        path.reset();
+        path.moveTo(-half * 0.9f, 0f);
+        path.lineTo(-half - 9f, 6.5f);
+        path.lineTo(-half * 0.5f, 1.8f);
         path.close();
         c.drawPath(path, fill);
         c.restore();
@@ -1588,20 +1695,23 @@ public final class Renderer {
             fill.setColor(0x33FFFFFF);
             c.drawCircle(0f, 0f, s * 1.7f, fill);
         }
+        // crescent (banana) body with a dark rim and capped tips
         fill.setColor(pr.returning ? 0xFFDFFFB4 : 0xFFBFE08A);
-        // two thick bent arms (an L rotated 45 degrees)
-        c.save();
-        c.rotate(45f);
-        c.drawRoundRect(rect(-s, -s * 0.32f, s, s * 0.32f), s * 0.3f, s * 0.3f, fill);
-        c.drawRoundRect(rect(s * 0.36f, -s, s, s), s * 0.3f, s * 0.3f, fill);
-        c.restore();
-        stroke.setColor(0x884F6A2E);
-        stroke.setStrokeWidth(2f);
-        c.save();
-        c.rotate(45f);
-        c.drawRoundRect(rect(-s, -s * 0.32f, s, s * 0.32f), s * 0.3f, s * 0.3f, stroke);
-        c.drawRoundRect(rect(s * 0.36f, -s, s, s), s * 0.3f, s * 0.3f, stroke);
-        c.restore();
+        path.reset();
+        path.moveTo(-s, -s * 0.15f);
+        path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
+        path.quadTo(0f, -s * 0.42f, -s, -s * 0.15f);
+        path.close();
+        c.drawPath(path, fill);
+        stroke.setColor(0xFF8F6A2E);
+        stroke.setStrokeWidth(2.5f);
+        path.reset();
+        path.moveTo(-s, -s * 0.15f);
+        path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
+        c.drawPath(path, stroke);
+        fill.setColor(0xFF8F6A2E);
+        c.drawCircle(-s, -s * 0.15f, 3.5f, fill);
+        c.drawCircle(s, -s * 0.15f, 3.5f, fill);
         c.restore();
     }
 
@@ -2605,19 +2715,42 @@ public final class Renderer {
         text.setTextAlign(Paint.Align.CENTER);
 
         float bob = sinf(g.worldTime * 2f) * 6f;
-        // title
+        // title: crossed sword icons, then a ring-outlined gold logo
+        float titleY = sh * 0.185f + bob * 0.3f;
+        float icx = sw / 2f;
+        float icy = titleY - 40f * scale;
+        drawSwordIcon(c, icx - 52f * scale, icy, 30f * scale, -38f);
+        drawSwordIcon(c, icx + 52f * scale, icy, 30f * scale, 218f);
         text.setTextSize(88f * scale);
-        text.setColor(0xAA000000);
+        text.setTextAlign(Paint.Align.CENTER);
         text.setShadowLayer(0f, 0f, 0f, 0);
-        c.drawText("ANPLOMER", sw / 2f + 5f, sh * 0.185f + 6f + bob * 0.3f, text);
+        float or = Math.max(2f, 5f * scale);
+        for (int k = 0; k < 8; k++) {
+            float a = (float) (k * Math.PI / 4.0);
+            text.setColor(0xFF7A4A00);
+            c.drawText("ANPLOMER", icx + or * (float) Math.cos(a),
+                    titleY + or * (float) Math.sin(a), text);
+        }
         text.setColor(0xFFFFD34D);
         text.setShadowLayer(10f, 0f, 6f, 0xCC000000);
-        c.drawText("ANPLOMER", sw / 2f, sh * 0.185f + bob * 0.3f, text);
+        c.drawText("ANPLOMER", icx, titleY, text);
+        text.setShadowLayer(0f, 0f, 0f, 0);
 
+        // subtitle in a little pill
+        String tag = "A TINY PLATFORM ADVENTURE";
         text.setTextSize(24f * scale);
+        float tw = textWidth(tag, 24f * scale);
+        float px = icx - tw / 2f - 18f * scale;
+        float py = titleY + 24f * scale;
+        float ph = 36f * scale;
+        fill.setColor(0xB0101828);
+        c.drawRoundRect(rect(px, py, px + tw + 36f * scale, py + ph), ph / 2f, ph / 2f, fill);
+        stroke.setColor(0x88FFD34D);
+        stroke.setStrokeWidth(2f);
+        c.drawRoundRect(rect(px, py, px + tw + 36f * scale, py + ph), ph / 2f, ph / 2f, stroke);
         text.setColor(0xFFFFFFFF);
         text.setShadowLayer(4f, 0f, 3f, 0x99000000);
-        c.drawText("A TINY PLATFORM ADVENTURE", sw / 2f, sh * 0.185f + 40f * scale, text);
+        c.drawText(tag, icx, py + ph * 0.68f, text);
 
         // active career badge (top-left, clear of the centred title)
         drawCareerBadge(c, g, sw, scale);
@@ -3076,37 +3209,7 @@ public final class Renderer {
         c.scale(2.1f * scale, 2.1f * scale);
         fill.setColor(0x66000000);
         c.drawOval(rect(-24f, 44f, 24f, 58f), fill);
-        fill.setColor(0xFF2A3F7A);
-        c.drawRoundRect(rect(-16f, 26f, -2f, 52f), 5f, 5f, fill);
-        c.drawRoundRect(rect(2f, 26f, 16f, 52f), 5f, 5f, fill);
-        fill.setColor(0xFF3F6BE0);
-        c.drawRoundRect(rect(-22f, -14f, 22f, 32f), 12f, 12f, fill);
-        fill.setColor(0xFF5A85F5);
-        c.drawRoundRect(rect(-18f, -11f, 18f, 6f), 9f, 9f, fill);
-        fill.setColor(0xFFF3C79A);
-        c.drawRoundRect(rect(-22f, -54f, 22f, -24f), 14f, 14f, fill);
-        fill.setColor(0xFF4A2E1D);
-        path.reset();
-        path.moveTo(-22f, -38f);
-        path.lineTo(-22f, -53f);
-        path.quadTo(0f, -64f, 22f, -53f);
-        path.lineTo(22f, -44f);
-        path.lineTo(8f, -49f);
-        path.lineTo(-6f, -42f);
-        path.lineTo(-16f, -48f);
-        path.close();
-        c.drawPath(path, fill);
-        fill.setColor(0xFFFFFFFF);
-        c.drawOval(rect(2f, -47f, 16f, -34f), fill);
-        fill.setColor(0xFF2A2118);
-        c.drawCircle(11f, -40f, 5f, fill);
-        fill.setColor(0xFFE14A4A);
-        path.reset();
-        path.moveTo(-6f, -16f);
-        path.lineTo(-34f, -6f + sinf(g.worldTime * 6f) * 5f);
-        path.lineTo(-6f, 2f);
-        path.close();
-        c.drawPath(path, fill);
+        drawKnightFigure(c, g.worldTime * 4f, true, false, false, g.worldTime);
         c.restore();
     }
 
@@ -3114,53 +3217,33 @@ public final class Renderer {
         c.save();
         c.translate(x, y + sinf(g.worldTime * 3f + 1f) * 6f);
         c.scale(2.0f * scale, 2.0f * scale);
-        fill.setColor(0x66000000);
-        c.drawOval(rect(-26f, 42f, 26f, 56f), fill);
-        fill.setColor(0xFF9E3227);
-        c.drawRoundRect(rect(-24f, -8f, 24f, 46f), 16f, 16f, fill);
-        fill.setColor(0xFFC74B3E);
-        c.drawRoundRect(rect(-24f, -8f, 24f, 26f), 16f, 16f, fill);
-        fill.setColor(0xFFF2E2C2);
-        path.reset();
-        path.moveTo(-14f, -4f);
-        path.lineTo(-22f, -24f);
-        path.lineTo(-4f, -8f);
-        path.close();
-        c.drawPath(path, fill);
-        path.reset();
-        path.moveTo(14f, -4f);
-        path.lineTo(22f, -24f);
-        path.lineTo(4f, -8f);
-        path.close();
-        c.drawPath(path, fill);
-        fill.setColor(0xFFFFFFFF);
-        c.drawOval(rect(-16f, 4f, -4f, 18f), fill);
-        c.drawOval(rect(4f, 4f, 16f, 18f), fill);
-        fill.setColor(0xFF2A1210);
-        c.drawCircle(-8f, 12f, 4f, fill);
-        c.drawCircle(10f, 12f, 4f, fill);
-        stroke.setColor(0xFF3A1512);
-        stroke.setStrokeWidth(4f);
-        c.drawLine(-18f, 0f, -3f, 8f, stroke);
-        c.drawLine(3f, 8f, 18f, 0f, stroke);
+        drawImpFigure(c, g.worldTime * 2.5f, false, -1f);
         c.restore();
     }
 
     private void drawMenuCoin(Canvas c, float x, float y, float scale, Game g) {
         c.save();
         c.translate(x, y + sinf(g.worldTime * 3f + 2f) * 6f);
-        float spin = Math.max(0.2f, Math.abs(cosf(g.worldTime * 3f)));
+        float spin = Math.max(0.25f, Math.abs(cosf(g.worldTime * 3f)));
         c.scale(spin * 2.0f * scale, 2.0f * scale);
-        fill.setColor(0xFFFFC93C);
+        // rim, face, highlight, inner ridge, rim notches, coin glyph
+        fill.setColor(0xFFD89A17);
         c.drawCircle(0f, 0f, 26f, fill);
+        fill.setColor(0xFFFFC93C);
+        c.drawCircle(0f, 0f, 23f, fill);
         fill.setColor(0xFFFFE58A);
-        c.drawCircle(-5f, -5f, 16f, fill);
+        c.drawCircle(-4f, -4f, 15f, fill);
         stroke.setColor(0xFFD89A17);
-        stroke.setStrokeWidth(3f);
-        c.drawCircle(0f, 0f, 24f, stroke);
+        stroke.setStrokeWidth(2.5f);
+        c.drawCircle(0f, 0f, 18f, stroke);
+        for (int k = 0; k < 8; k++) {
+            float a = k * 0.7854f;
+            c.drawLine((float) Math.cos(a) * 21f, (float) Math.sin(a) * 21f,
+                    (float) Math.cos(a) * 25f, (float) Math.sin(a) * 25f, stroke);
+        }
         fill.setColor(0xFFE8A81C);
-        c.drawRect(rect(-4f, -12f, 4f, 12f), fill);
-        c.drawRect(rect(-10f, -4f, 10f, 4f), fill);
+        c.drawRect(rect(-3.5f, -11f, 3.5f, 11f), fill);
+        c.drawRect(rect(-9f, -3.5f, 9f, 3.5f), fill);
         c.restore();
     }
 
@@ -3288,108 +3371,347 @@ public final class Renderer {
         text.setTextAlign(Paint.Align.CENTER);
     }
 
-    /** "SELECT LEVEL": two-column grid of the career's unlocked levels. */
+    /** "WORLD MAP": a pannable, zoomable map with one node per level. */
     private void drawLevelSelect(Canvas c, Game g, float sw, float sh, float scale) {
-        scrim(c, sw, sh, 0.62f);
-        float pw = g.levelSelectPanelW();
-        float ph = g.levelSelectPanelH();
-        float left = (sw - pw) / 2f;
-        float top = (sh - ph) / 2f;
-        drawPanel(c, sw / 2f, sh / 2f, pw, ph);
+        MapCamera cam = g.mapCamera;
 
-        float headerY = top + Math.min(52f * scale, ph * 0.075f);
+        // ink backdrop behind the map landmass
+        fill.setColor(0xFF060A14);
+        c.drawRect(0f, 0f, sw, sh, fill);
+
+        // ---- world space: the map itself ----
+        c.save();
+        c.translate(sw / 2f, sh / 2f);
+        c.scale(cam.zoom, cam.zoom);
+        c.translate(-cam.x, -cam.y);
+        drawMapBackground(c, cam);
+        drawMapTrail(c, g);
+        drawMapNodes(c, g);
+        c.restore();
+
+        // compass rose, top-right corner (screen space)
+        float ccx = sw - 64f * scale;
+        float ccy = 64f * scale;
+        float cr = 30f * scale;
+        fill.setColor(0xB0101828);
+        c.drawCircle(ccx, ccy, cr, fill);
+        stroke.setColor(0xCCFFD34D);
+        stroke.setStrokeWidth(2.5f * scale);
+        c.drawCircle(ccx, ccy, cr, stroke);
+        fill.setColor(0xFFFFD34D);
+        path.reset();
+        path.moveTo(ccx, ccy - cr * 0.72f);
+        path.lineTo(ccx + cr * 0.30f, ccy + cr * 0.20f);
+        path.lineTo(ccx, ccy + cr * 0.02f);
+        path.lineTo(ccx - cr * 0.30f, ccy + cr * 0.20f);
+        path.close();
+        c.drawPath(path, fill);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(18f * scale);
+        text.setColor(0xFFFFD34D);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText("N", ccx, ccy - cr - 6f * scale, text);
+
+        // ---- screen space: header, back button, hints ----
+        float headerY = 44f * scale;
         text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(Math.max(8f, 38f * scale));
+        text.setTextSize(Math.max(10f, 40f * scale));
         text.setColor(0xFFFFD34D);
         text.setShadowLayer(7f, 0f, 4f, 0xAA000000);
-        c.drawText("SELECT LEVEL", left + pw * 0.06f, headerY, text);
+        c.drawText("WORLD MAP", 18f * scale, headerY, text);
 
-        // career line on the right: who is playing and what they carry
-        String career = g.profile.name + "  •  COINS " + num(g.profile.coins)
-                + "  •  " + Weapons.secondaryName(g.secondaryWeaponId());
-        text.setTextAlign(Paint.Align.RIGHT);
-        text.setTextSize(fitSize(career, pw * 0.46f, Math.max(6f, 19f * scale)));
-        text.setColor(0xFFBFD4FF);
-        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
-        c.drawText(career, left + pw * 0.94f, headerY, text);
-        text.setTextAlign(Paint.Align.CENTER);
-
-        // rows: Game laid them out in a two-column grid; enrich each cell
-        for (Game.UiButton b : g.levelButtons) {
-            int idx = b.id - Game.BTN_LEVEL_ROW;
-            if (idx < 0 || idx >= Levels.TEXT.length || b.w <= 0f || b.h <= 0f) {
-                continue;
-            }
-            boolean unlocked = g.levelUnlocked(idx);
-            boolean cleared = g.levelCleared(idx);
-            float r = Math.max(2f, 12f * scale);
-            fill.setColor(unlocked ? 0xD61E3A6E : 0x66101826);
-            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, fill);
-            stroke.setColor(cleared ? 0xFF9BE89B : unlocked ? 0x88FFFFFF : 0x33FFFFFF);
-            stroke.setStrokeWidth(Math.max(1f, (cleared ? 2.5f : 2f) * scale));
-            c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
-
-            float pad = 12f * scale;
-            float leftX = b.x + pad;
-            // number chip
-            float chip = Math.min(b.h * 0.52f, 30f * scale);
-            fill.setColor(unlocked ? 0xFF0F2547 : 0xFF181E2C);
-            c.drawCircle(leftX + chip, b.y + b.h / 2f, chip, fill);
-            text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(chip * 1.05f);
-            text.setColor(unlocked ? 0xFFFFD34D : 0x66FFFFFF);
-            c.drawText(String.valueOf(idx + 1), leftX + chip, b.y + b.h * 0.68f, text);
-
-            // name (dimmed when locked)
-            float nameX = leftX + chip * 2.4f;
-            float nameSize = Math.max(6f, Math.min(b.h * 0.40f, 27f * scale));
-            text.setTextAlign(Paint.Align.LEFT);
-            text.setColor(unlocked ? 0xFFFFFFFF : 0x55FFFFFF);
-            text.setShadowLayer(3f, 0f, 2f, 0xCC000000);
-            text.setTextSize(fitSize(g.levelName(idx),
-                    Math.max(20f, b.w - (nameX - b.x) - pad - 90f * scale), nameSize));
-            c.drawText(g.levelName(idx), nameX, b.y + b.h * (b.h > 40f ? 0.42f : 0.64f), text);
-
-            // status line under the name, or centred when the row is short
-            String status;
-            if (!unlocked) {
-                status = "LOCKED";
-            } else if (cleared) {
-                status = "CLEARED  •  BEST " + num(g.profile.levelBestScore(idx));
-            } else {
-                status = "NEW";
-            }
-            float subSize = Math.max(4f, Math.min(b.h * 0.26f, 17f * scale));
-            text.setTextSize(fitSize(status,
-                    Math.max(20f, b.w - (nameX - b.x) - pad), subSize));
-            text.setColor(!unlocked ? 0x55FFFFFF
-                    : cleared ? 0xFF9BE89B : 0xFFFFE08A);
-            if (b.h > 40f) {
-                c.drawText(status, nameX, b.y + b.h * 0.76f, text);
-            } else {
-                text.setTextAlign(Paint.Align.RIGHT);
-                c.drawText(status, b.x + b.w - pad, b.y + b.h * 0.64f, text);
-                text.setTextAlign(Paint.Align.LEFT);
+        int cleared = 0;
+        for (int i = 0; i < Levels.TEXT.length; i++) {
+            if (g.profile.isCleared(i)) {
+                cleared++;
             }
         }
+        String career = g.profile.name + "  •  COINS " + num(g.profile.coins)
+                + "  •  " + cleared + "/" + Levels.TEXT.length + " CLEARED";
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setTextSize(fitSize(career, sw * 0.62f, Math.max(8f, 20f * scale)));
+        text.setColor(0xFFBFD4FF);
+        text.setShadowLayer(3f, 0f, 2f, 0x99000000);
+        c.drawText(career, sw - 18f * scale, headerY, text);
+        text.setTextAlign(Paint.Align.CENTER);
 
+        Game.UiButton back = null;
         for (Game.UiButton b : g.levelButtons) {
             if (b.id == Game.BTN_BACK) {
+                back = b;
                 drawOverlayButton(c, b, scale, false);
             }
         }
 
-        // feedback line (locked-row refusals) above the footer
-        float msgY = footerTop(g.levelButtons, top + ph) - 12f * scale;
-        drawMessage(c, g.levelMsg, g.levelMsgTimer, sw / 2f, msgY, scale);
+        String hint = "drag to pan  •  pinch to zoom  •  tap a level node";
+        float hintY = back != null ? back.y - 10f * scale : sh - 96f * scale;
+        text.setTextSize(fitSize(hint, sw * 0.9f, Math.max(6f, 18f * scale)));
+        text.setColor(0xCCFFFFFF);
+        text.setShadowLayer(4f, 0f, 3f, 0x99000000);
+        c.drawText(hint, sw / 2f, hintY, text);
 
-        text.setTextAlign(Paint.Align.CENTER);
-        String foot = "cleared levels stay replayable  •  picking a level opens your loadout";
-        float footY = Math.min(footerBottom(g.levelButtons, top + ph) + 18f * scale,
-                top + ph - 8f * scale);
-        text.setTextSize(fitSize(foot, pw * 0.94f, Math.max(5f, 17f * scale)));
-        text.setColor(0x99FFFFFF);
-        c.drawText(foot, sw / 2f, Math.min(footY, sh - 8f * scale), text);
+        // feedback line (locked-node refusals)
+        drawMessage(c, g.levelMsg, g.levelMsgTimer, sw / 2f, sh * 0.42f, scale);
+    }
+
+    /**
+     * The world map landmass with geography: ocean with waves, a sandy beach
+     * ring, grass base, mountain ranges, forests, a desert, rivers, lakes,
+     * a faint grid, region labels and a gold border — all in world coords.
+     */
+    private void drawMapBackground(Canvas c, MapCamera cam) {
+        float L = cam.worldLeft, T = cam.worldTop, R = cam.worldRight, B = cam.worldBottom;
+
+        // ---- ocean ----
+        fill.setColor(0xFF0A2440);
+        c.drawRect(L - 600f, T - 600f, R + 600f, B + 600f, fill);
+        // deeper water toward the corners
+        fill.setColor(0xFF071A30);
+        c.drawRect(L - 600f, T - 600f, R + 600f, T - 260f, fill);
+        c.drawRect(L - 600f, B + 260f, R + 600f, B + 600f, fill);
+        // wave marks scattered over the ocean (kept outside the landmass)
+        stroke.setColor(0x2E7FB8E8);
+        stroke.setStrokeWidth(3f);
+        for (int i = 0; i < 70; i++) {
+            float wx = L - 560f + h1(i * 31 + 7) * (R - L + 1120f);
+            float wy = T - 560f + h1(i * 31 + 13) * (B - T + 1120f);
+            if (wx > L - 40f && wx < R + 40f && wy > T - 40f && wy < B + 40f) {
+                continue;   // on land
+            }
+            float s = 12f + h1(i * 31 + 3) * 14f;
+            c.drawArc(rect(wx - s, wy - s * 0.5f, wx + s, wy + s * 0.5f), 200f, 140f, false, stroke);
+        }
+
+        // ---- landmass shadow, beach ring, grass base ----
+        fill.setColor(0x66000000);
+        c.drawRoundRect(rect(L + 20f, T + 26f, R + 20f, B + 26f), 100f, 100f, fill);
+        fill.setColor(0xFFC9B26B);                       // beach / sand
+        c.drawRoundRect(rect(L - 26f, T - 26f, R + 26f, B + 26f), 104f, 104f, fill);
+        fill.setColor(0xFF4E7A3C);                       // grass
+        c.drawRoundRect(rect(L, T, R, B), 80f, 80f, fill);
+
+        // ---- terrain patches (deterministic) ----
+        drawDesert(c, 950f, 780f, 340f, 170f, 41);
+        drawForest(c, 300f, 940f, 260f, 90f, 7);
+        drawForest(c, -260f, -790f, 240f, 90f, 13);
+        drawForest(c, -1150f, 350f, 220f, 110f, 19);
+        drawLake(c, -520f, 60f, 90f, 55f);
+        drawLake(c, 1180f, -560f, 110f, 60f);
+        drawMountains(c, -1180f, -680f, 260f, 60f, 5, 0);     // north-west range
+        drawMountains(c, 1330f, 330f, 240f, 60f, 6, 100);       // eastern range
+        drawRiver(c, -1150f, -620f, -800f, -350f, -350f, 250f, 200f, 780f, 900f, 1010f);
+        drawRiver(c, 1380f, 380f, 1150f, 600f, 800f, 850f, 950f, 980f);
+
+        // ---- faint grid ----
+        stroke.setColor(0x10FFFFFF);
+        stroke.setStrokeWidth(2f);
+        for (float gx = L; gx <= R + 1f; gx += 200f) {
+            c.drawLine(gx, T, gx, B, stroke);
+        }
+        for (float gy = T; gy <= B + 1f; gy += 200f) {
+            c.drawLine(L, gy, R, gy, stroke);
+        }
+
+        // ---- region labels (only readable when zoomed out) ----
+        if (cam.zoom <= 1.3f) {
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(120f);
+            text.setShadowLayer(0f, 0f, 0f, 0);
+            text.setColor(0x2EFFFFFF);
+            c.drawText("VERDANT VALE", -650f, 330f, text);
+            c.drawText("EMBER WASTES", 850f, 640f, text);
+            c.drawText("STARFELL HEIGHTS", 550f, -760f, text);
+            c.drawText("SHADOWFELL", -1000f, -60f, text);
+            text.setTextSize(60f);
+            text.setColor(0x24FFFFFF);
+            c.drawText("the old world", 100f, 200f, text);
+        }
+
+        // ---- gold border ----
+        stroke.setColor(0x66FFD34D);
+        stroke.setStrokeWidth(6f);
+        c.drawRoundRect(rect(L, T, R, B), 80f, 80f, stroke);
+    }
+
+    /** A sandy desert patch with scattered cacti/dune strokes. */
+    private void drawDesert(Canvas c, float cx, float cy, float rx, float ry, int seed) {
+        fill.setColor(0xFFD9B96A);
+        c.drawOval(rect(cx - rx, cy - ry, cx + rx, cy + ry), fill);
+        fill.setColor(0xFFCBA452);
+        c.drawOval(rect(cx - rx * 0.7f, cy - ry * 0.6f, cx + rx * 0.8f, cy + ry * 0.7f), fill);
+        stroke.setColor(0xFFB08D3E);
+        stroke.setStrokeWidth(5f);
+        for (int i = 0; i < 9; i++) {
+            float dx = (h1(seed + i * 3) - 0.5f) * 2f * rx * 0.8f;
+            float dy = (h1(seed + i * 3 + 1) - 0.5f) * 2f * ry * 0.8f;
+            float len = 20f + h1(seed + i * 3 + 2) * 26f;
+            c.drawLine(cx + dx, cy + dy, cx + dx + len, cy + dy + len * 0.3f, stroke);
+        }
+        // cacti: small green posts with arms
+        fill.setColor(0xFF4E8F4E);
+        for (int i = 0; i < 4; i++) {
+            float dx = (h1(seed + 50 + i * 5) - 0.5f) * 2f * rx * 0.7f;
+            float dy = (h1(seed + 51 + i * 5) - 0.5f) * 2f * ry * 0.7f;
+            c.drawRoundRect(rect(cx + dx - 5f, cy + dy - 22f, cx + dx + 5f, cy + dy), 5f, 5f, fill);
+            c.drawRoundRect(rect(cx + dx - 14f, cy + dy - 14f, cx + dx - 2f, cy + dy - 8f), 4f, 4f, fill);
+        }
+    }
+
+    /** A forest cluster: many little pine triangles over a darker green blob. */
+    private void drawForest(Canvas c, float cx, float cy, float rx, float ry, int seed) {
+        fill.setColor(0xFF2E5A2C);
+        c.drawOval(rect(cx - rx, cy - ry, cx + rx, cy + ry), fill);
+        for (int i = 0; i < 16; i++) {
+            float dx = (h1(seed + i * 7) - 0.5f) * 2f * rx * 0.85f;
+            float dy = (h1(seed + i * 7 + 1) - 0.5f) * 2f * ry * 0.85f;
+            float s = 16f + h1(seed + i * 7 + 2) * 16f;
+            // pine: two stacked triangles + trunk
+            fill.setColor(0xFF1E4020);
+            path.reset();
+            path.moveTo(cx + dx, cy + dy - s * 1.6f);
+            path.lineTo(cx + dx - s * 0.7f, cy + dy - s * 0.4f);
+            path.lineTo(cx + dx + s * 0.7f, cy + dy - s * 0.4f);
+            path.close();
+            c.drawPath(path, fill);
+            fill.setColor(0xFF35703A);
+            path.reset();
+            path.moveTo(cx + dx, cy + dy - s * 1.1f);
+            path.lineTo(cx + dx - s * 0.55f, cy + dy);
+            path.lineTo(cx + dx + s * 0.55f, cy + dy);
+            path.close();
+            c.drawPath(path, fill);
+            fill.setColor(0xFF5A3A22);
+            c.drawRect(rect(cx + dx - 2f, cy + dy, cx + dx + 2f, cy + dy + s * 0.35f), fill);
+        }
+    }
+
+    /** A mountain range: a row of peaks, gray with snow caps. */
+    private void drawMountains(Canvas c, float x0, float y0, float span, float jag, int count, int seed) {
+        for (int i = 0; i < count; i++) {
+            float t = count == 1 ? 0.5f : i / (float) (count - 1);
+            float mx = x0 + t * span + (h1(seed + i * 11) - 0.5f) * 40f;
+            float my = y0 + (h1(seed + i * 11 + 1) - 0.5f) * jag * 2f;
+            float mh = 70f + h1(seed + i * 11 + 2) * 90f;
+            float mw = mh * (0.9f + h1(seed + i * 11 + 3) * 0.5f);
+            fill.setColor(0xFF5C6672);
+            path.reset();
+            path.moveTo(mx - mw / 2f, my);
+            path.lineTo(mx, my - mh);
+            path.lineTo(mx + mw / 2f, my);
+            path.close();
+            c.drawPath(path, fill);
+            // snow cap
+            fill.setColor(0xFFF2F6FF);
+            path.reset();
+            path.moveTo(mx - mw * 0.16f, my - mh * 0.72f);
+            path.lineTo(mx, my - mh);
+            path.lineTo(mx + mw * 0.16f, my - mh * 0.72f);
+            path.lineTo(mx + mw * 0.06f, my - mh * 0.62f);
+            path.lineTo(mx, my - mh * 0.70f);
+            path.lineTo(mx - mw * 0.06f, my - mh * 0.62f);
+            path.close();
+            c.drawPath(path, fill);
+            // shady side
+            fill.setColor(0xFF46505C);
+            path.reset();
+            path.moveTo(mx, my - mh);
+            path.lineTo(mx + mw / 2f, my);
+            path.lineTo(mx, my);
+            path.close();
+            c.drawPath(path, fill);
+        }
+    }
+
+    /** A blue lake. */
+    private void drawLake(Canvas c, float cx, float cy, float rx, float ry) {
+        fill.setColor(0xFF2E6FB8);
+        c.drawOval(rect(cx - rx, cy - ry, cx + rx, cy + ry), fill);
+        fill.setColor(0xFF5FA8E0);
+        c.drawOval(rect(cx - rx * 0.7f, cy - ry * 0.6f, cx + rx * 0.6f, cy + ry * 0.5f), fill);
+        stroke.setColor(0xFFBFE4FF);
+        stroke.setStrokeWidth(3f);
+        c.drawArc(rect(cx - rx * 0.5f, cy - ry * 0.3f, cx + rx * 0.5f, cy + ry * 0.4f),
+                200f, 140f, false, stroke);
+    }
+
+    /** A winding river from the mountains to the coast; args are control points. */
+    private void drawRiver(Canvas c, float... pts) {
+        path.reset();
+        path.moveTo(pts[0], pts[1]);
+        for (int i = 2; i + 3 < pts.length + 1 && i + 3 <= pts.length; i += 4) {
+            path.quadTo(pts[i], pts[i + 1], pts[i + 2], pts[i + 3]);
+        }
+        stroke.setColor(0xFF2E6FB8);
+        stroke.setStrokeWidth(16f);
+        c.drawPath(path, stroke);
+        stroke.setColor(0xFF7FD4F0);
+        stroke.setStrokeWidth(6f);
+        c.drawPath(path, stroke);
+    }
+
+    /** Dashed trail connecting the level nodes in unlock order. */
+    private void drawMapTrail(Canvas c, Game g) {
+        java.util.List<LevelNode> nodes = g.levelNodes;
+        stroke.setStrokeWidth(7f);
+        for (int i = 0; i + 1 < nodes.size(); i++) {
+            LevelNode a = nodes.get(i);
+            LevelNode b = nodes.get(i + 1);
+            stroke.setColor(g.levelUnlocked(b.levelIndex) ? 0xCCFFD34D : 0x44FFFFFF);
+            float dx = b.worldX - a.worldX;
+            float dy = b.worldY - a.worldY;
+            float len = (float) Math.sqrt(dx * dx + dy * dy);
+            if (len < 1f) {
+                continue;
+            }
+            int dashes = Math.max(1, (int) (len / 30f));
+            for (int d = 0; d < dashes; d += 2) {
+                float t0 = d / (float) dashes;
+                float t1 = Math.min(1f, (d + 1) / (float) dashes);
+                c.drawLine(a.worldX + dx * t0, a.worldY + dy * t0,
+                        a.worldX + dx * t1, a.worldY + dy * t1, stroke);
+            }
+        }
+    }
+
+    /** One circular node per level: locked / open / cleared, with labels. */
+    private void drawMapNodes(Canvas c, Game g) {
+        float t = g.worldTime;
+        int nextIdx = g.profile.unlocked - 1;
+        float r = LevelNode.RADIUS;
+        for (LevelNode n : g.levelNodes) {
+            boolean unlocked = g.levelUnlocked(n.levelIndex);
+            boolean cleared = g.levelCleared(n.levelIndex);
+            if (unlocked && n.levelIndex == nextIdx) {
+                // pulse ring on the next level to play
+                float pulse = 1f + 0.12f * sinf(t * 3f);
+                fill.setColor(0x66FFD34D);
+                c.drawCircle(n.worldX, n.worldY, r * pulse + 16f, fill);
+            }
+            fill.setColor(!unlocked ? 0xFF232A38 : cleared ? 0xFF2E7D32 : 0xFF2C5AA8);
+            c.drawCircle(n.worldX, n.worldY, r, fill);
+            stroke.setColor(!unlocked ? 0x44FFFFFF : cleared ? 0xFFFFD34D : 0xFFBFD4FF);
+            stroke.setStrokeWidth(5f);
+            c.drawCircle(n.worldX, n.worldY, r, stroke);
+            fill.setColor(!unlocked ? 0xFF141B28 : 0xFF0F2547);
+            c.drawCircle(n.worldX, n.worldY, r * 0.66f, fill);
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(34f);
+            text.setColor(unlocked ? 0xFFFFD34D : 0x66FFFFFF);
+            text.setShadowLayer(0f, 0f, 0f, 0);
+            c.drawText(String.valueOf(n.levelIndex + 1), n.worldX, n.worldY + 12f, text);
+            if (g.mapCamera.zoom >= 0.5f) {
+                text.setTextSize(27f);
+                text.setColor(unlocked ? 0xFFFFFFFF : 0x55FFFFFF);
+                text.setShadowLayer(4f, 0f, 3f, 0xCC000000);
+                c.drawText(n.name, n.worldX, n.worldY + r + 36f, text);
+                text.setTextSize(20f);
+                text.setColor(cleared ? 0xFF9BE89B : 0xFFBFD4FF);
+                String sub = cleared
+                        ? "CLEARED  •  BEST " + num(g.profile.levelBestScore(n.levelIndex))
+                        : "PAR " + n.parTime + "s";
+                c.drawText(sub, n.worldX, n.worldY + r + 64f, text);
+            }
+        }
     }
 
     /** Pre-level loadout: pick the secondary weapon, then START. */
