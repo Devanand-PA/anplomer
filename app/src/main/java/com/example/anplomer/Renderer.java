@@ -2620,36 +2620,76 @@ public final class Renderer {
         }
         switch (weapon) {
             case Weapons.BOW: {
-                // bow arc + string + nocked arrow, opening towards the enemy
+                // Bow opening to the right: a limb arc, its string as the
+                // chord between the two limb tips, and an arrow nocked on the
+                // string. The chord is what makes it read as a bow -- the
+                // string has to touch both tips, never span the whole box.
+                stroke.setStrokeCap(Paint.Cap.ROUND);
                 stroke.setColor(0xFFE0A62E);
-                stroke.setStrokeWidth(size * 0.24f);
+                stroke.setStrokeWidth(size * 0.26f);
+                // the arc sweeps 115..245 deg, so both tips land at
+                // x = cx - 0.4226*size, y = cy -/+ 0.9063*size
                 c.drawArc(rect(cx - size, cy - size, cx + size, cy + size),
-                        128f, 104f, false, stroke);
-                stroke.setColor(0xDDFFFFFF);
-                stroke.setStrokeWidth(size * 0.10f);
-                float bx = (float) Math.cos(Math.toRadians(128f + 52f)) * size;
-                float sx = cx + bx, ex = cx - bx;
-                c.drawLine(sx, cy - size * 0.788f, ex, cy + size * 0.788f, stroke);
-                fill.setColor(0xFFFFFFFF);
-                c.drawCircle(ex + size * 0.02f, cy, size * 0.13f, fill);
+                        115f, 130f, false, stroke);
+                stroke.setStrokeCap(Paint.Cap.BUTT);
+                float tipX = cx - 0.4226f * size;
+                float tipY = 0.9063f * size;
+                stroke.setColor(0xE6FFFFFF);
+                stroke.setStrokeWidth(size * 0.08f);
+                c.drawLine(tipX, cy - tipY, tipX, cy + tipY, stroke);
+                // the arrow: shaft from the string's middle, head at the tip
+                stroke.setStrokeCap(Paint.Cap.ROUND);
+                stroke.setColor(0xFFFFFFFF);
+                stroke.setStrokeWidth(size * 0.13f);
+                c.drawLine(tipX, cy, cx + size * 0.94f, cy, stroke);
+                stroke.setStrokeWidth(size * 0.11f);
+                c.drawLine(cx + size * 0.94f, cy, cx + size * 0.50f, cy - size * 0.30f, stroke);
+                c.drawLine(cx + size * 0.94f, cy, cx + size * 0.50f, cy + size * 0.30f, stroke);
+                stroke.setStrokeCap(Paint.Cap.BUTT);
                 break;
             }
             case Weapons.BOOMERANG: {
+                // The crescent the player actually sees in flight, at glyph
+                // scale: tan body, lit upper half, gold spine inlay, dark rim
+                // on both curves and the gold grip cap on the left tip. An
+                // icon that is the projectile beats an abstraction of one.
                 c.save();
-                c.translate(cx, cy);
-                fill.setColor(0xFFC8E4A0);
-                float arm = size * 0.95f;
-                float th = size * 0.34f;
+                c.translate(cx, cy + size * 0.75f);
+                float s = size * 0.95f;
+                fill.setColor(0xFFD9A05B);
                 path.reset();
-                path.moveTo(-arm * 0.95f, -arm * 0.15f);
-                path.lineTo(-arm * 0.15f, -arm * 0.95f);
-                path.lineTo(arm * 0.19f, -arm * 0.95f);
-                path.lineTo(arm * 0.19f, arm * 0.19f);
-                path.lineTo(-arm * 0.15f, arm * 0.19f);
-                path.lineTo(-arm * 0.15f, -arm * 0.51f);
-                path.lineTo(-arm * 0.95f, -arm * 0.51f);
+                path.moveTo(-s, -s * 0.15f);
+                path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
+                path.quadTo(0f, -s * 0.42f, -s, -s * 0.15f);
                 path.close();
                 c.drawPath(path, fill);
+                fill.setColor(0xFFE8B87A);
+                path.reset();
+                path.moveTo(-s, -s * 0.15f);
+                path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
+                path.quadTo(0f, -s * 0.80f, -s, -s * 0.15f);
+                path.close();
+                c.drawPath(path, fill);
+                stroke.setColor(0xFFFFCB3D);
+                stroke.setStrokeWidth(Math.max(1.5f, size * 0.07f));
+                path.reset();
+                path.moveTo(-s * 0.72f, -s * 0.44f);
+                path.quadTo(0f, -s * 1.0f, s * 0.72f, -s * 0.44f);
+                c.drawPath(path, stroke);
+                stroke.setColor(0xFF8F6A2E);
+                stroke.setStrokeWidth(Math.max(1.5f, size * 0.07f));
+                path.reset();
+                path.moveTo(-s, -s * 0.15f);
+                path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
+                c.drawPath(path, stroke);
+                path.reset();
+                path.moveTo(-s, -s * 0.15f);
+                path.quadTo(0f, -s * 0.42f, s, -s * 0.15f);
+                c.drawPath(path, stroke);
+                fill.setColor(0xFFFFCB3D);
+                c.drawCircle(-s, -s * 0.15f, Math.max(1.5f, size * 0.09f), fill);
+                fill.setColor(0xFF8F6A2E);
+                c.drawCircle(s, -s * 0.15f, Math.max(1.5f, size * 0.09f), fill);
                 c.restore();
                 break;
             }
@@ -3946,10 +3986,10 @@ public final class Renderer {
             c.drawRoundRect(rect(b.x, b.y, b.x + b.w, b.y + b.h), r, r, stroke);
 
             // icon on the left, matching the disc glyphs
-            float icon = b.h * 0.26f;
-            drawSecondaryGlyph(c, id, b.x + icon * 2.4f, b.y + b.h / 2f, icon);
+            float icon = b.h * 0.30f;
+            drawSecondaryGlyph(c, id, b.x + icon * 2.5f, b.y + b.h / 2f, icon);
 
-            float nameX = b.x + icon * 4.4f;
+            float nameX = b.x + icon * 4.6f;
             float nameSize = Math.min(b.h * 0.34f, 26f * scale);
             float subSize = Math.min(b.h * 0.24f, 17f * scale);
             float rightW = 0f;
