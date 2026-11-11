@@ -92,6 +92,9 @@ public final class HeadlessTest {
             if (!mapGestureFlow()) {
                 failures = true;
             }
+            if (!menuLayoutFlow()) {
+                failures = true;
+            }
             if (!loadoutFlow()) {
                 failures = true;
             }
@@ -429,6 +432,45 @@ public final class HeadlessTest {
     // ------------------------------------------------------------------
     // level select: unlocks, cleared markers, locked rows refused
     // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // home-screen layout: the button stack must fit every supported size
+    // ------------------------------------------------------------------
+
+    private static boolean menuLayoutFlow() {
+        float[][] sizes = {
+                {1080, 480}, {1600, 900}, {1920, 1080}, {2400, 1080},
+                {720, 360}, {480, 320}, {1604, 720}, {2560, 1440},
+        };
+        for (float[] s : sizes) {
+            Game g = new Game(new Silent());
+            g.resize(s[0], s[1]);
+            float minTop = Float.MAX_VALUE;
+            float maxBottom = 0f;
+            float maxRight = 0f;
+            for (Game.UiButton b : g.menuButtons) {
+                minTop = Math.min(minTop, b.y);
+                maxBottom = Math.max(maxBottom, b.y + b.h);
+                maxRight = Math.max(maxRight, b.x + b.w);
+            }
+            if (minTop < 0f || maxBottom > s[1] || maxRight > s[0] + 0.5f) {
+                return fail("menulayout", String.format(
+                        "%dx%d overflows the screen (top %.0f bottom %.0f right %.0f)",
+                        (int) s[0], (int) s[1], minTop, maxBottom, maxRight));
+            }
+            // the title area (logo + subtitle pill) must stay clear of the
+            // first button row: the pill bottom is ~ titleY + 48*scale
+            float scale = Math.min(s[0], s[1]) / 480f;
+            float pillBottom = s[1] * 0.185f + 6f + 48f * scale;
+            if (pillBottom > minTop) {
+                return fail("menulayout", String.format(
+                        "%dx%d: title block (bottom %.0f) overlaps the buttons (top %.0f)",
+                        (int) s[0], (int) s[1], pillBottom, minTop));
+            }
+        }
+        System.out.println("menulayout OK: menu stack + title block fit 8 screen sizes");
+        return true;
+    }
 
     private static boolean levelSelectFlow() {
         MemStore store = new MemStore();

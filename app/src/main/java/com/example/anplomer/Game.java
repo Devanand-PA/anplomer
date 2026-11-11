@@ -508,7 +508,8 @@ public final class Game implements Player.Listener {
         float bh = Math.max(40f, screenHeight * 0.072f);
         float gap = bh * 0.24f;
         float x = (screenWidth - bw) / 2f;
-        float top = screenHeight * 0.27f;
+        // 0.345 keeps the column clear of the title + subtitle pill above
+        float top = screenHeight * 0.345f;
 
         for (UiButton b : menuButtons) {
             if (!isMenuColumn(b.id)) {

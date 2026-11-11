@@ -20,12 +20,14 @@
         d="M 20 38 Q 32 30 44 38 L 46 58 Q 46 65 39 65 L 25 65 Q 18 65 18 58 Z"/>
   <path id="chest" fill="#5a85f5"
         d="M 24 40 Q 32 35 40 40 L 41 50 L 23 50 Z"/>
+  <path id="flank" fill="#2f55c0"
+        d="M 39 40 L 44 38 L 46 58 Q 46 65 39 65 L 34 65 L 39 40 Z" opacity="0.55"/>
   <rect id="belt" x="19" y="54" width="26" height="6" rx="2" fill="#243458"/>
   <rect id="buckle" x="29" y="54" width="6" height="6" rx="1" fill="#ffcb3d"/>
   <g id="arms">
     <path id="arm-back" fill="#3560d2"
           d="M 16 38 Q 11 41 11 47 L 11 56 Q 11 60 15 60 L 19 60 L 19 38 Z"/>
-    <path id="arm-front" fill="#3f6be0"
+    <path id="arm-front" fill="#3560d2"
           d="M 48 38 Q 53 41 53 47 L 53 56 Q 53 60 49 60 L 45 60 L 45 38 Z"/>
     <circle id="hand-back" cx="15" cy="61" r="4" fill="#f0be92"/>
     <circle id="hand-front" cx="49" cy="61" r="4" fill="#f0be92"/>
@@ -35,15 +37,17 @@
   <path id="helmet" fill="#aab6c6"
         d="M 19 21 A 13 13 0 0 1 45 21 L 45 24 L 19 24 Z"/>
   <rect id="helm-brim" x="17" y="21" width="30" height="4" rx="2" fill="#7c8a9c"/>
-  <rect id="nose-guard" x="30.5" y="25" width="3" height="9" rx="1.5" fill="#7c8a9c"/>
+  <rect id="nose-guard" x="30.5" y="25" width="3" height="4" rx="1.5" fill="#7c8a9c"/>
   <path id="plume" fill="#e14a4a"
         d="M 33 10 C 31 3 24 -1 17 1 C 23 3 27 7 29 12 Z"/>
-  <circle id="eye-white" cx="26.5" cy="28" r="4.2" fill="#ffffff"/>
-  <circle id="pupil" cx="28.1" cy="28.4" r="2.1" fill="#2a2118"/>
-  <circle id="eye2-white" cx="37.5" cy="28" r="4.2" fill="#ffffff"/>
-  <circle id="eye2-pupil" cx="39.1" cy="28.4" r="2.1" fill="#2a2118"/>
+  <circle id="eye-white" cx="26.5" cy="28.5" r="4.2" fill="#ffffff"/>
+  <circle id="pupil" cx="28.1" cy="28.9" r="2.1" fill="#2a2118"/>
+  <circle id="eye-glint" cx="27.3" cy="27.9" r="0.9" fill="#ffffff"/>
+  <circle id="eye2-white" cx="37.5" cy="28.5" r="4.2" fill="#ffffff"/>
+  <circle id="eye2-pupil" cx="39.1" cy="28.9" r="2.1" fill="#2a2118"/>
+  <circle id="eye2-glint" cx="38.3" cy="27.9" r="0.9" fill="#ffffff"/>
   <path id="brow" fill="#4a2e1d" d="M 23 25.5 L 30 24.5 L 30 26 L 23 27 Z"/>
   <path id="brow2" fill="#4a2e1d" d="M 34 24.5 L 41 25.5 L 41 27 L 34 26 Z"/>
-  <path id="mouth" fill="#b3754b" d="M 27 33 Q 32 37 37 33 Q 32 35.5 27 33 Z"/>
+  <path id="mouth" fill="#8a4a26" d="M 26.5 32.4 Q 32 37.4 37.5 32.4 Q 32 34.4 26.5 32.4 Z"/>
   <circle id="cheek" cx="23" cy="31" r="2" fill="#f2a98a"/>
 </svg>

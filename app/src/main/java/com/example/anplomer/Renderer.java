@@ -189,6 +189,10 @@ public final class Renderer {
     // ------------------------------------------------------------------
 
     private LinearGradient skyShader;
+    /** Cached menu scrim gradient (rebuilt only on a surface resize). */
+    private LinearGradient menuScrim;
+    private float menuScrimW = -1f;
+    private float menuScrimH = -1f;
     private float skyW = -1f;
     private float skyH = -1f;
     private int skyPal = -1;
@@ -1282,35 +1286,72 @@ public final class Renderer {
     private void drawImpFigure(Canvas c, float animTime, boolean dead, float facing) {
         float w = 48f;
         float h = 42f;
+        // whole-body bob so it reads as a walk rather than a hop. The ground
+        // shadow is NOT bobbed: a drifting contact patch reads as hovering.
+        float bob = dead ? 0f : sinf(animTime * 24f) * 1.5f;
         fill.setColor(0x30000000);
         c.drawOval(rect(-w * 0.45f, -5f, w * 0.45f, 5f), fill);
         if (!dead) {
+            // Counter-phase stride, biased so the two feet can never reach the
+            // centre line and merge, and each foot LIFTS clear of the ground on
+            // its forward beat. Lighter fill + 1px outline so they are feet,
+            // not dark nubs at 1x.
             float step = sinf(animTime * 12f) * 5f;
-            fill.setColor(0xFF7E2C22);
-            c.drawRoundRect(rect(-w * 0.32f, -7f + step, -w * 0.05f, 0f), 4f, 4f, fill);
-            c.drawRoundRect(rect(w * 0.05f, -7f - step, w * 0.32f, 0f), 4f, 4f, fill);
+            float stride = cosf(animTime * 12f) * 3f;
+            float liftL = Math.max(0f, step) * 0.5f;
+            float liftR = Math.max(0f, -step) * 0.5f;
+            stroke.setColor(0xFF2A0E0A);
+            stroke.setStrokeWidth(1f);
+            fill.setColor(0xFF7A2E22);
+            float lt = -9f + step * 0.3f - liftL;
+            float rt = -9f - step * 0.3f - liftR;
+            c.drawRoundRect(rect(-w * 0.34f + stride, lt, -w * 0.10f + stride, -liftL), 4f, 4f, fill);
+            c.drawRoundRect(rect(-w * 0.34f + stride, lt, -w * 0.10f + stride, -liftL), 4f, 4f, stroke);
+            c.drawRoundRect(rect(w * 0.10f - stride, rt, w * 0.34f - stride, -liftR), 4f, 4f, fill);
+            c.drawRoundRect(rect(w * 0.10f - stride, rt, w * 0.34f - stride, -liftR), 4f, 4f, stroke);
         }
+        c.save();
+        c.translate(0f, bob);
+        // curled tail with a spade tip: a silhouette quirk that stops the imp
+        // reading as a plain horned blob
+        fill.setColor(0xFFB03A1E);
+        stroke.setColor(0xFF2A0E0A);
+        stroke.setStrokeWidth(1.8f);
+        path.reset();
+        path.moveTo(-w * 0.42f, -h * 0.56f);
+        path.quadTo(-w * 0.76f, -h * 0.62f, -w * 0.66f, -h * 0.98f);
+        path.quadTo(-w * 0.56f, -h * 0.74f, -w * 0.38f, -h * 0.70f);
+        path.close();
+        c.drawPath(path, fill);
+        c.drawPath(path, stroke);
         // body blob with lit belly and dark base
-        fill.setColor(0xFFC74B3E);
+        fill.setColor(0xFFD9542B);
         c.drawRoundRect(rect(-w / 2f, -h, w / 2f, -4f), 16f, 16f, fill);
-        fill.setColor(0xFFE0665A);
+        stroke.setColor(0xFF2A0E0A);
+        stroke.setStrokeWidth(2f);
+        c.drawRoundRect(rect(-w / 2f, -h, w / 2f, -4f), 16f, 16f, stroke);
+        fill.setColor(0xFFF07A4A);
         c.drawOval(rect(-w * 0.30f, -h + 5f, w * 0.28f, -h * 0.42f), fill);
-        fill.setColor(0xFF9E3227);
+        fill.setColor(0xFFB03A1E);
         c.drawRoundRect(rect(-w / 2f + 3f, -h * 0.38f, w / 2f - 3f, -5f), 12f, 12f, fill);
         // horns
         fill.setColor(0xFFF2E2C2);
+        stroke.setColor(0xFF2A0E0A);
+        stroke.setStrokeWidth(1.8f);
         path.reset();
         path.moveTo(-w * 0.28f, -h + 9f);
         path.quadTo(-w * 0.50f, -h - 6f, -w * 0.44f, -h - 15f);
         path.quadTo(-w * 0.28f, -h - 3f, -w * 0.14f, -h + 3f);
         path.close();
         c.drawPath(path, fill);
+        c.drawPath(path, stroke);
         path.reset();
         path.moveTo(w * 0.28f, -h + 9f);
         path.quadTo(w * 0.50f, -h - 6f, w * 0.44f, -h - 15f);
         path.quadTo(w * 0.28f, -h - 3f, w * 0.14f, -h + 3f);
         path.close();
         c.drawPath(path, fill);
+        c.drawPath(path, stroke);
         // face
         float off = facing * 4f;
         if (dead) {
@@ -1337,7 +1378,23 @@ public final class Renderer {
             path.moveTo(-w * 0.14f, mouth + 5f);
             path.quadTo(0f, mouth - 5f, w * 0.14f, mouth + 5f);
             c.drawPath(path, stroke);
+            // a pair of small fangs in the frown: personality at 1x without
+            // dominating the face
+            fill.setColor(0xFFFFFFFF);
+            path.reset();
+            path.moveTo(-w * 0.09f, mouth + 3f);
+            path.lineTo(-w * 0.055f, mouth + 7.5f);
+            path.lineTo(-w * 0.02f, mouth + 3f);
+            path.close();
+            c.drawPath(path, fill);
+            path.reset();
+            path.moveTo(w * 0.02f, mouth + 3f);
+            path.lineTo(w * 0.055f, mouth + 7.5f);
+            path.lineTo(w * 0.09f, mouth + 3f);
+            path.close();
+            c.drawPath(path, fill);
         }
+        c.restore();
     }
 
     /** Hand-drawn flyer bat, origin at the body centre. */
@@ -1345,24 +1402,33 @@ public final class Renderer {
         float w = 46f;
         float h = 38f;
         float flap = dead ? 0f : sinf(time * 14f) * 12f;
-        // wings with scalloped trailing edges
+        // Wings with scalloped trailing edges, outlined so they do not merge
+        // into the body as one purple mass mid-flap. The outline is a lighter
+        // violet (0xFF5A3A8E): it reads both on bright skies AND on the dark
+        // violet levels (8 Starfall, 13 Shadow Realm) where a near-black rim
+        // vanished into the sky. Wing tips are pulled in to ~0.72w so the
+        // drawn art stays close to the 46px hurtbox.
         fill.setColor(dead ? 0xFF6A43A6 : 0xFF7B4FBF);
+        stroke.setColor(0xFF5A3A8E);
+        stroke.setStrokeWidth(2f);
         path.reset();
         path.moveTo(-6f, -2f);
-        path.quadTo(-w * 0.55f, -18f - flap, -w * 0.95f, -12f - flap);
-        path.quadTo(-w * 0.80f, -2f - flap * 0.6f, -w * 0.72f, 2f - flap * 0.4f);
-        path.quadTo(-w * 0.62f, 8f - flap * 0.3f, -w * 0.45f, 6f);
+        path.quadTo(-w * 0.48f, -18f - flap, -w * 0.72f, -12f - flap);
+        path.quadTo(-w * 0.64f, -2f - flap * 0.6f, -w * 0.60f, 2f - flap * 0.4f);
+        path.quadTo(-w * 0.54f, 8f - flap * 0.3f, -w * 0.42f, 6f);
         path.quadTo(-w * 0.28f, 12f, -6f, 6f);
         path.close();
         c.drawPath(path, fill);
+        c.drawPath(path, stroke);
         path.reset();
         path.moveTo(6f, -2f);
-        path.quadTo(w * 0.55f, -18f - flap, w * 0.95f, -12f - flap);
-        path.quadTo(w * 0.80f, -2f - flap * 0.6f, w * 0.72f, 2f - flap * 0.4f);
-        path.quadTo(w * 0.62f, 8f - flap * 0.3f, w * 0.45f, 6f);
+        path.quadTo(w * 0.48f, -18f - flap, w * 0.72f, -12f - flap);
+        path.quadTo(w * 0.64f, -2f - flap * 0.6f, w * 0.60f, 2f - flap * 0.4f);
+        path.quadTo(w * 0.54f, 8f - flap * 0.3f, w * 0.42f, 6f);
         path.quadTo(w * 0.28f, 12f, 6f, 6f);
         path.close();
         c.drawPath(path, fill);
+        c.drawPath(path, stroke);
         if (dead) {
             fill.setColor(0xFF6A43A6);
             c.drawOval(rect(-w / 2f, -h / 2f, w / 2f, h / 2f), fill);
@@ -1374,32 +1440,47 @@ public final class Renderer {
             c.drawLine(5f, 4f, 14f, -6f, stroke);
             return;
         }
-        // body + ears
+        // body + ears, outlined against the wings with the same lighter rim
+        // the wings use, so the whole bat reads on dark violet levels
         fill.setColor(0xFF8B5BD6);
         c.drawOval(rect(-w / 2f, -h / 2f, w / 2f, h / 2f), fill);
+        stroke.setColor(0xFF5A3A8E);
+        stroke.setStrokeWidth(2f);
+        c.drawOval(rect(-w / 2f, -h / 2f, w / 2f, h / 2f), stroke);
         fill.setColor(0xFFA87BEA);
         c.drawOval(rect(-w / 2f + 4f, -h / 2f + 3f, w / 2f - 6f, 2f), fill);
         fill.setColor(0xFF6A43A6);
+        stroke.setColor(0xFF5A3A8E);
         path.reset();
         path.moveTo(-w * 0.28f, -h * 0.40f);
         path.lineTo(-w * 0.42f, -h * 0.80f);
         path.lineTo(-w * 0.08f, -h * 0.48f);
         path.close();
         c.drawPath(path, fill);
+        c.drawPath(path, stroke);
         path.reset();
         path.moveTo(w * 0.28f, -h * 0.40f);
         path.lineTo(w * 0.42f, -h * 0.80f);
         path.lineTo(w * 0.08f, -h * 0.48f);
         path.close();
         c.drawPath(path, fill);
-        // big eyes + fangs
+        c.drawPath(path, stroke);
+        // eyes: smaller than before so they read as eyes, not yellow blobs,
+        // with angry brows and glints matching the hero's face
         float off = facing * 3f;
         fill.setColor(0xFFFFE27A);
-        c.drawCircle(-w * 0.16f + off, -2f, 7.5f, fill);
-        c.drawCircle(w * 0.16f + off, -2f, 7.5f, fill);
+        c.drawCircle(-w * 0.16f + off, -2f, 5.5f, fill);
+        c.drawCircle(w * 0.16f + off, -2f, 5.5f, fill);
         fill.setColor(0xFF241238);
-        c.drawCircle(-w * 0.16f + off + facing * 2f, -2f, 4f, fill);
-        c.drawCircle(w * 0.16f + off + facing * 2f, -2f, 4f, fill);
+        c.drawCircle(-w * 0.16f + off + facing * 2f, -1.6f, 2.9f, fill);
+        c.drawCircle(w * 0.16f + off + facing * 2f, -1.6f, 2.9f, fill);
+        fill.setColor(0xFFFFFFFF);
+        c.drawCircle(-w * 0.16f + off + facing * 2f - 1f, -2.8f, 1.1f, fill);
+        c.drawCircle(w * 0.16f + off + facing * 2f - 1f, -2.8f, 1.1f, fill);
+        stroke.setColor(0xFF2C1A4A);
+        stroke.setStrokeWidth(3f);
+        c.drawLine(-w * 0.26f + off, -h * 0.30f, -w * 0.06f + off, -h * 0.18f, stroke);
+        c.drawLine(w * 0.06f + off, -h * 0.18f, w * 0.26f + off, -h * 0.30f, stroke);
         fill.setColor(0xFFFFFFFF);
         path.reset();
         path.moveTo(-7f, h * 0.16f);
@@ -1545,15 +1626,39 @@ public final class Renderer {
         float midX = ax + (float) Math.cos(rad) * arcR * 0.55f;
         float midY = ay + (float) Math.sin(rad) * arcR * 0.55f;
 
-        // translucent trail: a filled wedge from the arc's start to the blade
-        fill.setColor(0x38FFFFFF);
+        // Slash trail as a stepped ANNULAR BAND rather than a pivot-filled pie:
+        // a pie bloats toward the shoulder and swallows the blade. Each step is
+        // a thick round-capped segment along the arc, fading toward the tail,
+        // with a brighter leading edge so the arc reads as one motion.
         float cur = start + sweep * Math.min(1f, prog * 1.35f);
-        float span = Math.abs(cur - start);
-        c.drawArc(rect(ax - arcR, ay - arcR, ax + arcR, ay + arcR),
-                Math.min(start, cur), span, true, fill);
-        fill.setColor(0x55EAF2FF);
-        c.drawArc(rect(ax - arcR * 0.80f, ay - arcR * 0.80f, ax + arcR * 0.80f, ay + arcR * 0.80f),
-                Math.min(start, cur), span * 0.86f, true, fill);
+        int steps = 14;
+        // Round caps: with the default BUTT caps every step joint left a small
+        // periodic notch in the band.
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        stroke.setStrokeWidth(Math.max(3f, arcR * 0.40f));
+        for (int i = 0; i < steps; i++) {
+            float t0 = i / (float) steps;
+            float t1 = (i + 1) / (float) steps;
+            float a0 = (float) Math.toRadians(start + (cur - start) * t0);
+            float a1 = (float) Math.toRadians(start + (cur - start) * t1);
+            float bandR = arcR * 0.80f;
+            int alpha = (int) (0x18 + 0x3C * t1);
+            stroke.setColor((alpha << 24) | 0x00C8F2FF);
+            c.drawLine(ax + (float) Math.cos(a0) * bandR, ay + (float) Math.sin(a0) * bandR,
+                    ax + (float) Math.cos(a1) * bandR, ay + (float) Math.sin(a1) * bandR, stroke);
+        }
+        stroke.setStrokeWidth(Math.max(2f, arcR * 0.10f));
+        for (int i = 0; i < steps; i++) {
+            float t0 = i / (float) steps;
+            float t1 = (i + 1) / (float) steps;
+            float a0 = (float) Math.toRadians(start + (cur - start) * t0);
+            float a1 = (float) Math.toRadians(start + (cur - start) * t1);
+            float bandR = arcR * 0.97f;
+            int alpha = (int) (0x20 + 0x44 * t1);
+            stroke.setColor((alpha << 24) | 0x00FFFFFF);
+            c.drawLine(ax + (float) Math.cos(a0) * bandR, ay + (float) Math.sin(a0) * bandR,
+                    ax + (float) Math.cos(a1) * bandR, ay + (float) Math.sin(a1) * bandR, stroke);
+        }
 
         // a proper sword riding the sweep angle: bright tapered blade with a
         // fuller, gold crossguard, brown grip and pommel
@@ -1583,14 +1688,18 @@ public final class Renderer {
         stroke.setStrokeWidth(6f);
         c.drawLine(guardX - px * 12f, guardY - py * 12f,
                 guardX + px * 12f, guardY + py * 12f, stroke);
-        // blade: bright edge, darker fuller
-        fill.setColor(0xFFF4F7FF);
+        // blade: bright edge, darker fuller, and a cool steel OUTLINE so the
+        // silhouette survives both the trail and a bright sky behind it
         path.reset();
-        path.moveTo(baseX - px * 5f, baseY - py * 5f);
+        path.moveTo(baseX - px * 6.5f, baseY - py * 6.5f);
         path.lineTo(tipX, tipY);
-        path.lineTo(baseX + px * 5f, baseY + py * 5f);
+        path.lineTo(baseX + px * 6.5f, baseY + py * 6.5f);
         path.close();
+        fill.setColor(0xFFF4F7FF);
         c.drawPath(path, fill);
+        stroke.setColor(0xFF5E7396);
+        stroke.setStrokeWidth(2f);
+        c.drawPath(path, stroke);
         fill.setColor(0xFFB9C8E8);
         path.reset();
         path.moveTo(baseX - px * 1.6f, baseY - py * 1.6f);
@@ -1603,6 +1712,9 @@ public final class Renderer {
         stroke.setStrokeWidth(3f);
         c.drawLine(midX, midY,
                 ax + (tipX - ax) * 0.85f, ay + (tipY - ay) * 0.85f, stroke);
+        // the band above switched the shared stroke paint to ROUND caps:
+        // restore the default so no later art silently inherits them
+        stroke.setStrokeCap(Paint.Cap.BUTT);
     }
 
     /** Small decorative sword used behind the title logo. */
@@ -1610,12 +1722,16 @@ public final class Renderer {
         c.save();
         c.translate(x, y);
         c.rotate(deg);
-        fill.setColor(0xFFEFF4FF);
         path.reset();
         path.moveTo(0f, -len);
-        path.lineTo(4f, -len * 0.22f);
-        path.lineTo(-4f, -len * 0.22f);
+        path.lineTo(4.5f, -len * 0.22f);
+        path.lineTo(-4.5f, -len * 0.22f);
         path.close();
+        // dark outline pass behind the blade so the emblem reads on any sky
+        stroke.setColor(0xFF6B4326);
+        stroke.setStrokeWidth(3f);
+        c.drawPath(path, stroke);
+        fill.setColor(0xFFEFF4FF);
         c.drawPath(path, fill);
         fill.setColor(0xFFFFCB3D);
         c.drawRoundRect(rect(-9f, -len * 0.22f, 9f, -len * 0.22f + 4f), 2f, 2f, fill);
@@ -1650,32 +1766,43 @@ public final class Renderer {
         c.translate(pr.x, pr.y);
         c.rotate(ang);
         float half = pr.w / 2f;
+        // motion streak trailing the shaft: an arrow at 860 u/s has no other
+        // speed cue, so a short fading tail sells the flight
+        stroke.setColor(0x44FFFFFF);
+        stroke.setStrokeWidth(3f);
+        c.drawLine(-half - 6f, 0f, -half - 30f, 0f, stroke);
         // shaft
         fill.setColor(0xFFD8C08A);
         c.drawRoundRect(rect(-half, -1.6f, half * 0.45f, 1.6f), 1.6f, 1.6f, fill);
-        // steel head: bright diamond with a shaded half
+        // steel head: barbed diamond, bright lit half over a shaded half
         fill.setColor(0xFFEFF4FF);
         path.reset();
-        path.moveTo(half * 0.45f, -5.5f);
+        path.moveTo(half * 0.45f, -7.5f);
+        path.lineTo(half * 0.30f, -3f);
         path.lineTo(half + 8f, 0f);
-        path.lineTo(half * 0.45f, 5.5f);
+        path.lineTo(half * 0.30f, 3f);
+        path.lineTo(half * 0.45f, 7.5f);
+        path.lineTo(half * 0.62f, 2f);
+        path.lineTo(half * 0.62f, -2f);
         path.close();
         c.drawPath(path, fill);
         fill.setColor(0xFFB9C8E8);
         path.reset();
         path.moveTo(half * 0.45f, 0f);
         path.lineTo(half + 8f, 0f);
-        path.lineTo(half * 0.45f, 5.5f);
+        path.lineTo(half * 0.30f, 3f);
+        path.lineTo(half * 0.45f, 7.5f);
         path.close();
         c.drawPath(path, fill);
-        // twin red feathers
-        fill.setColor(0xFFE86A5A);
+        // twin feathers, tinted with the hero's plume red
+        fill.setColor(0xFFE14A4A);
         path.reset();
         path.moveTo(-half * 0.9f, 0f);
         path.lineTo(-half - 9f, -6.5f);
         path.lineTo(-half * 0.5f, -1.8f);
         path.close();
         c.drawPath(path, fill);
+        fill.setColor(0xFFB93636);
         path.reset();
         path.moveTo(-half * 0.9f, 0f);
         path.lineTo(-half - 9f, 6.5f);
@@ -1690,27 +1817,51 @@ public final class Renderer {
         c.translate(pr.x, pr.y);
         c.rotate((float) Math.toDegrees(pr.phase));
         float s = pr.w / 2f;
-        // a soft glow while returning so the homing leg reads
+        // gold glow while returning so the homing leg reads in the hero palette
         if (pr.returning) {
-            fill.setColor(0x33FFFFFF);
+            fill.setColor(0x33FFD34D);
             c.drawCircle(0f, 0f, s * 1.7f, fill);
         }
-        // crescent (banana) body with a dark rim and capped tips
-        fill.setColor(pr.returning ? 0xFFDFFFB4 : 0xFFBFE08A);
+        // crescent body: wood tan (lit while returning), dark rim on BOTH the
+        // outer and inner curves, gold spine inlay, and asymmetric tip caps so
+        // the spin direction reads frame to frame
+        fill.setColor(pr.returning ? 0xFFEDBE7E : 0xFFD9A05B);
         path.reset();
         path.moveTo(-s, -s * 0.15f);
         path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
         path.quadTo(0f, -s * 0.42f, -s, -s * 0.15f);
         path.close();
         c.drawPath(path, fill);
+        // lit top half
+        fill.setColor(pr.returning ? 0xFFFFD9A0 : 0xFFE8B87A);
+        path.reset();
+        path.moveTo(-s, -s * 0.15f);
+        path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
+        path.quadTo(0f, -s * 0.80f, -s, -s * 0.15f);
+        path.close();
+        c.drawPath(path, fill);
+        // gold spine inlay tying it to the hero's buckle
+        stroke.setColor(0xFFFFCB3D);
+        stroke.setStrokeWidth(2.5f);
+        path.reset();
+        path.moveTo(-s * 0.72f, -s * 0.44f);
+        path.quadTo(0f, -s * 1.0f, s * 0.72f, -s * 0.44f);
+        c.drawPath(path, stroke);
+        // rim: outer curve then inner curve
         stroke.setColor(0xFF8F6A2E);
         stroke.setStrokeWidth(2.5f);
         path.reset();
         path.moveTo(-s, -s * 0.15f);
         path.quadTo(0f, -s * 1.2f, s, -s * 0.15f);
         c.drawPath(path, stroke);
-        fill.setColor(0xFF8F6A2E);
+        path.reset();
+        path.moveTo(-s, -s * 0.15f);
+        path.quadTo(0f, -s * 0.42f, s, -s * 0.15f);
+        c.drawPath(path, stroke);
+        // asymmetric caps: gold grip end vs dark tip
+        fill.setColor(0xFFFFCB3D);
         c.drawCircle(-s, -s * 0.15f, 3.5f, fill);
+        fill.setColor(0xFF8F6A2E);
         c.drawCircle(s, -s * 0.15f, 3.5f, fill);
         c.restore();
     }
@@ -2711,16 +2862,35 @@ public final class Renderer {
     }
 
     private void drawMenu(Canvas c, Game g, float sw, float sh, float scale) {
-        scrim(c, sw, sh, 0.45f);
+        // Gradient scrim (cached like the sky shader): keeps the live world
+        // readable behind the buttons instead of flattening it to one tone.
+        fill.setAlpha(255);
+        if (menuScrim == null || sw != menuScrimW || sh != menuScrimH) {
+            menuScrim = new LinearGradient(0f, 0f, 0f, sh,
+                    new int[]{0xA8000000, 0x4D000000, 0x8C000000},
+                    new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP);
+            menuScrimW = sw;
+            menuScrimH = sh;
+        }
+        fill.setShader(menuScrim);
+        c.drawRect(0f, 0f, sw, sh, fill);
+        fill.setShader(null);
         text.setTextAlign(Paint.Align.CENTER);
 
         float bob = sinf(g.worldTime * 2f) * 6f;
-        // title: crossed sword icons, then a ring-outlined gold logo
-        float titleY = sh * 0.185f + bob * 0.3f;
+        // Title: the two swords share one origin so they read as a crossed
+        // emblem crowning the logo, and counter-rotate gently against the bob.
+        float titleY = sh * 0.185f + bob;
         float icx = sw / 2f;
-        float icy = titleY - 40f * scale;
-        drawSwordIcon(c, icx - 52f * scale, icy, 30f * scale, -38f);
-        drawSwordIcon(c, icx + 52f * scale, icy, 30f * scale, 218f);
+        // Mirrored across the vertical axis: -35 and +35 both point their tips
+        // UP and splay outward, forming a proper crown. (The old +215 mirrored
+        // horizontally, so one blade pointed down through the wordmark.)
+        // icy/len chosen so the tips stay on screen at every supported size:
+        // tip y = titleY - (40 + 52*cos35) * scale >= 4px even at 480x320.
+        float icy = titleY - 42f * scale;
+        float tilt = sinf(g.worldTime * 2f + 1f) * 4f;
+        drawSwordIcon(c, icx, icy, 52f * scale, -35f + tilt);
+        drawSwordIcon(c, icx, icy, 52f * scale, 35f - tilt);
         text.setTextSize(88f * scale);
         text.setTextAlign(Paint.Align.CENTER);
         text.setShadowLayer(0f, 0f, 0f, 0);
@@ -2736,16 +2906,17 @@ public final class Renderer {
         c.drawText("ANPLOMER", icx, titleY, text);
         text.setShadowLayer(0f, 0f, 0f, 0);
 
-        // subtitle in a little pill
+        // subtitle pill: tighter than before so it cannot collide with PLAY,
+        // and higher contrast so it reads as a deliberate plate
         String tag = "A TINY PLATFORM ADVENTURE";
-        text.setTextSize(24f * scale);
-        float tw = textWidth(tag, 24f * scale);
+        text.setTextSize(26f * scale);
+        float tw = textWidth(tag, 26f * scale);
         float px = icx - tw / 2f - 18f * scale;
-        float py = titleY + 24f * scale;
-        float ph = 36f * scale;
-        fill.setColor(0xB0101828);
+        float py = titleY + 18f * scale;
+        float ph = 30f * scale;
+        fill.setColor(0xD6131C30);
         c.drawRoundRect(rect(px, py, px + tw + 36f * scale, py + ph), ph / 2f, ph / 2f, fill);
-        stroke.setColor(0x88FFD34D);
+        stroke.setColor(0xE6FFD34D);
         stroke.setStrokeWidth(2f);
         c.drawRoundRect(rect(px, py, px + tw + 36f * scale, py + ph), ph / 2f, ph / 2f, stroke);
         text.setColor(0xFFFFFFFF);
@@ -2755,11 +2926,12 @@ public final class Renderer {
         // active career badge (top-left, clear of the centred title)
         drawCareerBadge(c, g, sw, scale);
 
-        // side art, pushed to the edges so it never fights the buttons
-        float y = sh * 0.52f;
+        // side art, grounded on the scenery line so it reads as part of the
+        // world rather than floating in the sky; the coin sits above the imp
+        float y = sh * 0.66f;
         drawMenuHero(c, sw * 0.13f, y, scale * 0.9f, g);
         drawMenuEnemy(c, sw * 0.87f, y, scale * 0.9f, g);
-        drawMenuCoin(c, sw * 0.87f - 130f * scale, y - 70f * scale, scale * 0.8f, g);
+        drawMenuCoin(c, sw * 0.87f - 150f * scale, y - 90f * scale, scale * 0.8f, g);
 
         // Every menu button is drawn from the rect Game laid out; styling only
         // depends on which group the id belongs to, so drawing and hit testing
@@ -2767,7 +2939,8 @@ public final class Renderer {
         for (Game.UiButton b : g.menuButtons) {
             boolean small = b.id == Game.BTN_SOUND || b.id == Game.BTN_RESET;
             boolean row = b.id == Game.BTN_CAREER || b.id == Game.BTN_SETTINGS;
-            drawMenuButton(c, b.label, b.x, b.y, b.w, b.h, scale, small, row);
+            drawMenuButton(c, b.label, b.x, b.y, b.w, b.h, scale, small, row,
+                    b.id == Game.BTN_START);
         }
 
         String hint = "auto-saves the level you reach  •  losing all lives returns here";
@@ -2786,12 +2959,14 @@ public final class Renderer {
 
     /** One home-screen button; {@code small}/{@code row} pick the styling group. */
     private void drawMenuButton(Canvas c, String label, float x, float y, float w, float h,
-                                float scale, boolean small, boolean row) {
+                                float scale, boolean small, boolean row, boolean primary) {
         float r = Math.max(2f, (small ? 12f : 18f) * Math.max(scale, 0.4f));
         fill.setColor(small ? 0x99203A66 : row ? 0xE61E3A6E : 0xF21E3A6E);
         c.drawRoundRect(rect(x, y, x + w, y + h), r, r, fill);
-        stroke.setColor(small ? 0x66FFFFFF : 0xAAFFFFFF);
-        stroke.setStrokeWidth(Math.max(1f, (small ? 2f : 3f) * Math.max(scale, 0.4f)));
+        // the primary CTA wears the logo's gold so the eye lands on PLAY first
+        stroke.setColor(primary ? 0xFFFFD34D : small ? 0x66FFFFFF : 0xAAFFFFFF);
+        stroke.setStrokeWidth(Math.max(1f, (primary ? 4f : small ? 2f : 3f)
+                * Math.max(scale, 0.4f)));
         c.drawRoundRect(rect(x, y, x + w, y + h), r, r, stroke);
         if (!small) {
             fill.setColor(0x2EFFFFFF);
@@ -3209,7 +3384,14 @@ public final class Renderer {
         c.scale(2.1f * scale, 2.1f * scale);
         fill.setColor(0x66000000);
         c.drawOval(rect(-24f, 44f, 24f, 58f), fill);
-        drawKnightFigure(c, g.worldTime * 4f, true, false, false, g.worldTime);
+        if (ArtBindings.has("player")) {
+            // same knight as gameplay: identically animated baked artwork
+            float artH = ArtBindings.height("player");
+            float artScale = artH > 0f ? Constants.PLAYER_H / artH : 1f;
+            drawBakedArt("player", c, g.worldTime * 4f, g.worldTime, true, false, artScale);
+        } else {
+            drawKnightFigure(c, g.worldTime * 4f, true, false, false, g.worldTime);
+        }
         c.restore();
     }
 
@@ -3217,6 +3399,8 @@ public final class Renderer {
         c.save();
         c.translate(x, y + sinf(g.worldTime * 3f + 1f) * 6f);
         c.scale(2.0f * scale, 2.0f * scale);
+        fill.setColor(0x66000000);
+        c.drawOval(rect(-26f, 42f, 26f, 56f), fill);
         drawImpFigure(c, g.worldTime * 2.5f, false, -1f);
         c.restore();
     }
@@ -3225,6 +3409,8 @@ public final class Renderer {
         c.save();
         c.translate(x, y + sinf(g.worldTime * 3f + 2f) * 6f);
         float spin = Math.max(0.25f, Math.abs(cosf(g.worldTime * 3f)));
+        fill.setColor(0x55000000);
+        c.drawOval(rect(-18f, 24f, 18f, 34f), fill);
         c.scale(spin * 2.0f * scale, 2.0f * scale);
         // rim, face, highlight, inner ridge, rim notches, coin glyph
         fill.setColor(0xFFD89A17);

@@ -101,7 +101,9 @@ public final class RendererSmoke {
                 }
                 java.awt.Color[] cols = new java.awt.Color[lg.colors.length];
                 for (int i = 0; i < cols.length; i++) {
-                    cols[i] = new java.awt.Color((lg.colors[i] & 0xFFFFFF) | 0xFF000000, true);
+                    // keep the ARGB alpha of each stop: translucent scrims
+                    // (e.g. the menu gradient) must render translucent
+                    cols[i] = new java.awt.Color(lg.colors[i], true);
                 }
                 g.setPaint(new java.awt.GradientPaint(lg.x0, lg.y0, cols[0],
                         lg.x1, lg.y1, cols[cols.length - 1]));

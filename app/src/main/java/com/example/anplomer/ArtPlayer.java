@@ -49,10 +49,11 @@ public final class ArtPlayer {
         new Part("shoe-right", 0xFF232F52, 0x00000000, 0f, shoe_right(), 7.36f, -9f),
         new Part("body", 0xFF3F6BE0, 0x00000000, 0f, body(), 2.86f, -46.64f),
         new Part("chest", 0xFF5A85F5, 0x00000000, 0f, chest(), 2.86f, -42.55f),
+        new Part("flank", 0x8C2F55C0, 0x00000000, 0f, flank(), 9.41f, -40.09f),
         new Part("belt", 0xFF243458, 0x00000000, 0f, belt(), 2.86f, -27f),
         new Part("buckle", 0xFFFFCB3D, 0x00000000, 0f, buckle(), 2.86f, -27f),
         new Part("arm-back", 0xFF3560D2, 0x00000000, 0f, arm_back(), -11.05f, -40.09f),
-        new Part("arm-front", 0xFF3F6BE0, 0x00000000, 0f, arm_front(), 16.77f, -40.09f),
+        new Part("arm-front", 0xFF3560D2, 0x00000000, 0f, arm_front(), 16.77f, -40.09f),
         new Part("hand-back", 0xFFF0BE92, 0x00000000, 0f, hand_back(), -11.05f, -24.55f),
         new Part("hand-front", 0xFFF0BE92, 0x00000000, 0f, hand_front(), 16.77f, -24.55f),
         new Part("head", 0xFFF3C79A, 0x00000000, 0f, head(), 2.86f, -63f),
@@ -61,13 +62,15 @@ public final class ArtPlayer {
         new Part("helm-brim", 0xFF7C8A9C, 0x00000000, 0f, helm_brim(), 2.86f, -54f),
         new Part("nose-guard", 0xFF7C8A9C, 0x00000000, 0f, nose_guard(), 2.86f, -50.73f),
         new Part("plume", 0xFFE14A4A, 0x00000000, 0f, plume(), -2.86f, -72f),
-        new Part("eye-white", 0xFFFFFFFF, 0x00000000, 0f, eye_white(), -1.64f, -51.71f),
-        new Part("pupil", 0xFF2A2118, 0x00000000, 0f, pupil(), -0.33f, -49.66f),
-        new Part("eye2-white", 0xFFFFFFFF, 0x00000000, 0f, eye2_white(), 7.36f, -51.71f),
-        new Part("eye2-pupil", 0xFF2A2118, 0x00000000, 0f, eye2_pupil(), 8.67f, -49.66f),
+        new Part("eye-white", 0xFFFFFFFF, 0x00000000, 0f, eye_white(), -1.64f, -51.3f),
+        new Part("pupil", 0xFF2A2118, 0x00000000, 0f, pupil(), -0.33f, -49.25f),
+        new Part("eye-glint", 0xFFFFFFFF, 0x00000000, 0f, eye_glint(), -0.98f, -49.09f),
+        new Part("eye2-white", 0xFFFFFFFF, 0x00000000, 0f, eye2_white(), 7.36f, -51.3f),
+        new Part("eye2-pupil", 0xFF2A2118, 0x00000000, 0f, eye2_pupil(), 8.67f, -49.25f),
+        new Part("eye2-glint", 0xFFFFFFFF, 0x00000000, 0f, eye2_glint(), 8.02f, -49.09f),
         new Part("brow", 0xFF4A2E1D, 0x00000000, 0f, brow(), -1.64f, -51.14f),
         new Part("brow2", 0xFF4A2E1D, 0x00000000, 0f, brow2(), 7.36f, -51.14f),
-        new Part("mouth", 0xFFB3754B, 0x00000000, 0f, mouth(), 2.86f, -44.18f),
+        new Part("mouth", 0xFF8A4A26, 0x00000000, 0f, mouth(), 2.86f, -44.67f),
         new Part("cheek", 0xFFF2A98A, 0x00000000, 0f, cheek(), -4.5f, -47.45f),
     };
 
@@ -241,6 +244,18 @@ public final class ArtPlayer {
         return p;
     }
 
+    private static Path flank() {
+        Path p = new Path();
+        p.moveTo(8.59f, -38.45f);
+        p.lineTo(12.68f, -40.09f);
+        p.lineTo(14.32f, -23.73f);
+        p.quadTo(14.32f, -18f, 8.59f, -18f);
+        p.lineTo(4.5f, -18f);
+        p.lineTo(8.59f, -38.45f);
+        p.close();
+        return p;
+    }
+
     private static Path belt() {
         Path p = new Path();
         p.moveTo(-6.14f, -27f);
@@ -368,10 +383,10 @@ public final class ArtPlayer {
         p.moveTo(2.86f, -50.73f);
         p.lineTo(2.86f, -50.73f);
         p.cubicTo(3.54f, -50.73f, 4.09f, -50.18f, 4.09f, -49.5f);
-        p.lineTo(4.09f, -44.59f);
-        p.cubicTo(4.09f, -43.91f, 3.54f, -43.36f, 2.86f, -43.36f);
-        p.lineTo(2.86f, -43.36f);
-        p.cubicTo(2.19f, -43.36f, 1.64f, -43.91f, 1.64f, -44.59f);
+        p.lineTo(4.09f, -48.68f);
+        p.cubicTo(4.09f, -48f, 3.54f, -47.45f, 2.86f, -47.45f);
+        p.lineTo(2.86f, -47.45f);
+        p.cubicTo(2.19f, -47.45f, 1.64f, -48f, 1.64f, -48.68f);
         p.lineTo(1.64f, -49.5f);
         p.cubicTo(1.64f, -50.18f, 2.19f, -50.73f, 2.86f, -50.73f);
         p.close();
@@ -389,44 +404,66 @@ public final class ArtPlayer {
 
     private static Path eye_white() {
         Path p = new Path();
-        p.moveTo(1.8f, -48.27f);
-        p.cubicTo(1.8f, -46.37f, 0.26f, -44.84f, -1.64f, -44.84f);
-        p.cubicTo(-3.53f, -44.84f, -5.07f, -46.37f, -5.07f, -48.27f);
-        p.cubicTo(-5.07f, -50.17f, -3.53f, -51.71f, -1.64f, -51.71f);
-        p.cubicTo(0.26f, -51.71f, 1.8f, -50.17f, 1.8f, -48.27f);
+        p.moveTo(1.8f, -47.86f);
+        p.cubicTo(1.8f, -45.97f, 0.26f, -44.43f, -1.64f, -44.43f);
+        p.cubicTo(-3.53f, -44.43f, -5.07f, -45.97f, -5.07f, -47.86f);
+        p.cubicTo(-5.07f, -49.76f, -3.53f, -51.3f, -1.64f, -51.3f);
+        p.cubicTo(0.26f, -51.3f, 1.8f, -49.76f, 1.8f, -47.86f);
         p.close();
         return p;
     }
 
     private static Path pupil() {
         Path p = new Path();
-        p.moveTo(1.39f, -47.95f);
-        p.cubicTo(1.39f, -47f, 0.62f, -46.23f, -0.33f, -46.23f);
-        p.cubicTo(-1.28f, -46.23f, -2.05f, -47f, -2.05f, -47.95f);
-        p.cubicTo(-2.05f, -48.89f, -1.28f, -49.66f, -0.33f, -49.66f);
-        p.cubicTo(0.62f, -49.66f, 1.39f, -48.89f, 1.39f, -47.95f);
+        p.moveTo(1.39f, -47.54f);
+        p.cubicTo(1.39f, -46.59f, 0.62f, -45.82f, -0.33f, -45.82f);
+        p.cubicTo(-1.28f, -45.82f, -2.05f, -46.59f, -2.05f, -47.54f);
+        p.cubicTo(-2.05f, -48.49f, -1.28f, -49.25f, -0.33f, -49.25f);
+        p.cubicTo(0.62f, -49.25f, 1.39f, -48.49f, 1.39f, -47.54f);
+        p.close();
+        return p;
+    }
+
+    private static Path eye_glint() {
+        Path p = new Path();
+        p.moveTo(-0.25f, -48.35f);
+        p.cubicTo(-0.25f, -47.95f, -0.58f, -47.62f, -0.98f, -47.62f);
+        p.cubicTo(-1.39f, -47.62f, -1.72f, -47.95f, -1.72f, -48.35f);
+        p.cubicTo(-1.72f, -48.76f, -1.39f, -49.09f, -0.98f, -49.09f);
+        p.cubicTo(-0.58f, -49.09f, -0.25f, -48.76f, -0.25f, -48.35f);
         p.close();
         return p;
     }
 
     private static Path eye2_white() {
         Path p = new Path();
-        p.moveTo(10.8f, -48.27f);
-        p.cubicTo(10.8f, -46.37f, 9.26f, -44.84f, 7.36f, -44.84f);
-        p.cubicTo(5.47f, -44.84f, 3.93f, -46.37f, 3.93f, -48.27f);
-        p.cubicTo(3.93f, -50.17f, 5.47f, -51.71f, 7.36f, -51.71f);
-        p.cubicTo(9.26f, -51.71f, 10.8f, -50.17f, 10.8f, -48.27f);
+        p.moveTo(10.8f, -47.86f);
+        p.cubicTo(10.8f, -45.97f, 9.26f, -44.43f, 7.36f, -44.43f);
+        p.cubicTo(5.47f, -44.43f, 3.93f, -45.97f, 3.93f, -47.86f);
+        p.cubicTo(3.93f, -49.76f, 5.47f, -51.3f, 7.36f, -51.3f);
+        p.cubicTo(9.26f, -51.3f, 10.8f, -49.76f, 10.8f, -47.86f);
         p.close();
         return p;
     }
 
     private static Path eye2_pupil() {
         Path p = new Path();
-        p.moveTo(10.39f, -47.95f);
-        p.cubicTo(10.39f, -47f, 9.62f, -46.23f, 8.67f, -46.23f);
-        p.cubicTo(7.72f, -46.23f, 6.95f, -47f, 6.95f, -47.95f);
-        p.cubicTo(6.95f, -48.89f, 7.72f, -49.66f, 8.67f, -49.66f);
-        p.cubicTo(9.62f, -49.66f, 10.39f, -48.89f, 10.39f, -47.95f);
+        p.moveTo(10.39f, -47.54f);
+        p.cubicTo(10.39f, -46.59f, 9.62f, -45.82f, 8.67f, -45.82f);
+        p.cubicTo(7.72f, -45.82f, 6.95f, -46.59f, 6.95f, -47.54f);
+        p.cubicTo(6.95f, -48.49f, 7.72f, -49.25f, 8.67f, -49.25f);
+        p.cubicTo(9.62f, -49.25f, 10.39f, -48.49f, 10.39f, -47.54f);
+        p.close();
+        return p;
+    }
+
+    private static Path eye2_glint() {
+        Path p = new Path();
+        p.moveTo(8.75f, -48.35f);
+        p.cubicTo(8.75f, -47.95f, 8.42f, -47.62f, 8.02f, -47.62f);
+        p.cubicTo(7.61f, -47.62f, 7.28f, -47.95f, 7.28f, -48.35f);
+        p.cubicTo(7.28f, -48.76f, 7.61f, -49.09f, 8.02f, -49.09f);
+        p.cubicTo(8.42f, -49.09f, 8.75f, -48.76f, 8.75f, -48.35f);
         p.close();
         return p;
     }
@@ -453,9 +490,9 @@ public final class ArtPlayer {
 
     private static Path mouth() {
         Path p = new Path();
-        p.moveTo(-1.23f, -44.18f);
-        p.quadTo(2.86f, -40.91f, 6.95f, -44.18f);
-        p.quadTo(2.86f, -42.14f, -1.23f, -44.18f);
+        p.moveTo(-1.64f, -44.67f);
+        p.quadTo(2.86f, -40.58f, 7.36f, -44.67f);
+        p.quadTo(2.86f, -43.04f, -1.64f, -44.67f);
         p.close();
         return p;
     }

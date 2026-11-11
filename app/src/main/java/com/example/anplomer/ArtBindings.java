@@ -25,10 +25,10 @@ public final class ArtBindings {
     public static final int CHANNEL_WING = 3;
     public static final int CHANNEL_FLUTTER = 4;
 
-    private static final int[] PLAYER_CHANNELS = {4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0};
-    private static final float[] PLAYER_PHASES = {0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
-    private static final float[] PLAYER_AMPS = {7.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 7.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
-    private static final float[] PLAYER_PIVOTS = {-9.818f, -38.455f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, -9.818f, -38.455f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f};
+    private static final int[] PLAYER_CHANNELS = {4, 1, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    private static final float[] PLAYER_PHASES = {0.00f, 0.00f, 180.00f, 0.00f, 180.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 180.00f, 0.00f, 180.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
+    private static final float[] PLAYER_AMPS = {7.00f, 26.00f, 26.00f, 26.00f, 26.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 16.00f, 16.00f, 16.00f, 16.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 7.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f};
+    private static final float[] PLAYER_PIVOTS = {-9.818f, -38.455f, -1.636f, -9.000f, 7.364f, -9.000f, -1.636f, -9.000f, 7.364f, -9.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, -11.045f, -40.091f, 16.773f, -40.091f, -11.045f, -40.091f, 16.773f, -40.091f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, -9.818f, -38.455f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f};
 
     public static String partName(String entity, int i) {
         switch (entity) {

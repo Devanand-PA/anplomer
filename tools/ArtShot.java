@@ -49,8 +49,10 @@ public final class ArtShot {
             w.animTime = 0.6f;
             g.enemies.add(w);
         }, g -> {
+            // centre on the walker's mid-body: a vertical offset here used to
+            // push the legs and feet out of the frame
             Enemy w = g.enemies.get(0);
-            g.camera.snapTo(w.x + w.w / 2f, w.y + w.h / 2f - 40f, g.level);
+            g.camera.snapTo(w.x + w.w / 2f, w.y + w.h / 2f, g.level);
         });
         shot(dir, "mob-flyer.png", 700, 520, 7f, 1, Game.State.PLAYING, g -> {
             g.enemies.clear();
@@ -60,6 +62,36 @@ public final class ArtShot {
         }, g -> {
             Enemy f = g.enemies.get(0);
             g.camera.snapTo(f.x + f.w / 2f, f.y + f.h / 2f, g.level);
+        });
+
+        // ---- mobs at TRUE 1x: exactly what the player sees on screen ----
+        shot(dir, "mob-walker-1x.png", 260, 200, 1f, 1, Game.State.PLAYING, g -> {
+            g.enemies.clear();
+            float feet = 12f * Constants.TILE;
+            Enemy w = new Enemy(Enemy.Type.WALKER, g.level.startX + 260f, feet);
+            w.y = feet - w.h;
+            w.facing = 1f;
+            w.animTime = 0.15f;
+            g.enemies.add(w);
+        }, g -> {
+            Enemy w = g.enemies.get(0);
+            g.camera.snapTo(w.x + w.w / 2f, w.y + w.h / 2f, g.level);
+        });
+        shot(dir, "mob-flyer-1x.png", 260, 200, 1f, 1, Game.State.PLAYING, g -> {
+            g.enemies.clear();
+            Enemy f = new Enemy(Enemy.Type.FLYER, g.level.startX + 260f, 7f * Constants.TILE);
+            f.facing = -1f;
+            g.enemies.add(f);
+        }, g -> {
+            Enemy f = g.enemies.get(0);
+            g.camera.snapTo(f.x + f.w / 2f, f.y + f.h / 2f, g.level);
+        });
+        // hero at true 1x too
+        shot(dir, "player-1x.png", 260, 200, 1f, 0, Game.State.PLAYING, g -> {
+        }, g -> {
+            g.player.vx = 0f;
+            g.player.onGround = true;
+            g.player.runCycle = 0f;
         });
 
         // ---- weapons: sword mid-swing, arrow, boomerang ----

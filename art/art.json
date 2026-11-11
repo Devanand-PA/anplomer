@@ -21,6 +21,14 @@
       "precision": 2,
       "entity": "player",
       "anim": {
+        "leg-left": "limb-a",
+        "shoe-left": "limb-a",
+        "leg-right": "limb-b",
+        "shoe-right": "limb-b",
+        "arm-back": "arm-b",
+        "hand-back": "arm-b",
+        "arm-front": "arm-a",
+        "hand-front": "arm-a",
         "scarf": "flutter",
         "plume": "flutter"
       }
